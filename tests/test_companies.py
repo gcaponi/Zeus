@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client as TestClient
 from django.urls import reverse
 
-from apps.companies.models import Company, CompanyDNA, Source
+from apps.companies.models import Company, CompanyDNA, LLMCall, Source
 from apps.companies import views
 
 User = get_user_model()
@@ -268,6 +268,80 @@ class TestScrapeTask:
         source.refresh_from_db()
         assert source.status == Source.STATUS_FAILED
         assert source.error_msg is not None
+
+
+@pytest.mark.django_db
+class TestLLMClient:
+    def test_mock_returns_structured_dna(self):
+        from apps.companies.llm_client import MockLLMClient
+        client = MockLLMClient()
+        result = client.generate("test prompt")
+        data = json.loads(result.text)
+        assert "chi_siamo" in data
+        assert "mission" in data
+        assert "pilastri" in data
+        assert isinstance(data["pilastri"], list)
+        assert result.tokens_in == 350
+        assert result.cost == 0.0001
+
+    def test_factory_returns_mock_when_no_key(self):
+        from apps.companies.llm_client import get_llm_client, MockLLMClient
+        with patch.dict("os.environ", {}, clear=True):
+            client = get_llm_client()
+            assert isinstance(client, MockLLMClient)
+
+    def test_openai_client_raises_without_key(self):
+        from apps.companies.llm_client import OpenAIClient
+        with pytest.raises(RuntimeError, match="LLM_API_KEY not set"):
+            OpenAIClient(api_key="")
+
+
+@pytest.mark.django_db
+class TestLLMGenerateAPI:
+    def test_generate_requires_login(self):
+        client = TestClient()
+        response = client.post(reverse("dna-generate"), {})
+        assert response.status_code == 302
+
+    def test_generate_requires_source_id(self, rf_with_tenant):
+        request = rf_with_tenant("post", reverse("dna-generate"), data={})
+        response = views.dna_generate(request)
+        assert response.status_code == 400
+
+    def test_generate_requires_scraped_source(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="T")
+        source = Source.objects.create(company=company, url="https://x.it", status=Source.STATUS_PENDING)
+        request = rf_with_tenant("post", reverse("dna-generate"), data={"source_id": source.id})
+        response = views.dna_generate(request)
+        assert response.status_code == 400
+        assert b"not scraped" in response.content
+
+    def test_generate_creates_dna_and_llm_call(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="T")
+        source = Source.objects.create(
+            company=company, url="https://rossi-metalli.it",
+            status=Source.STATUS_SCRAPED,
+            scraped_data={"markdown": "# Rossi Metalli\nAzienda siderurgica."},
+        )
+        request = rf_with_tenant("post", reverse("dna-generate"), data={"source_id": source.id})
+        response = views.dna_generate(request)
+        assert response.status_code == 201
+        data = json.loads(response.content)
+        assert data["version"] == 1
+        assert data["content"]["chi_siamo"] != ""
+        assert data["tokens_in"] > 0
+
+        assert LLMCall.objects.count() == 1
+        call = LLMCall.objects.first()
+        assert call.tokens_in == 350
+        assert call.model_name == "gpt-4o-mini"
+
+    def test_generate_404_for_wrong_company(self, rf_with_tenant):
+        other = Company.objects.create(schema_name="other", name="Other")
+        source = Source.objects.create(company=other, url="https://x.it", status=Source.STATUS_SCRAPED)
+        request = rf_with_tenant("post", reverse("dna-generate"), data={"source_id": source.id})
+        response = views.dna_generate(request)
+        assert response.status_code == 404
 
 
 @pytest.fixture

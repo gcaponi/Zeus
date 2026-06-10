@@ -86,3 +86,32 @@ class Source(models.Model):
 
     def __str__(self):
         return f"{self.url} ({self.status})"
+
+
+class LLMCall(models.Model):
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name="llm_calls",
+    )
+    model_name = models.CharField(max_length=64)
+    prompt_text = models.TextField()
+    response_text = models.TextField()
+    tokens_in = models.PositiveIntegerField()
+    tokens_out = models.PositiveIntegerField()
+    cost_usd = models.FloatField()
+    latency_ms = models.PositiveIntegerField()
+    source = models.ForeignKey(
+        Source,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="llm_calls",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.model_name} @ {self.created_at:%H:%M}"
