@@ -19,7 +19,7 @@ class ZEUSSignupView(SignupView):
     def form_valid(self, form):
         slug = form.cleaned_data["company_slug"]
 
-        tenant = Client(schema_name=slug, name=form.cleaned_data.get("company_name", slug))
+        tenant = Client(schema_name=slug, name=form.cleaned_data["company_name"])
         tenant.save()
 
         Domain.objects.create(
