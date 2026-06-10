@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% if is_public %}ZEUS{% else %}{{ tenant.name }} · ZEUS{% endif %}</title>
+    <title>{{ tenant.name }} · Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -41,11 +41,20 @@
             letter-spacing: -.02em;
             margin-bottom: .5rem;
         }
-        p {
+        .info {
             color: #5b5f7a;
             line-height: 1.6;
             font-size: .9375rem;
             margin-bottom: 2rem;
+        }
+        .badge {
+            display: inline-block;
+            background: #eef0f5;
+            border-radius: .375rem;
+            padding: .25rem .75rem;
+            font-size: .8125rem;
+            color: #5b5f7a;
+            margin-bottom: 1rem;
         }
         .btn {
             display: inline-block;
@@ -54,14 +63,7 @@
             font-size: .9375rem;
             font-weight: 500;
             text-decoration: none;
-            transition: background .15s, box-shadow .15s;
-        }
-        .btn-primary {
-            background: #1a1a2e;
-            color: #fff;
-        }
-        .btn-primary:hover {
-            background: #2d2d4a;
+            transition: background .15s;
         }
         .btn-outline {
             background: transparent;
@@ -71,18 +73,12 @@
         .btn-outline:hover {
             border-color: #c4c7d2;
         }
-        .actions { display: flex; gap: .75rem; justify-content: center; flex-wrap: wrap; }
-        .tenant-badge {
-            display: inline-block;
-            background: #eef0f5;
-            border-radius: .375rem;
-            padding: .25rem .75rem;
-            font-size: .8125rem;
-            color: #5b5f7a;
-            margin-bottom: 1rem;
+        hr {
+            border: none;
+            border-top: 1px solid #eef0f5;
+            margin: 2rem 0 1.5rem;
         }
         .home-link {
-            margin-top: 2.5rem;
             font-size: .8125rem;
         }
         .home-link a {
@@ -90,36 +86,23 @@
             text-decoration: none;
         }
         .home-link a:hover { color: #1a1a2e; }
-        hr {
-            border: none;
-            border-top: 1px solid #eef0f5;
-            margin: 2rem 0 1.5rem;
-        }
     </style>
 </head>
 <body>
     <div class="card">
-        {% if is_public %}
-            <div class="brand">ZEUS</div>
-            <h1>Your workspace awaits</h1>
-            <p>Centralised management for your organisation — clients, projects, and operations, all in one place.</p>
-            <div class="actions">
-                <a href="{% url 'account_signup' %}" class="btn btn-primary">Create account</a>
-                <a href="{% url 'account_login' %}" class="btn btn-outline">Sign in</a>
-            </div>
-        {% else %}
-            <div class="brand">{{ tenant.schema_name }}.zeus.cais.uno</div>
-            <h1>{{ tenant.name }}</h1>
-            <div class="tenant-badge">Active workspace</div>
-            <p>Welcome to {{ tenant.name }}'s ZEUS workspace. Manage your projects, clients, and team from here.</p>
-            <div class="actions">
-                <a href="{% url 'tenant-dashboard' %}" class="btn btn-primary">Go to dashboard</a>
-                <a href="{% url 'account_logout' %}" class="btn btn-outline">Sign out</a>
-            </div>
-        {% endif %}
+        <div class="brand">{{ tenant.schema_name }}.zeus.cais.uno</div>
+        <h1>{{ tenant.name }}</h1>
+        <div class="badge">Dashboard</div>
+        <div class="info">
+            <p>Logged in as <strong>{{ user.email }}</strong></p>
+            <p>Workspace ready for configuration.</p>
+        </div>
+        <div class="actions">
+            <a href="{% url 'account_logout' %}" class="btn btn-outline">Sign out</a>
+        </div>
         <hr>
         <div class="home-link">
-            <a href="https://zeus.cais.uno">ZEUS</a>
+            <a href="{% url 'tenant-landing' %}">Back to workspace home</a>
         </div>
     </div>
 </body>

@@ -42,3 +42,15 @@ def tenant_landing(request):
         "tenant": tenant,
         "is_public": is_public,
     })
+
+
+from django.contrib.auth.decorators import login_required
+
+
+@login_required
+def tenant_dashboard(request):
+    tenant = request.tenant if hasattr(request, "tenant") else None
+    return render(request, "core/tenant_dashboard.html", {
+        "tenant": tenant,
+        "user": request.user,
+    })
