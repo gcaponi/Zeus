@@ -88,6 +88,41 @@ class Source(models.Model):
         return f"{self.url} ({self.status})"
 
 
+class PipelineRun(models.Model):
+    STATUS_PENDING = "pending"
+    STATUS_RUNNING = "running"
+    STATUS_COMPLETED = "completed"
+    STATUS_FAILED = "failed"
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_RUNNING, "Running"),
+        (STATUS_COMPLETED, "Completed"),
+        (STATUS_FAILED, "Failed"),
+    ]
+
+    company = models.ForeignKey(
+        Company, on_delete=models.CASCADE, related_name="pipeline_runs",
+    )
+    source = models.ForeignKey(
+        Source, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="pipeline_runs",
+    )
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING,
+    )
+    current_step = models.CharField(max_length=64, blank=True)
+    error_msg = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Pipeline #{self.pk} ({self.status})"
+
+
 class LLMCall(models.Model):
     company = models.ForeignKey(
         Company,

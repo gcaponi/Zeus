@@ -10,4 +10,6 @@ urlpatterns = [
     path("company/dna/generate/", views.dna_generate, name="dna-generate"),
     path("sources/", views.source_list_create, name="source-list-create"),
     path("sources/<int:pk>/", views.source_detail, name="source-detail"),
+    path("pipeline/", views.pipeline_run_create, name="pipeline-run-create"),
+    path("pipeline/<int:pk>/", views.pipeline_run_detail, name="pipeline-run-detail"),
 ]

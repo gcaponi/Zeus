@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from apps.companies.models import Company, CompanyDNA, LLMCall, Source
+from apps.companies.models import Company, CompanyDNA, LLMCall, PipelineRun, Source
 
 
 class CompanyDNAInline(admin.StackedInline):
@@ -43,6 +43,19 @@ class LLMCallAdmin(admin.ModelAdmin):
         "prompt_text", "response_text", "tokens_in", "tokens_out",
         "cost_usd", "latency_ms", "created_at",
     ]
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(PipelineRun)
+class PipelineRunAdmin(admin.ModelAdmin):
+    list_display = ["id", "company", "status", "current_step", "created_at", "completed_at"]
+    list_filter = ["status"]
+    readonly_fields = ["status", "current_step", "error_msg", "created_at", "completed_at"]
 
     def has_add_permission(self, request, obj=None):
         return False

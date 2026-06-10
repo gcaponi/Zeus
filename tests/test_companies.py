@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client as TestClient
 from django.urls import reverse
 
-from apps.companies.models import Company, CompanyDNA, LLMCall, Source
+from apps.companies.models import Company, CompanyDNA, LLMCall, PipelineRun, Source
 from apps.companies import views
 
 User = get_user_model()
@@ -342,6 +342,81 @@ class TestLLMGenerateAPI:
         request = rf_with_tenant("post", reverse("dna-generate"), data={"source_id": source.id})
         response = views.dna_generate(request)
         assert response.status_code == 404
+
+
+@pytest.mark.django_db
+class TestPipelineAPI:
+    def test_create_requires_login(self):
+        client = TestClient()
+        response = client.post(reverse("pipeline-run-create"), {})
+        assert response.status_code == 302
+
+    def test_create_requires_source_id(self, rf_with_tenant):
+        request = rf_with_tenant("post", reverse("pipeline-run-create"), data={})
+        response = views.pipeline_run_create(request)
+        assert response.status_code == 400
+
+    def test_create_enqueues_pipeline(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="T")
+        source = Source.objects.create(company=company, url="https://rossi-metalli.it")
+        request = rf_with_tenant("post", reverse("pipeline-run-create"), data={"source_id": source.id})
+        response = views.pipeline_run_create(request)
+        assert response.status_code == 201
+        data = json.loads(response.content)
+        assert data["status"] == "pending"
+
+        run = PipelineRun.objects.get(pk=data["id"])
+        assert run.status in ("running", "completed")
+
+    def test_detail_returns_status(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="T")
+        run = PipelineRun.objects.create(company=company, status=PipelineRun.STATUS_COMPLETED)
+        request = rf_with_tenant("get", reverse("pipeline-run-detail", args=[run.id]))
+        response = views.pipeline_run_detail(request, pk=run.id)
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data["status"] == "completed"
+
+    def test_detail_404(self, rf_with_tenant):
+        request = rf_with_tenant("get", reverse("pipeline-run-detail", args=[999]))
+        response = views.pipeline_run_detail(request, pk=999)
+        assert response.status_code == 404
+
+
+@pytest.mark.django_db
+class TestPipelineTask:
+    def test_pipeline_completes_end_to_end(self):
+        company = Company.objects.create(schema_name="pipe-e2e", name="PipeE2E")
+        source = Source.objects.create(
+            company=company, url="https://rossi-metalli.it",
+            status=Source.STATUS_PENDING,
+        )
+        run = PipelineRun.objects.create(company=company, source=source)
+
+        from apps.companies.tasks import run_pipeline
+        run_pipeline(run.id)
+
+        run.refresh_from_db()
+        assert run.status == PipelineRun.STATUS_COMPLETED
+        assert run.current_step == "done"
+        assert company.dna_versions.count() == 1
+        assert LLMCall.objects.count() == 1
+
+    def test_pipeline_marks_failed_on_error(self):
+        company = Company.objects.create(schema_name="pipe-fail", name="PipeFail")
+        source = Source.objects.create(company=company, url="https://fail.example")
+        run = PipelineRun.objects.create(company=company, source=source)
+
+        with patch("apps.companies.tasks.get_scraper") as mock_scraper_factory:
+            from apps.companies.scraper import MockScraperClient
+            mock_scraper_factory.return_value = MockScraperClient(fail=True)
+
+            from apps.companies.tasks import run_pipeline
+            run_pipeline(run.id)
+
+        run.refresh_from_db()
+        assert run.status == PipelineRun.STATUS_FAILED
+        assert run.error_msg is not None
 
 
 @pytest.fixture
