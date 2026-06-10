@@ -23,6 +23,8 @@ SHARED_APPS = [
 TENANT_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.auth",
+    "allauth",
+    "allauth.account",
 ]
 
 INSTALLED_APPS = list(SHARED_APPS) + [
