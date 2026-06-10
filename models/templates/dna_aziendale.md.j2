@@ -1,0 +1,172 @@
+# {{ dna.nome_azienda }} — DNA Aziendale
+
+**Versione:** {{ dna.versione }}  
+**Generato:** {{ dna.created.strftime('%Y-%m-%d %H:%M') }}  
+**Famiglie riferite:** {{ dna.famiglie_riferite | join(', ') }}  
+**Meta-Framework:** ZEUS v1.0
+
+---
+
+## Filosofia e Interpretazione
+
+{% if dna.sezioni.get('A1') %}
+### {{ dna.sezioni['A1'].codice }} — {{ dna.sezioni['A1'].titolo }}
+
+{{ dna.sezioni['A1'].risposta }}
+{% endif %}
+
+{% if dna.sezioni.get('A2') %}
+### {{ dna.sezioni['A2'].codice }} — {{ dna.sezioni['A2'].titolo }}
+
+{{ dna.sezioni['A2'].risposta }}
+{% endif %}
+
+---
+
+## Pilastri Trasversali
+
+{% if dna.pilastri_trasversali %}
+{% for pilastro in dna.pilastri_trasversali %}
+- **{{ pilastro }}**
+{% endfor %}
+{% endif %}
+
+{% if dna.sezioni.get('A3') %}
+### {{ dna.sezioni['A3'].codice }} — {{ dna.sezioni['A3'].titolo }}
+
+{{ dna.sezioni['A3'].risposta }}
+{% endif %}
+
+---
+
+## Valore e Posizionamento
+
+{% if dna.sezioni.get('A4') %}
+### {{ dna.sezioni['A4'].codice }} — {{ dna.sezioni['A4'].titolo }}
+
+{{ dna.sezioni['A4'].risposta }}
+{% endif %}
+
+{% if dna.sezioni.get('A5') %}
+### {{ dna.sezioni['A5'].codice }} — {{ dna.sezioni['A5'].titolo }}
+
+{{ dna.sezioni['A5'].risposta }}
+{% endif %}
+
+---
+
+## Materiali e Lavorazione
+
+{% if dna.sezioni.get('A6') %}
+### {{ dna.sezioni['A6'].codice }} — {{ dna.sezioni['A6'].titolo }}
+
+{{ dna.sezioni['A6'].risposta }}
+{% endif %}
+
+{% if dna.sezioni.get('A7') %}
+### {{ dna.sezioni['A7'].codice }} — {{ dna.sezioni['A7'].titolo }}
+
+{{ dna.sezioni['A7'].risposta }}
+{% endif %}
+
+{% if dna.sezioni.get('A9') %}
+### {{ dna.sezioni['A9'].codice }} — {{ dna.sezioni['A9'].titolo }}
+
+{{ dna.sezioni['A9'].risposta }}
+{% endif %}
+
+{% if dna.sezioni.get('A10') %}
+### {{ dna.sezioni['A10'].codice }} — {{ dna.sezioni['A10'].titolo }}
+
+{{ dna.sezioni['A10'].risposta }}
+{% endif %}
+
+---
+
+## Fissaggio e Incollaggio
+
+{% if dna.sezioni.get('A11') %}
+### {{ dna.sezioni['A11'].codice }} — {{ dna.sezioni['A11'].titolo }}
+
+{{ dna.sezioni['A11'].risposta }}
+{% endif %}
+
+{% if dna.sezioni.get('A12') %}
+### {{ dna.sezioni['A12'].codice }} — {{ dna.sezioni['A12'].titolo }}
+
+{{ dna.sezioni['A12'].risposta }}
+{% endif %}
+
+{% if dna.sezioni.get('A13') %}
+### {{ dna.sezioni['A13'].codice }} — {{ dna.sezioni['A13'].titolo }}
+
+{{ dna.sezioni['A13'].risposta }}
+{% endif %}
+
+---
+
+## Tolleranze e Validazione
+
+{% if dna.sezioni.get('A14') %}
+### {{ dna.sezioni['A14'].codice }} — {{ dna.sezioni['A14'].titolo }}
+
+{{ dna.sezioni['A14'].risposta }}
+{% endif %}
+
+{% if dna.sezioni.get('A15') %}
+### {{ dna.sezioni['A15'].codice }} — {{ dna.sezioni['A15'].titolo }}
+
+{{ dna.sezioni['A15'].risposta }}
+{% endif %}
+
+---
+
+## Custom e Standard
+
+{% if dna.sezioni.get('A16') %}
+### {{ dna.sezioni['A16'].codice }} — {{ dna.sezioni['A16'].titolo }}
+
+{{ dna.sezioni['A16'].risposta }}
+{% endif %}
+
+{% if dna.sezioni.get('A17') %}
+### {{ dna.sezioni['A17'].codice }} — {{ dna.sezioni['A17'].titolo }}
+
+{{ dna.sezioni['A17'].risposta }}
+{% endif %}
+
+{% if dna.sezioni.get('A18') %}
+### {{ dna.sezioni['A18'].codice }} — {{ dna.sezioni['A18'].titolo }}
+
+{{ dna.sezioni['A18'].risposta }}
+{% endif %}
+
+---
+
+## Comunicazione
+
+{% if dna.sezioni.get('A19') %}
+### {{ dna.sezioni['A19'].codice }} — {{ dna.sezioni['A19'].titolo }}
+
+{{ dna.sezioni['A19'].risposta }}
+{% endif %}
+
+{% if dna.sezioni.get('A20') %}
+### {{ dna.sezioni['A20'].codice }} — {{ dna.sezioni['A20'].titolo }}
+
+{{ dna.sezioni['A20'].risposta }}
+{% endif %}
+
+---
+
+## Segmentazione Funzionale
+
+{% if dna.sezioni.get('A8') %}
+### {{ dna.sezioni['A8'].codice }} — {{ dna.sezioni['A8'].titolo }}
+
+{{ dna.sezioni['A8'].risposta }}
+{% endif %}
+
+---
+
+*Generato da ZEUS — Meta-Framework Knowledge Engineering v1.0*

@@ -1,0 +1,179 @@
+# {{ dna.nome_commerciale or dna.nome }} — DNA Famiglia Prodotto
+
+**Versione:** {{ dna.versione }}  
+**Generato:** {{ dna.created.strftime('%Y-%m-%d %H:%M') }}  
+**Checksum fonti:** {{ dna.checksum_fonti }}  
+**Meta-Framework:** ZEUS v1.0
+
+---
+
+## Identità e Scope
+
+{% if dna.sezioni.get('D1') %}
+### {{ dna.sezioni['D1'].codice }} — {{ dna.sezioni['D1'].titolo }}
+
+{{ dna.sezioni['D1'].risposta }}
+{% endif %}
+
+{% if dna.sezioni.get('D2') %}
+### {{ dna.sezioni['D2'].codice }} — {{ dna.sezioni['D2'].titolo }}
+
+{{ dna.sezioni['D2'].risposta }}
+{% endif %}
+
+---
+
+## Struttura e Geometria
+
+{% if dna.sezioni.get('D3') %}
+### {{ dna.sezioni['D3'].codice }} — {{ dna.sezioni['D3'].titolo }}
+
+{{ dna.sezioni['D3'].risposta }}
+{% endif %}
+
+{% if dna.sezioni.get('D13') %}
+### {{ dna.sezioni['D13'].codice }} — {{ dna.sezioni['D13'].titolo }}
+
+{{ dna.sezioni['D13'].risposta }}
+{% endif %}
+
+{% if dna.sezioni.get('D14') %}
+### {{ dna.sezioni['D14'].codice }} — {{ dna.sezioni['D14'].titolo }}
+
+{{ dna.sezioni['D14'].risposta }}
+{% endif %}
+
+---
+
+## Terminologia
+
+{% if dna.terminologia_corretta %}
+### Termini corretti
+{% for termine, definizione in dna.terminologia_corretta.items() %}
+- **{{ termine }}**: {{ definizione }}
+{% endfor %}
+{% endif %}
+
+{% if dna.terminologia_bandita %}
+### Termini da evitare
+{% for termine in dna.terminologia_bandita %}
+- ~~{{ termine }}~~
+{% endfor %}
+{% endif %}
+
+---
+
+## Meccanica e Montaggio
+
+{% if dna.sezioni.get('D5') %}
+### {{ dna.sezioni['D5'].codice }} — {{ dna.sezioni['D5'].titolo }}
+
+{{ dna.sezioni['D5'].risposta }}
+{% endif %}
+
+{% if dna.sezioni.get('D7') %}
+### {{ dna.sezioni['D7'].codice }} — {{ dna.sezioni['D7'].titolo }}
+
+{{ dna.sezioni['D7'].risposta }}
+{% endif %}
+
+{% if dna.sezioni.get('D12') %}
+### {{ dna.sezioni['D12'].codice }} — {{ dna.sezioni['D12'].titolo }}
+
+{{ dna.sezioni['D12'].risposta }}
+{% endif %}
+
+---
+
+## Materiali e Comportamento
+
+{% if dna.sezioni.get('D8') %}
+### {{ dna.sezioni['D8'].codice }} — {{ dna.sezioni['D8'].titolo }}
+
+{{ dna.sezioni['D8'].risposta }}
+{% endif %}
+
+{% if dna.sezioni.get('D9') %}
+### {{ dna.sezioni['D9'].codice }} — {{ dna.sezioni['D9'].titolo }}
+
+{{ dna.sezioni['D9'].risposta }}
+{% endif %}
+
+{% if dna.sezioni.get('D10') %}
+### {{ dna.sezioni['D10'].codice }} — {{ dna.sezioni['D10'].titolo }}
+
+{{ dna.sezioni['D10'].risposta }}
+{% endif %}
+
+---
+
+## Compatibilità e Interfacce
+
+{% if dna.sezioni.get('D11') %}
+### {{ dna.sezioni['D11'].codice }} — {{ dna.sezioni['D11'].titolo }}
+
+{{ dna.sezioni['D11'].risposta }}
+{% endif %}
+
+{% if dna.sezioni.get('D18') %}
+### {{ dna.sezioni['D18'].codice }} — {{ dna.sezioni['D18'].titolo }}
+
+{{ dna.sezioni['D18'].risposta }}
+{% endif %}
+
+---
+
+## Custom e Procedura
+
+{% if dna.sezioni.get('D15') %}
+### {{ dna.sezioni['D15'].codice }} — {{ dna.sezioni['D15'].titolo }}
+
+{{ dna.sezioni['D15'].risposta }}
+{% endif %}
+
+{% if dna.sezioni.get('D16') %}
+### {{ dna.sezioni['D16'].codice }} — {{ dna.sezioni['D16'].titolo }}
+
+{{ dna.sezioni['D16'].risposta }}
+{% endif %}
+
+{% if dna.sezioni.get('D20') %}
+### {{ dna.sezioni['D20'].codice }} — {{ dna.sezioni['D20'].titolo }}
+
+{{ dna.sezioni['D20'].risposta }}
+{% endif %}
+
+---
+
+## Sicurezza e Percezione
+
+{% if dna.sezioni.get('D17') %}
+### {{ dna.sezioni['D17'].codice }} — {{ dna.sezioni['D17'].titolo }}
+
+{{ dna.sezioni['D17'].risposta }}
+{% endif %}
+
+{% if dna.sezioni.get('D19') %}
+### {{ dna.sezioni['D19'].codice }} — {{ dna.sezioni['D19'].titolo }}
+
+{{ dna.sezioni['D19'].risposta }}
+{% endif %}
+
+---
+
+## Fonti Tecniche Vincolanti
+
+{% if dna.sezioni.get('D6') %}
+### {{ dna.sezioni['D6'].codice }} — {{ dna.sezioni['D6'].titolo }}
+
+{{ dna.sezioni['D6'].risposta }}
+{% endif %}
+
+### File fonte utilizzati
+{% for file in dna.fonti.all_files() %}
+- `{{ file.name }}`
+{% endfor %}
+
+---
+
+*Generato da ZEUS — Meta-Framework Knowledge Engineering v1.0*

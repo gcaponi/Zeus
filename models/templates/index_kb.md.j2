@@ -1,0 +1,60 @@
+# INDEX — Knowledge Base {{ kb.cliente }}
+
+**Versione:** {{ kb.versione }}  
+**Generato:** {{ kb.created.strftime('%Y-%m-%d %H:%M') }}  
+**Meta-Framework:** ZEUS v1.0
+
+---
+
+## Gerarchia Attiva
+
+```
+1. DNA AZIENDALE → sempre presente, principi trasversali
+2. DNA FAMIGLIA PRODOTTO → declina sul comportamento specifico
+3. FONTI TECNICHE VINCOLANTI → dati reali, vincolanti, gerarchiche
+```
+
+**Regola di prevalenza:** Se esiste differenza tra DNA e fonti tecniche vincolanti, prevalgono SEMPRE le fonti tecniche vincolanti.
+
+---
+
+## Documenti
+
+### DNA Aziendale
+{% if kb.dna_aziendale %}
+- [DNA_AZIENDALE.md](DNA_AZIENDALE.md) — {{ kb.dna_aziendale.nome_azienda }}
+{% else %}
+- *Manca DNA_AZIENDALE.md*
+{% endif %}
+
+### DNA Famiglie Prodotto
+{% for famiglia in kb.dna_famiglie %}
+- [DNA_FAMIGLIA_{{ famiglia.nome }}.md](DNA_FAMIGLIA_{{ famiglia.nome }}.md) — {{ famiglia.nome_commerciale or famiglia.nome }}
+{% else %}
+- *Nessuna famiglia registrata*
+{% endfor %}
+
+### Comportamento Sistema
+{% if kb.comportamento_sistema %}
+- [COMPORTAMENTO_SISTEMA.md](COMPORTAMENTO_SISTEMA.md) — {{ kb.comportamento_sistema.nome_agente }}
+{% else %}
+- *Manca COMPORTAMENTO_SISTEMA.md*
+{% endif %}
+
+---
+
+## Validazione
+
+{% set errors = kb.validate() %}
+{% if errors %}
+**⚠️ Errori rilevati:**
+{% for err in errors %}
+- {{ err }}
+{% endfor %}
+{% else %}
+**✓ Knowledge Base validata — tutti i check passati.**
+{% endif %}
+
+---
+
+*Generato da ZEUS — Meta-Framework Knowledge Engineering v1.0*
