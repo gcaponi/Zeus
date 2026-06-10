@@ -334,7 +334,7 @@ class TestLLMGenerateAPI:
         assert LLMCall.objects.count() == 1
         call = LLMCall.objects.first()
         assert call.tokens_in == 350
-        assert call.model_name == "gpt-4o-mini"
+        assert call.model_name == "deepseek-chat"
 
     def test_generate_404_for_wrong_company(self, rf_with_tenant):
         other = Company.objects.create(schema_name="other", name="Other")

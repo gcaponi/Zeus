@@ -8,11 +8,13 @@ from abc import ABC, abstractmethod
 logger = logging.getLogger(__name__)
 
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
-LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o-mini")
+LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "")
+LLM_MODEL = os.environ.get("LLM_MODEL", "deepseek-chat")
 
 MODEL_PRICING = {
     "gpt-4o-mini": {"input": 0.15 / 1_000_000, "output": 0.60 / 1_000_000},
     "gpt-4o": {"input": 2.50 / 1_000_000, "output": 10.00 / 1_000_000},
+    "deepseek-chat": {"input": 0.14 / 1_000_000, "output": 0.28 / 1_000_000},
 }
 
 
@@ -35,12 +37,15 @@ class LLMClient(ABC):
 
 
 class OpenAIClient(LLMClient):
-    def __init__(self, api_key: str = LLM_API_KEY):
+    def __init__(self, api_key: str = LLM_API_KEY, base_url: str = LLM_BASE_URL):
         if not api_key:
             raise RuntimeError("LLM_API_KEY not set")
         from openai import OpenAI
 
-        self._client = OpenAI(api_key=api_key)
+        kwargs = {"api_key": api_key}
+        if base_url:
+            kwargs["base_url"] = base_url
+        self._client = OpenAI(**kwargs)
 
     def generate(self, prompt: str, model: str | None = None) -> LLMResult:
         model = model or LLM_MODEL
@@ -85,6 +90,6 @@ class MockLLMClient(LLMClient):
 
 def get_llm_client() -> LLMClient:
     if LLM_API_KEY:
-        return OpenAIClient()
+        return OpenAIClient(api_key=LLM_API_KEY, base_url=LLM_BASE_URL or "")
     logger.info("LLM_API_KEY not set, using mock LLM client")
     return MockLLMClient()
