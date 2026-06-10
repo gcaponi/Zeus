@@ -19,6 +19,6 @@ DATABASES = {
 
 STORAGES = {
     "staticfiles": {
-        "BACKEND": "django_tenants.postgresql_backend",
-    }
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
 }
