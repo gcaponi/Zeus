@@ -22,12 +22,11 @@ TENANT_APPS = [
     "django.contrib.auth",
 ]
 
-INSTALLLED_APPS = list(SHARED_APPS) + [
+INSTALLED_APPS = list(SHARED_APPS) + [
     app for app in TENANT_APPS if app not in SHARED_APPS
 ]
 
 MIDDLEWARE = [
-    "django_tenants.middleware.main.TenantMainMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -59,7 +58,7 @@ WSGI_APPLICATION = "config.wsgi.application"
 
 DATABASES = {
     "default": {
-        "ENGINE": "django_tenants.postgresql_backend",
+        "ENGINE": "django.db.backends.postgresql",
         "NAME": os.environ.get("POSTGRES_DB", "mydb"),
         "USER": os.environ.get("POSTGRES_USER", "myuser"),
         "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "mypassword"),
@@ -67,8 +66,6 @@ DATABASES = {
         "PORT": os.environ.get("POSTGRES_PORT", "5432"),
     }
 }
-
-DATABASE_ROUTERS = ["django_tenants.routers.TenantSyncRouter"]
 
 TENANT_MODEL = "core.Client"
 TENANT_DOMAIN_MODEL = "core.Domain"
