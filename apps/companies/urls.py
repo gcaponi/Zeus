@@ -8,6 +8,7 @@ urlpatterns = [
     path("company/dna/history/", views.dna_history, name="dna-history"),
     path("company/dna/create/", views.dna_create, name="dna-create"),
     path("company/dna/generate/", views.dna_generate, name="dna-generate"),
+    path("company/dna/<int:pk>/feedback/", views.dna_feedback, name="dna-feedback"),
     path("sources/", views.source_list_create, name="source-list-create"),
     path("sources/<int:pk>/", views.source_detail, name="source-detail"),
     path("pipeline/", views.pipeline_run_create, name="pipeline-run-create"),

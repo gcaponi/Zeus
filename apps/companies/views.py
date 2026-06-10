@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
-from apps.companies.models import Company, CompanyDNA, PipelineRun, Source
+from apps.companies.models import Company, CompanyDNA, DNAFeedback, PipelineRun, Source
 from apps.companies.tasks import _generate_dna, run_pipeline, scrape_source
 
 logger = logging.getLogger(__name__)
@@ -182,6 +182,39 @@ def pipeline_run_create(request):
         "id": run.id,
         "status": run.status,
         "current_step": run.current_step,
+    }, status=201)
+
+
+@login_required
+@require_http_methods(["POST"])
+def dna_feedback(request, pk):
+    tenant = getattr(request, "tenant", None)
+    if not tenant or tenant.schema_name == "public":
+        return JsonResponse({"error": "no tenant"}, status=400)
+    dna = CompanyDNA.objects.filter(
+        pk=pk, company__schema_name=tenant.schema_name,
+    ).first()
+    if not dna:
+        return JsonResponse({"error": "dna not found"}, status=404)
+
+    body = json.loads(request.body)
+    rating = body.get("rating")
+    if not rating or not isinstance(rating, int) or rating < 1 or rating > 5:
+        return JsonResponse({"error": "rating must be 1-5"}, status=400)
+
+    feedback = DNAFeedback.objects.create(
+        dna=dna,
+        rating=rating,
+        comment=body.get("comment", ""),
+    )
+    dna.confidence_score = CompanyDNA.recalculate_confidence(dna.id)
+    dna.save(update_fields=["confidence_score"])
+
+    return JsonResponse({
+        "id": feedback.id,
+        "rating": feedback.rating,
+        "comment": feedback.comment,
+        "confidence_score": dna.confidence_score,
     }, status=201)
 
 

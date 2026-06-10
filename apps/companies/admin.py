@@ -1,13 +1,13 @@
 from django.contrib import admin
 
-from apps.companies.models import Company, CompanyDNA, LLMCall, PipelineRun, Source
+from apps.companies.models import Company, CompanyDNA, DNAFeedback, LLMCall, PipelineRun, Source
 
 
 class CompanyDNAInline(admin.StackedInline):
     model = CompanyDNA
     extra = 0
-    fields = ["version", "content", "is_current", "created_by", "created_at"]
-    readonly_fields = ["version", "created_at"]
+    fields = ["version", "confidence_score", "content", "is_current", "created_by", "created_at"]
+    readonly_fields = ["version", "confidence_score", "created_at"]
     ordering = ["-version"]
 
     def has_add_permission(self, request, obj=None):
@@ -33,6 +33,18 @@ class SourceAdmin(admin.ModelAdmin):
     list_filter = ["status"]
     search_fields = ["url", "company__name"]
     readonly_fields = ["scraped_data", "error_msg", "created_at", "updated_at"]
+
+
+@admin.register(DNAFeedback)
+class DNAFeedbackAdmin(admin.ModelAdmin):
+    list_display = ["dna", "rating", "created_at"]
+    list_filter = ["rating"]
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(LLMCall)

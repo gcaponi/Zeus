@@ -19,6 +19,21 @@ class Company(models.Model):
         return self.name
 
 
+class DNAFeedback(models.Model):
+    dna = models.ForeignKey(
+        "CompanyDNA", on_delete=models.CASCADE, related_name="feedbacks",
+    )
+    rating = models.PositiveSmallIntegerField()  # 1-5
+    comment = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Feedback {self.rating}/5 on DNA #{self.dna_id}"
+
+
 class CompanyDNA(models.Model):
     company = models.ForeignKey(
         Company,
@@ -27,6 +42,7 @@ class CompanyDNA(models.Model):
     )
     version = models.PositiveIntegerField()
     content = models.JSONField()
+    confidence_score = models.FloatField(null=True, blank=True)
     is_current = models.BooleanField(default=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -35,6 +51,22 @@ class CompanyDNA(models.Model):
         blank=True,
     )
     created_at = models.DateTimeField(auto_now_add=True)
+
+    @staticmethod
+    def recalculate_confidence(dna_id: int) -> float | None:
+        """Recency-weighted average of feedback ratings."""
+        feedbacks = list(DNAFeedback.objects.filter(dna_id=dna_id).order_by("-created_at"))
+        if not feedbacks:
+            return None
+        total_weight = 0.0
+        weighted_sum = 0.0
+        weight = 1.0
+        decay = 0.5
+        for fb in feedbacks:
+            weighted_sum += fb.rating * weight
+            total_weight += weight
+            weight *= decay
+        return round(weighted_sum / total_weight, 2)
 
     class Meta:
         verbose_name = "Company DNA"

@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client as TestClient
 from django.urls import reverse
 
-from apps.companies.models import Company, CompanyDNA, LLMCall, PipelineRun, Source
+from apps.companies.models import Company, CompanyDNA, DNAFeedback, LLMCall, PipelineRun, Source
 from apps.companies import views
 
 User = get_user_model()
@@ -417,6 +417,70 @@ class TestPipelineTask:
         run.refresh_from_db()
         assert run.status == PipelineRun.STATUS_FAILED
         assert run.error_msg is not None
+
+
+@pytest.mark.django_db
+class TestDNAFeedback:
+    def test_recalculate_no_feedback(self):
+        company = Company.objects.create(schema_name="fb-1", name="FB1")
+        dna = CompanyDNA.objects.create(company=company, version=1, content={})
+        assert CompanyDNA.recalculate_confidence(dna.id) is None
+
+    def test_recalculate_single_feedback(self):
+        company = Company.objects.create(schema_name="fb-2", name="FB2")
+        dna = CompanyDNA.objects.create(company=company, version=1, content={})
+        DNAFeedback.objects.create(dna=dna, rating=4)
+        assert CompanyDNA.recalculate_confidence(dna.id) == 4.0
+
+    def test_recalculate_multiple_feedback_recency_weighted(self):
+        company = Company.objects.create(schema_name="fb-3", name="FB3")
+        dna = CompanyDNA.objects.create(company=company, version=1, content={})
+        DNAFeedback.objects.create(dna=dna, rating=1)
+        DNAFeedback.objects.create(dna=dna, rating=5)
+        score = CompanyDNA.recalculate_confidence(dna.id)
+        # With equal timestamps ordering is undefined; score must be between 1 and 5
+        assert 1 < score < 5
+
+    def test_feedback_api_invalid_rating(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="FB API")
+        dna = CompanyDNA.objects.create(company=company, version=1, content={})
+        req = rf_with_tenant("post", f"/api/company/dna/{dna.id}/feedback/", {"rating": 6})
+        from apps.companies.views import dna_feedback
+        resp = dna_feedback(req, pk=dna.id)
+        assert resp.status_code == 400
+        assert "rating must be 1-5" in resp.content.decode()
+
+    def test_feedback_api_success(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="FB OK")
+        dna = CompanyDNA.objects.create(company=company, version=1, content={})
+        req = rf_with_tenant("post", f"/api/company/dna/{dna.id}/feedback/", {
+            "rating": 5, "comment": "Perfetto",
+        })
+        from apps.companies.views import dna_feedback
+        resp = dna_feedback(req, pk=dna.id)
+        data = json.loads(resp.content)
+        assert resp.status_code == 201
+        assert data["rating"] == 5
+        assert data["comment"] == "Perfetto"
+        assert data["confidence_score"] == 5.0
+        dna.refresh_from_db()
+        assert dna.confidence_score == 5.0
+
+    def test_feedback_api_wrong_tenant(self, rf_with_tenant):
+        req = rf_with_tenant("post", "/api/company/dna/999/feedback/", {"rating": 3})
+        from apps.companies.views import dna_feedback
+        resp = dna_feedback(req, pk=999)
+        assert resp.status_code == 404
+
+    def test_score_persisted_on_dna(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="FB Save")
+        dna = CompanyDNA.objects.create(company=company, version=1, content={})
+        DNAFeedback.objects.create(dna=dna, rating=2)
+        DNAFeedback.objects.create(dna=dna, rating=4)
+        dna.confidence_score = CompanyDNA.recalculate_confidence(dna.id)
+        dna.save(update_fields=["confidence_score"])
+        dna.refresh_from_db()
+        assert dna.confidence_score is not None
 
 
 @pytest.fixture
