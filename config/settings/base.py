@@ -6,8 +6,7 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "change-me-in-production")
 DEBUG = False
 ALLOWED_HOSTS = []
 
-SHARED_APPS = [
-    "django_tenants",
+INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.auth",
     "django.contrib.sessions",
@@ -15,15 +14,6 @@ SHARED_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.admin",
     "apps.core",
-]
-
-TENANT_APPS = [
-    "django.contrib.contenttypes",
-    "django.contrib.auth",
-]
-
-INSTALLED_APPS = list(SHARED_APPS) + [
-    app for app in TENANT_APPS if app not in SHARED_APPS
 ]
 
 MIDDLEWARE = [
@@ -66,9 +56,6 @@ DATABASES = {
         "PORT": os.environ.get("POSTGRES_PORT", "5432"),
     }
 }
-
-TENANT_MODEL = "core.Client"
-TENANT_DOMAIN_MODEL = "core.Domain"
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
