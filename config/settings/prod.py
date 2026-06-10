@@ -4,6 +4,12 @@ DEBUG = False
 
 ALLOWED_HOSTS = [".zeus.cais.uno", "91.230.110.7", "localhost", "127.0.0.1"]
 
+CSRF_TRUSTED_ORIGINS = ["https://*.zeus.cais.uno", "https://zeus.cais.uno"]
+CSRF_COOKIE_DOMAIN = ".zeus.cais.uno"
+SESSION_COOKIE_DOMAIN = ".zeus.cais.uno"
+SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_HTTPONLY = True
+
 SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 
 DATABASES = {
