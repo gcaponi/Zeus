@@ -1,5 +1,5 @@
 from django.http import JsonResponse
-from django.shortcuts import redirect
+from django.shortcuts import redirect, render
 from allauth.account.utils import perform_login
 from allauth.account.views import SignupView
 from django_tenants.utils import schema_context
@@ -33,3 +33,12 @@ class ZEUSSignupView(SignupView):
             perform_login(self.request, user, email_verification=False)
 
         return redirect(f"https://{slug}.zeus.cais.uno")
+
+
+def tenant_landing(request):
+    tenant = request.tenant if hasattr(request, "tenant") else None
+    is_public = tenant is None or tenant.schema_name == "public"
+    return render(request, "core/tenant_landing.html", {
+        "tenant": tenant,
+        "is_public": is_public,
+    })

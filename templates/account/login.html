@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Create account · ZEUS</title>
+    <title>Sign in · ZEUS</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -70,19 +70,6 @@
             outline: none;
             border-color: #1a1a2e;
         }
-        .helptext {
-            display: block;
-            font-size: .75rem;
-            color: #8b8fa3;
-            margin-top: -.875rem;
-            margin-bottom: 1.25rem;
-        }
-        .errorlist {
-            list-style: none;
-            color: #d94c4c;
-            font-size: .8125rem;
-            margin-bottom: .5rem;
-        }
         button {
             width: 100%;
             padding: .75rem;
@@ -95,9 +82,14 @@
             font-family: inherit;
             cursor: pointer;
             transition: background .15s;
-            margin-top: .5rem;
         }
         button:hover { background: #2d2d4a; }
+        .errorlist {
+            list-style: none;
+            color: #d94c4c;
+            font-size: .8125rem;
+            margin-bottom: 1rem;
+        }
         .links {
             text-align: center;
             margin-top: 1.5rem;
@@ -113,41 +105,25 @@
 <body>
     <div class="card">
         <div class="brand">ZEUS</div>
-        <h1>Create your account</h1>
-        <p class="subtitle">Start your ZEUS workspace</p>
-        <form method="post" action="{% url 'account_signup' %}">
+        <h1>Welcome back</h1>
+        <p class="subtitle">Sign in to your workspace</p>
+        <form method="post">
             {% csrf_token %}
             {{ form.non_field_errors }}
             <div>
-                <label for="{{ form.email.id_for_label }}">Email</label>
-                {{ form.email }}
-                {{ form.email.errors }}
+                <label for="id_login">Email</label>
+                <input type="email" name="login" id="id_login" autocomplete="email" required>
+                {{ form.login.errors }}
             </div>
             <div>
-                <label for="{{ form.password1.id_for_label }}">Password</label>
-                {{ form.password1 }}
-                {{ form.password1.errors }}
+                <label for="id_password">Password</label>
+                <input type="password" name="password" id="id_password" autocomplete="current-password" required>
+                {{ form.password.errors }}
             </div>
-            <div>
-                <label for="{{ form.password2.id_for_label }}">Confirm password</label>
-                {{ form.password2 }}
-                {{ form.password2.errors }}
-            </div>
-            <div>
-                <label for="{{ form.company_name.id_for_label }}">Company name</label>
-                {{ form.company_name }}
-                {{ form.company_name.errors }}
-            </div>
-            <div>
-                <label for="{{ form.company_slug.id_for_label }}">Workspace URL</label>
-                {{ form.company_slug }}
-                <span class="helptext">{{ form.company_slug.help_text }}</span>
-                {{ form.company_slug.errors }}
-            </div>
-            <button type="submit">Create workspace</button>
+            <button type="submit">Sign in</button>
         </form>
         <div class="links">
-            <a href="{% url 'account_login' %}">Already have an account? Sign in</a>
+            <a href="{% url 'account_signup' %}">Create an account</a>
         </div>
     </div>
 </body>
