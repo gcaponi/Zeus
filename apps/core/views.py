@@ -32,7 +32,7 @@ class ZEUSSignupView(SignupView):
             user = form.save(self.request)
             perform_login(self.request, user, email_verification=False)
 
-        return redirect(f"https://{slug}.zeus.cais.uno")
+        return redirect("https://zeus.cais.uno/admin/")
 
 
 def tenant_landing(request):
