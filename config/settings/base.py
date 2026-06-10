@@ -6,17 +6,33 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "change-me-in-production")
 DEBUG = False
 ALLOWED_HOSTS = []
 
-INSTALLED_APPS = [
+SHARED_APPS = [
+    "django_tenants",
     "django.contrib.contenttypes",
     "django.contrib.auth",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.admin",
+    "django.contrib.sites",
+    "allauth",
+    "allauth.account",
     "apps.core",
 ]
 
+TENANT_APPS = [
+    "django.contrib.contenttypes",
+    "django.contrib.auth",
+]
+
+INSTALLED_APPS = list(SHARED_APPS) + [
+    app for app in TENANT_APPS if app not in SHARED_APPS
+]
+
+SITE_ID = 1
+
 MIDDLEWARE = [
+    "django_tenants.middleware.main.TenantMainMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -24,6 +40,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -48,7 +65,7 @@ WSGI_APPLICATION = "config.wsgi.application"
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.postgresql",
+        "ENGINE": "django_tenants.postgresql_backend",
         "NAME": os.environ.get("POSTGRES_DB", "mydb"),
         "USER": os.environ.get("POSTGRES_USER", "myuser"),
         "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "mypassword"),
@@ -57,12 +74,29 @@ DATABASES = {
     }
 }
 
+DATABASE_ROUTERS = ["django_tenants.routers.TenantSyncRouter"]
+
+TENANT_MODEL = "core.Client"
+TENANT_DOMAIN_MODEL = "core.Domain"
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
+
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
+]
+
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_USERNAME_REQUIRED = False
+ACCOUNT_AUTHENTICATION_METHOD = "email"
+ACCOUNT_EMAIL_VERIFICATION = "none"
+LOGIN_REDIRECT_URL = "/dashboard/"
+LOGOUT_REDIRECT_URL = "/"
 
 LANGUAGE_CODE = "it-it"
 TIME_ZONE = "Europe/Rome"

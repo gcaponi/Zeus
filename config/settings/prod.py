@@ -8,7 +8,7 @@ SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.postgresql",
+        "ENGINE": "django_tenants.postgresql_backend",
         "NAME": os.environ["POSTGRES_DB"],
         "USER": os.environ["POSTGRES_USER"],
         "PASSWORD": os.environ["POSTGRES_PASSWORD"],
@@ -19,6 +19,6 @@ DATABASES = {
 
 STORAGES = {
     "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-    },
+        "BACKEND": "django_tenants.postgresql_backend",
+    }
 }
