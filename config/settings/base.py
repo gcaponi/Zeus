@@ -25,6 +25,7 @@ TENANT_APPS = [
     "django.contrib.auth",
     "allauth",
     "allauth.account",
+    "apps.companies",
 ]
 
 INSTALLED_APPS = list(SHARED_APPS) + [
@@ -110,3 +111,10 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+
+CELERY_BROKER_URL = REDIS_URL
+CELERY_RESULT_BACKEND = REDIS_URL
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = TIME_ZONE
