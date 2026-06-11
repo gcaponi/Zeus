@@ -107,18 +107,29 @@
         <div class="brand">ZEUS</div>
         <h1>Welcome back</h1>
         <p class="subtitle">Sign in to your workspace</p>
+        {% if error %}
+            <div class="errorlist">
+                <p>{{ error }}</p>
+            </div>
+        {% endif %}
         <form method="post">
             {% csrf_token %}
-            {{ form.non_field_errors }}
+            {% if form %}
+                {{ form.non_field_errors }}
+            {% endif %}
             <div>
                 <label for="id_login">Email</label>
-                <input type="email" name="login" id="id_login" autocomplete="email" required>
-                {{ form.login.errors }}
+                <input type="email" name="login" id="id_login" autocomplete="email" required value="{{ request.GET.email|default:'' }}">
+                {% if form %}
+                    {{ form.login.errors }}
+                {% endif %}
             </div>
             <div>
                 <label for="id_password">Password</label>
                 <input type="password" name="password" id="id_password" autocomplete="current-password" required>
-                {{ form.password.errors }}
+                {% if form %}
+                    {{ form.password.errors }}
+                {% endif %}
             </div>
             <button type="submit">Sign in</button>
         </form>

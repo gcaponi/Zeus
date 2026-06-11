@@ -18,3 +18,23 @@ class Client(TenantMixin):
 
 class Domain(DomainMixin):
     pass
+
+
+class WorkspaceAccess(models.Model):
+    email = models.EmailField(unique=True)
+    tenant_domain = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.email} → {self.tenant_domain}"
+
+
+class SignupToken(models.Model):
+    token = models.CharField(max_length=64, unique=True, db_index=True)
+    email = models.EmailField()
+    tenant_schema = models.CharField(max_length=63)
+    created_at = models.DateTimeField(auto_now_add=True)
+    used = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"{self.email} → {self.tenant_schema} ({'used' if self.used else 'pending'})"

@@ -6,7 +6,7 @@ from django.shortcuts import redirect, render
 from django_tenants.utils import schema_context
 
 from apps.core.forms import ZEUSSignupForm
-from apps.core.models import Client, Domain
+from apps.core.models import Client, Domain, WorkspaceAccess
 
 WORKSPACE_COOKIE = "zeus_workspace"
 WORKSPACE_COOKIE_MAX_AGE = 60 * 60 * 24 * 30
@@ -22,21 +22,27 @@ class ZEUSSignupView(SignupView):
 
     def form_valid(self, form):
         slug = form.cleaned_data["company_slug"]
+        email = form.cleaned_data["email"]
 
         tenant = Client(schema_name=slug, name=form.cleaned_data["company_name"])
         tenant.save()
 
-        Domain.objects.create(
+        domain = Domain.objects.create(
             domain=f"{slug}.zeus.cais.uno",
             tenant=tenant,
             is_primary=True,
+        )
+
+        # Crea mappa email→workspace nel public schema
+        WorkspaceAccess.objects.create(
+            email=email,
+            tenant_domain=domain.domain,
         )
 
         with schema_context(slug):
             user = form.save(self.request)
             perform_login(self.request, user, email_verification=False)
 
-        domain = Domain.objects.get(tenant=tenant, is_primary=True)
         response = redirect(f"https://{domain.domain}/onboarding/")
         response.set_cookie(
             WORKSPACE_COOKIE,
@@ -45,6 +51,27 @@ class ZEUSSignupView(SignupView):
             samesite="Lax",
         )
         return response
+
+
+def public_login(request):
+    """Login su zeus.cais.uno che redirect al tenant workspace."""
+    if request.method == "POST":
+        email = request.POST.get("login", "").strip()
+
+        # Cerca workspace nel public schema
+        try:
+            access = WorkspaceAccess.objects.get(email__iexact=email)
+            # Redirect al tenant subdomain con email (login avviene nel tenant)
+            redirect_url = f"https://{access.tenant_domain}/accounts/login/?email={email}"
+            return redirect(redirect_url)
+        except WorkspaceAccess.DoesNotExist:
+            # Email non registrata
+            return render(request, "account/login.html", {
+                "form": None,
+                "error": "Email non registrata. Crea prima un account.",
+            })
+
+    return render(request, "account/login.html", {"form": None, "error": None})
 
 
 def tenant_landing(request):
