@@ -1,10 +1,13 @@
-from .base import *
+import os
+
+from . import base
 
 DEBUG = False
 
 ALLOWED_HOSTS = [".zeus.cais.uno", "91.230.110.7", "localhost", "127.0.0.1"]
 
 CSRF_TRUSTED_ORIGINS = ["https://*.zeus.cais.uno", "https://zeus.cais.uno"]
+SESSION_COOKIE_DOMAIN = ".zeus.cais.uno"
 
 SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 
@@ -21,7 +24,7 @@ DATABASES = {
 
 STORAGES = {
     "staticfiles": {
-        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        "BACKEND": base.STORAGES["staticfiles"],
     },
 }
 

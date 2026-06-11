@@ -8,6 +8,9 @@ from django_tenants.utils import schema_context
 from apps.core.forms import ZEUSSignupForm
 from apps.core.models import Client, Domain
 
+WORKSPACE_COOKIE = "zeus_workspace"
+WORKSPACE_COOKIE_MAX_AGE = 60 * 60 * 24 * 30
+
 
 def health_check(request):
     return JsonResponse({"status": "ok"})
@@ -34,12 +37,23 @@ class ZEUSSignupView(SignupView):
             perform_login(self.request, user, email_verification=False)
 
         domain = Domain.objects.get(tenant=tenant, is_primary=True)
-        return redirect(f"https://{domain.domain}/onboarding/")
+        response = redirect(f"https://{domain.domain}/onboarding/")
+        response.set_cookie(
+            WORKSPACE_COOKIE,
+            domain.domain,
+            max_age=WORKSPACE_COOKIE_MAX_AGE,
+            samesite="Lax",
+        )
+        return response
 
 
 def tenant_landing(request):
     tenant = request.tenant if hasattr(request, "tenant") else None
     is_public = tenant is None or tenant.schema_name == "public"
+    if is_public:
+        workspace = request.COOKIES.get(WORKSPACE_COOKIE)
+        if workspace:
+            return redirect(f"https://{workspace}/onboarding/")
     return render(request, "core/tenant_landing.html", {
         "tenant": tenant,
         "is_public": is_public,
