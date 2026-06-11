@@ -1,5 +1,7 @@
 import os
 
+from .base import *  # noqa: F403
+
 DEBUG = False
 
 ALLOWED_HOSTS = [".zeus.cais.uno", "91.230.110.7", "localhost", "127.0.0.1"]
