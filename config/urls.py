@@ -7,6 +7,7 @@ from apps.core.views import (
     ZEUSSignupView,
     health_check,
     public_login,
+    public_logout,
     tenant_dashboard,
     tenant_landing,
 )
@@ -17,6 +18,7 @@ urlpatterns = [
     path("", include(onboarding_urls)),
     path("accounts/signup/", ZEUSSignupView.as_view(), name="account_signup"),
     path("accounts/login/", public_login, name="account_login"),
+    path("accounts/logout/", public_logout, name="account_logout"),
     path("accounts/", include("allauth.urls")),
     path("dashboard/", tenant_dashboard, name="tenant-dashboard"),
     path("api/", include(companies_urls)),

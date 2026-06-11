@@ -2,6 +2,7 @@ from allauth.account.utils import perform_login
 from allauth.account.views import SignupView
 from django.contrib.auth import authenticate
 from django.contrib.auth import login as auth_login
+from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
@@ -92,7 +93,7 @@ def public_login(request):
 def tenant_landing(request):
     tenant = request.tenant if hasattr(request, "tenant") else None
     is_public = tenant is None or tenant.schema_name == "public"
-    if is_public:
+    if is_public and request.user.is_authenticated:
         workspace = request.COOKIES.get(WORKSPACE_COOKIE)
         if workspace:
             return redirect(f"https://{workspace}/onboarding/")
@@ -109,3 +110,11 @@ def tenant_dashboard(request):
         "tenant": tenant,
         "user": request.user,
     })
+
+
+def public_logout(request):
+    """Logout from any domain and redirect to public login with cookie cleared."""
+    auth_logout(request)
+    response = redirect("https://zeus.cais.uno/accounts/login/")
+    response.delete_cookie(WORKSPACE_COOKIE)
+    return response
