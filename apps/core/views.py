@@ -1,5 +1,6 @@
 from allauth.account.utils import perform_login
 from allauth.account.views import SignupView
+from django.contrib.auth import authenticate
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
@@ -54,24 +55,35 @@ class ZEUSSignupView(SignupView):
 
 
 def public_login(request):
-    """Login su zeus.cais.uno che redirect al tenant workspace."""
+    """Login su zeus.cais.uno che trova workspace e redirect a onboarding."""
     if request.method == "POST":
         email = request.POST.get("login", "").strip()
-
-        # Cerca workspace nel public schema
-        try:
-            access = WorkspaceAccess.objects.get(email__iexact=email)
-            # Redirect al tenant subdomain con email (login avviene nel tenant)
-            redirect_url = f"https://{access.tenant_domain}/accounts/login/?email={email}"
-            return redirect(redirect_url)
-        except WorkspaceAccess.DoesNotExist:
-            # Email non registrata
+        password = request.POST.get("password", "")
+        access = WorkspaceAccess.objects.filter(email__iexact=email).first()
+        if not access:
             return render(request, "account/login.html", {
-                "form": None,
-                "error": "Email non registrata. Crea prima un account.",
+                "error": "Email o password non validi.",
             })
 
-    return render(request, "account/login.html", {"form": None, "error": None})
+        tenant_schema = access.tenant_domain.split(".zeus.cais.uno", 1)[0]
+        with schema_context(tenant_schema):
+            user = authenticate(request, username=email, password=password)
+
+        if user is None:
+            return render(request, "account/login.html", {
+                "error": "Email o password non validi.",
+            })
+
+        response = redirect(f"https://{access.tenant_domain}/onboarding/")
+        response.set_cookie(
+            WORKSPACE_COOKIE,
+            access.tenant_domain,
+            max_age=WORKSPACE_COOKIE_MAX_AGE,
+            samesite="Lax",
+        )
+        return response
+
+    return render(request, "account/login.html", {"error": None})
 
 
 def tenant_landing(request):

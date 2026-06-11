@@ -28,17 +28,6 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.CreateModel(
-            name='SignupToken',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('token', models.CharField(db_index=True, max_length=64, unique=True)),
-                ('email', models.EmailField(max_length=254)),
-                ('tenant_schema', models.CharField(max_length=63)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('used', models.BooleanField(default=False)),
-            ],
-        ),
-        migrations.CreateModel(
             name='WorkspaceAccess',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
