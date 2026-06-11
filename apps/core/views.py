@@ -1,6 +1,7 @@
 from allauth.account.utils import perform_login
 from allauth.account.views import SignupView
 from django.contrib.auth import authenticate
+from django.contrib.auth import login as auth_login
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
@@ -73,6 +74,8 @@ def public_login(request):
             return render(request, "account/login.html", {
                 "error": "Email o password non validi.",
             })
+
+        auth_login(request, user)
 
         response = redirect(f"https://{access.tenant_domain}/onboarding/")
         response.set_cookie(
