@@ -4,9 +4,17 @@ import logging
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
+from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
-from apps.companies.models import Company, CompanyDNA, DNAFeedback, PipelineRun, Source
+from apps.companies.models import (
+    Company,
+    CompanyDNA,
+    DNAFeedback,
+    PipelineRun,
+    SectionApproval,
+    Source,
+)
 from apps.companies.tasks import _generate_dna, run_pipeline, scrape_source
 
 logger = logging.getLogger(__name__)
@@ -39,7 +47,7 @@ def _onboarding_context(request):
     }
 
 
-def _dna_sections(content):
+def _dna_sections(content, old_content=None):
     labels = {
         "chi_siamo": "Chi siamo",
         "mission": "Mission",
@@ -52,8 +60,18 @@ def _dna_sections(content):
         value = content.get(key) if isinstance(content, dict) else None
         if isinstance(value, list):
             value = ", ".join(map(str, value))
-        if value:
-            sections.append({"label": label, "value": value})
+        old_value = None
+        if old_content and isinstance(old_content, dict):
+            old_value = old_content.get(key)
+            if isinstance(old_value, list):
+                old_value = ", ".join(map(str, old_value))
+        sections.append({
+            "key": key,
+            "label": label,
+            "value": value or "",
+            "old_value": old_value or "",
+            "changed": bool(old_value and old_value != value),
+        })
     return sections
 
 
@@ -403,3 +421,120 @@ def dna_create(request):
         "content": dna.content,
         "created_at": dna.created_at.isoformat(),
     }, status=201)
+
+
+@login_required
+def dna_review(request):
+    """Pagina review DNA — mostra sezioni con stato approvazione."""
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    dna = company.dna_versions.filter(is_current=True).first()
+    if not dna:
+        return HttpResponse("DNA not found", status=404)
+    return render(request, "core/dna_review.html", {
+        "dna": dna,
+        "sections": _dna_sections(dna.content),
+        "approved_keys": dna.approved_sections(),
+        "missing_keys": dna.missing_sections(),
+        "is_fully_approved": dna.is_fully_approved(),
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def dna_section_approve(request, pk, section_key):
+    """Approva una sezione specifica del DNA."""
+    company = _tenant_company(request)
+    if not company:
+        return JsonResponse({"error": "no tenant"}, status=400)
+    dna = CompanyDNA.objects.filter(pk=pk, company=company, is_current=True).first()
+    if not dna:
+        return JsonResponse({"error": "dna not found"}, status=404)
+    if section_key not in {"chi_siamo", "mission", "settore", "mercato", "pilastri"}:
+        return JsonResponse({"error": "invalid section_key"}, status=400)
+
+    body = json.loads(request.body)
+    comment = body.get("comment", "")
+    is_clarification = body.get("is_clarification", False)
+
+    SectionApproval.objects.update_or_create(
+        dna=dna,
+        section_key=section_key,
+        defaults={
+            "approved_by": request.user,
+            "comment": comment,
+            "is_clarification": is_clarification,
+        },
+    )
+
+    # Check if all sections approved
+    if not dna.missing_sections():
+        dna.is_approved = timezone.now()
+        dna.save(update_fields=["is_approved"])
+
+    return JsonResponse({
+        "section_key": section_key,
+        "approved": True,
+        "is_fully_approved": dna.is_fully_approved(),
+        "missing_sections": dna.missing_sections(),
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def dna_section_edit(request, pk, section_key):
+    """Modifica una sezione → nuovo DNA v+1 con approvazioni trasferite (opzione B)."""
+    company = _tenant_company(request)
+    if not company:
+        return JsonResponse({"error": "no tenant"}, status=400)
+    old_dna = CompanyDNA.objects.filter(pk=pk, company=company, is_current=True).first()
+    if not old_dna:
+        return JsonResponse({"error": "dna not found"}, status=404)
+    if section_key not in {"chi_siamo", "mission", "settore", "mercato", "pilastri"}:
+        return JsonResponse({"error": "invalid section_key"}, status=400)
+
+    body = json.loads(request.body)
+    new_text = body.get("text", "").strip()
+    if not new_text:
+        return JsonResponse({"error": "text is required"}, status=400)
+
+    # Build new content with modified section
+    content = dict(old_dna.content) if isinstance(old_dna.content, dict) else {}
+    content[section_key] = new_text
+
+    # Mark old current as False
+    company.dna_versions.filter(is_current=True).update(is_current=False)
+
+    # Create new DNA v+1
+    new_dna = CompanyDNA.objects.create(
+        company=company,
+        version=old_dna.version + 1,
+        content=content,
+        created_by=request.user,
+    )
+
+    # Transfer approvals from old DNA to new DNA (Option B)
+    for approval in old_dna.section_approvals.all():
+        if approval.section_key != section_key:
+            SectionApproval.objects.create(
+                dna=new_dna,
+                section_key=approval.section_key,
+                approved_by=approval.approved_by,
+                comment=approval.comment,
+                is_clarification=approval.is_clarification,
+            )
+
+    return JsonResponse({
+        "dna_id": new_dna.id,
+        "version": new_dna.version,
+        "section_key": section_key,
+        "transferred_approvals": [
+            {
+                "section_key": a.section_key,
+                "approved_by": a.approved_by.email if a.approved_by else None,
+            }
+            for a in new_dna.section_approvals.all()
+        ],
+        "missing_sections": new_dna.missing_sections(),
+    })

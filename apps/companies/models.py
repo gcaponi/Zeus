@@ -44,6 +44,7 @@ class CompanyDNA(models.Model):
     content = models.JSONField()
     confidence_score = models.FloatField(null=True, blank=True)
     is_current = models.BooleanField(default=True)
+    is_approved = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -82,6 +83,49 @@ class CompanyDNA(models.Model):
 
     def __str__(self):
         return f"{self.company.name} v{self.version}"
+
+    def is_fully_approved(self):
+        return self.is_approved is not None
+
+    def approved_sections(self):
+        return {s.section_key for s in self.section_approvals.all()}
+
+    def missing_sections(self):
+        all_keys = {"chi_siamo", "mission", "settore", "mercato", "pilastri"}
+        return sorted(all_keys - self.approved_sections())
+
+
+class SectionApproval(models.Model):
+    SECTION_KEYS = [
+        ("chi_siamo", "Chi siamo"),
+        ("mission", "Mission"),
+        ("settore", "Settore"),
+        ("mercato", "Mercato"),
+        ("pilastri", "Pilastri"),
+    ]
+
+    dna = models.ForeignKey(
+        CompanyDNA,
+        on_delete=models.CASCADE,
+        related_name="section_approvals",
+    )
+    section_key = models.CharField(max_length=20, choices=SECTION_KEYS)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    approved_at = models.DateTimeField(auto_now_add=True)
+    comment = models.TextField(null=True, blank=True)
+    is_clarification = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = [["dna", "section_key"]]
+        ordering = ["-approved_at"]
+
+    def __str__(self):
+        return f"{self.section_key} on DNA {self.dna_id}"
 
 
 class Source(models.Model):
