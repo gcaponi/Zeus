@@ -75,6 +75,15 @@ def _dna_sections(content, old_content=None):
     return sections
 
 
+def _request_data(request):
+    if request.content_type == "application/json":
+        try:
+            return json.loads(request.body or b"{}")
+        except json.JSONDecodeError:
+            return {}
+    return request.POST
+
+
 @login_required
 def company_detail(request):
     tenant = getattr(request, "tenant", None)
@@ -466,28 +475,44 @@ def dna_section_approve(request, pk, section_key):
     if section_key not in {"chi_siamo", "mission", "settore", "mercato", "pilastri"}:
         return JsonResponse({"error": "invalid section_key"}, status=400)
 
-    body = json.loads(request.body)
+    body = _request_data(request)
     comment = body.get("comment", "")
-    is_clarification = body.get("is_clarification", False)
+    is_clarification = str(body.get("is_clarification", False)).lower() == "true"
 
-    SectionApproval.objects.update_or_create(
-        dna=dna,
-        section_key=section_key,
-        defaults={
-            "approved_by": request.user,
-            "comment": comment,
-            "is_clarification": is_clarification,
-        },
-    )
+    if is_clarification:
+        SectionApproval.objects.create(
+            dna=dna,
+            section_key=section_key,
+            approved_by=request.user,
+            comment=comment,
+            is_clarification=True,
+        )
+    else:
+        SectionApproval.objects.update_or_create(
+            dna=dna,
+            section_key=section_key,
+            is_clarification=False,
+            defaults={
+                "approved_by": request.user,
+                "comment": comment,
+            },
+        )
+        # Check if all sections approved
+        dna.refresh_from_db()
+        if not dna.missing_sections():
+            dna.is_approved = timezone.now()
+            dna.save(update_fields=["is_approved"])
 
-    # Check if all sections approved
-    if not dna.missing_sections():
-        dna.is_approved = timezone.now()
-        dna.save(update_fields=["is_approved"])
+    if is_clarification and request.headers.get("HX-Request"):
+        return HttpResponse(
+            '<span class="rounded-xl bg-amber-400/10 px-3 py-2 text-sm '
+            'text-amber-300">Richiesta inviata ✓</span>'
+        )
 
     return JsonResponse({
         "section_key": section_key,
-        "approved": True,
+        "is_clarification": is_clarification,
+        "approved": not is_clarification,
         "is_fully_approved": dna.is_fully_approved(),
         "missing_sections": dna.missing_sections(),
     })
@@ -506,7 +531,7 @@ def dna_section_edit(request, pk, section_key):
     if section_key not in {"chi_siamo", "mission", "settore", "mercato", "pilastri"}:
         return JsonResponse({"error": "invalid section_key"}, status=400)
 
-    body = json.loads(request.body)
+    body = _request_data(request)
     new_text = body.get("text", "").strip()
     if not new_text:
         return JsonResponse({"error": "text is required"}, status=400)

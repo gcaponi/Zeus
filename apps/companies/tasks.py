@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from pathlib import Path
 
 from celery import shared_task
@@ -40,8 +41,17 @@ def _generate_dna(source: Source, company):
     try:
         content = json.loads(result.text)
     except json.JSONDecodeError:
-        content = {"raw": result.text}
+        # Try to extract JSON from markdown code block
+        match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", result.text, re.DOTALL)
+        if match:
+            try:
+                content = json.loads(match.group(1))
+            except json.JSONDecodeError:
+                content = {"raw": result.text}
+        else:
+            content = {"raw": result.text}
 
+    company.dna_versions.filter(is_current=True).update(is_current=False)
     dna = CompanyDNA.objects.create(
         company=company,
         version=next_version,

@@ -88,7 +88,7 @@ class CompanyDNA(models.Model):
         return self.is_approved is not None
 
     def approved_sections(self):
-        return {s.section_key for s in self.section_approvals.all()}
+        return {s.section_key for s in self.section_approvals.filter(is_clarification=False)}
 
     def missing_sections(self):
         all_keys = {"chi_siamo", "mission", "settore", "mercato", "pilastri"}
@@ -121,7 +121,6 @@ class SectionApproval(models.Model):
     is_clarification = models.BooleanField(default=False)
 
     class Meta:
-        unique_together = [["dna", "section_key"]]
         ordering = ["-approved_at"]
 
     def __str__(self):
