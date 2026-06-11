@@ -113,7 +113,8 @@
             <div class="tenant-badge">Active workspace</div>
             <p>Welcome to {{ tenant.name }}'s ZEUS workspace. Manage your projects, clients, and team from here.</p>
             <div class="actions">
-                <a href="{% url 'tenant-dashboard' %}" class="btn btn-primary">Go to dashboard</a>
+                <a href="{% url 'onboarding-index' %}" class="btn btn-primary">Start onboarding</a>
+                <a href="{% url 'tenant-dashboard' %}" class="btn btn-outline">Go to dashboard</a>
                 <a href="{% url 'account_logout' %}" class="btn btn-outline">Sign out</a>
             </div>
         {% endif %}

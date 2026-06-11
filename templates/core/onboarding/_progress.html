@@ -1,0 +1,30 @@
+<div id="run-status" data-run-id="{{ run.id }}">
+    <h2 class="text-xl font-medium">ZEUS sta lavorando</h2>
+    <p class="mt-2 text-sm text-slate-400">Fonte: <span class="text-slate-200">{{ source.url }}</span></p>
+
+    <div class="mt-6 rounded-2xl border border-white/10 bg-slate-950 p-4">
+        <div class="mb-3 flex items-center justify-between text-sm">
+            <span>Stato</span>
+            <strong class="capitalize text-cyan-300">{{ run.status }}</strong>
+        </div>
+        <div class="h-2 rounded-full bg-white/10">
+            <div class="h-2 rounded-full bg-cyan-300 transition-all" style="width: {% if run.status == 'completed' %}100%{% elif run.status == 'failed' %}100%{% else %}45%{% endif %}"></div>
+        </div>
+        <p class="mt-3 text-sm text-slate-400">Step corrente: <span class="text-slate-200">{{ run.current_step|default:"pending" }}</span></p>
+    </div>
+
+    {% if run.status == 'failed' %}
+        <div class="mt-5 rounded-2xl border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-200">
+            Qualcosa è andato storto. Puoi riprovare senza rifare il signup.
+            <button class="mt-3 rounded-2xl bg-red-300 px-4 py-2 font-medium text-slate-950" hx-get="{% url 'onboarding-index' %}" hx-target="#onboarding-step" hx-swap="innerHTML">Ritenta</button>
+        </div>
+    {% elif run.status == 'completed' %}
+        <div class="mt-5" hx-get="{% url 'onboarding-dna' dna.id %}" hx-trigger="load" hx-swap="outerHTML">
+            <p class="text-sm text-slate-400">Caricamento DNA...</p>
+        </div>
+    {% else %}
+        <div class="mt-5" hx-get="{% url 'onboarding-status' run.id %}" hx-trigger="every 2s" hx-swap="outerHTML">
+            <p class="text-sm text-slate-400">Aggiornamento automatico...</p>
+        </div>
+    {% endif %}
+</div>

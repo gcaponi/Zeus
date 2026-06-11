@@ -483,6 +483,56 @@ class TestDNAFeedback:
         assert dna.confidence_score is not None
 
 
+@pytest.mark.django_db
+class TestOnboardingViews:
+    def test_onboarding_index_shows_source_form(self, rf_with_tenant):
+        Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        req = rf_with_tenant("get", "/onboarding/")
+        resp = views.onboarding_index(req)
+        assert resp.status_code == 200
+        assert b"Aggiungi il sito web" in resp.content
+
+    def test_onboarding_source_create_generates_dna(self, rf_with_tenant):
+        from apps.companies.llm_client import MockLLMClient
+
+        with patch("apps.companies.tasks.get_llm_client", return_value=MockLLMClient()):
+            req = rf_with_tenant("post", "/onboarding/source/", {"url": "https://rossi-metalli.it"}, form=True)
+            resp = views.onboarding_source_create(req)
+
+        assert resp.status_code == 200
+        assert b"DNA generato" in resp.content
+        assert Company.objects.get(schema_name="test-tenant").sources.count() == 1
+        assert PipelineRun.objects.filter(company__schema_name="test-tenant").count() == 1
+        assert CompanyDNA.objects.filter(company__schema_name="test-tenant").count() == 1
+
+    def test_onboarding_source_create_invalid_url(self, rf_with_tenant):
+        Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        req = rf_with_tenant("post", "/onboarding/source/", {}, form=True)
+        resp = views.onboarding_source_create(req)
+        assert resp.status_code == 400
+        assert b"Inserisci un URL valido" in resp.content
+
+    def test_onboarding_status_completed(self, rf_with_tenant):
+        from apps.companies.llm_client import MockLLMClient
+
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        source = Source.objects.create(
+            company=company, url="https://rossi-metalli.it",
+            status=Source.STATUS_SCRAPED,
+            scraped_data={"markdown": "Rossi Metalli SRL produce acciai speciali."},
+        )
+        run = PipelineRun.objects.create(company=company, source=source, status=PipelineRun.STATUS_PENDING)
+        with patch("apps.companies.tasks.get_llm_client", return_value=MockLLMClient()):
+            from apps.companies.tasks import run_pipeline
+            run_pipeline(run.id)
+        req = rf_with_tenant("get", f"/onboarding/status/{run.id}/")
+        resp = views.onboarding_status(req, pk=run.id)
+        data = json.loads(resp.content)
+        assert resp.status_code == 200
+        assert data["status"] == "completed"
+        assert data["dna_id"] is not None
+
+
 @pytest.fixture
 def rf_with_tenant(django_user_model):
     """RequestFactory with request.tenant + authenticated user."""
@@ -491,9 +541,12 @@ def rf_with_tenant(django_user_model):
     rf = RequestFactory()
     user = django_user_model.objects.create_user(username="u", email="test@x.it", password="pw")
 
-    def _make(method, path, data=None):
+    def _make(method, path, data=None, form=False):
         if method == "post":
-            req = rf.post(path, json.dumps(data or {}), content_type="application/json")
+            if form:
+                req = rf.post(path, data or {})
+            else:
+                req = rf.post(path, json.dumps(data or {}), content_type="application/json")
         else:
             req = rf.get(path)
 

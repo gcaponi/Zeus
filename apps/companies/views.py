@@ -2,13 +2,59 @@ import json
 import logging
 
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
 
 from apps.companies.models import Company, CompanyDNA, DNAFeedback, PipelineRun, Source
 from apps.companies.tasks import _generate_dna, run_pipeline, scrape_source
 
 logger = logging.getLogger(__name__)
+
+
+def _tenant_company(request):
+    tenant = getattr(request, "tenant", None)
+    if not tenant or tenant.schema_name == "public":
+        return None
+    company, _ = Company.objects.get_or_create(
+        schema_name=tenant.schema_name,
+        defaults={"name": tenant.name},
+    )
+    return company
+
+
+def _onboarding_context(request):
+    company = _tenant_company(request)
+    if not company:
+        return None
+    latest_source = company.sources.order_by("-created_at").first()
+    latest_run = company.pipeline_runs.select_related("source").order_by("-created_at").first()
+    latest_dna = company.dna_versions.filter(is_current=True).order_by("-version").first()
+    return {
+        "company": company,
+        "source": latest_source,
+        "run": latest_run,
+        "dna": latest_dna,
+        "is_done": latest_dna is not None,
+    }
+
+
+def _dna_sections(content):
+    labels = {
+        "chi_siamo": "Chi siamo",
+        "mission": "Mission",
+        "settore": "Settore",
+        "mercato": "Mercato",
+        "pilastri": "Pilastri",
+    }
+    sections = []
+    for key, label in labels.items():
+        value = content.get(key) if isinstance(content, dict) else None
+        if isinstance(value, list):
+            value = ", ".join(map(str, value))
+        if value:
+            sections.append({"label": label, "value": value})
+    return sections
 
 
 @login_required
@@ -24,6 +70,87 @@ def company_detail(request):
         "id": company.id,
         "name": company.name,
         "created_at": company.created_at.isoformat(),
+    })
+
+
+@login_required
+def onboarding_index(request):
+    context = _onboarding_context(request)
+    if not context:
+        return HttpResponse("No tenant", status=400)
+    return render(request, "core/onboarding.html", context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def onboarding_source_create(request):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+
+    url = request.POST.get("url", "").strip()
+    if not url:
+        return render(request, "core/onboarding/_source_form.html", {
+            "error": "Inserisci un URL valido.",
+        }, status=400)
+
+    source = Source.objects.create(company=company, url=url, status=Source.STATUS_PENDING)
+    run = PipelineRun.objects.create(
+        company=company,
+        source=source,
+        status=PipelineRun.STATUS_PENDING,
+    )
+    run_pipeline.delay(run.id)
+    run.refresh_from_db()
+    source.refresh_from_db()
+
+    dna = company.dna_versions.filter(is_current=True).order_by("-version").first()
+    if run.status == PipelineRun.STATUS_COMPLETED and dna:
+        return render(request, "core/onboarding/_dna.html", {
+            "dna": dna,
+            "sections": _dna_sections(dna.content),
+        })
+
+    return render(request, "core/onboarding/_progress.html", {
+        "run": run,
+        "source": source,
+    })
+
+
+@login_required
+def onboarding_status(request, pk):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    run = PipelineRun.objects.filter(
+        pk=pk, company=company,
+    ).select_related("source").first()
+    if not run:
+        return JsonResponse({"error": "not found"}, status=404)
+    dna = company.dna_versions.filter(is_current=True).order_by("-version").first()
+    return JsonResponse({
+        "id": run.id,
+        "status": run.status,
+        "current_step": run.current_step,
+        "error_msg": run.error_msg,
+        "source_status": run.source.status if run.source else None,
+        "dna_id": dna.id if dna else None,
+    })
+
+
+@login_required
+def onboarding_dna(request, pk):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    dna = CompanyDNA.objects.filter(
+        pk=pk, company=company, is_current=True,
+    ).first()
+    if not dna:
+        return HttpResponse("DNA not found", status=404)
+    return render(request, "core/onboarding/_dna.html", {
+        "dna": dna,
+        "sections": _dna_sections(dna.content),
     })
 
 

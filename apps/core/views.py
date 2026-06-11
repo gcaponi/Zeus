@@ -1,7 +1,8 @@
-from django.http import JsonResponse
-from django.shortcuts import redirect, render
 from allauth.account.utils import perform_login
 from allauth.account.views import SignupView
+from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
+from django.shortcuts import redirect, render
 from django_tenants.utils import schema_context
 
 from apps.core.forms import ZEUSSignupForm
@@ -32,7 +33,8 @@ class ZEUSSignupView(SignupView):
             user = form.save(self.request)
             perform_login(self.request, user, email_verification=False)
 
-        return redirect("https://zeus.cais.uno/admin/")
+        domain = Domain.objects.get(tenant=tenant, is_primary=True)
+        return redirect(f"https://{domain.domain}/onboarding/")
 
 
 def tenant_landing(request):
@@ -42,9 +44,6 @@ def tenant_landing(request):
         "tenant": tenant,
         "is_public": is_public,
     })
-
-
-from django.contrib.auth.decorators import login_required
 
 
 @login_required

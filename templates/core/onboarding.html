@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Onboarding ZEUS</title>
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100">
+    <div class="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+        <header class="mb-8 flex items-center justify-between gap-4">
+            <div>
+                <p class="text-sm uppercase tracking-[0.3em] text-cyan-300">ZEUS</p>
+                <h1 class="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Onboarding</h1>
+            </div>
+            <a href="{% url 'account_logout' %}" class="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:bg-white/10">Esci</a>
+        </header>
+
+        <main class="grid gap-6 lg:grid-cols-[1fr_360px]">
+            <section class="rounded-3xl border border-white/10 bg-white/[0.03] p-5 shadow-2xl shadow-black/30 sm:p-8">
+                <div class="mb-6 grid gap-3 sm:grid-cols-4">
+                    <div class="rounded-2xl border border-cyan-300/40 bg-cyan-300/10 p-4">
+                        <p class="text-xs uppercase tracking-[0.2em] text-cyan-300">Step 1</p>
+                        <p class="mt-1 font-medium">Account</p>
+                    </div>
+                    <div class="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                        <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Step 2</p>
+                        <p class="mt-1 font-medium">Sito web</p>
+                    </div>
+                    <div class="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                        <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Step 3</p>
+                        <p class="mt-1 font-medium">Scrape</p>
+                    </div>
+                    <div class="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                        <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Step 4</p>
+                        <p class="mt-1 font-medium">DNA</p>
+                    </div>
+                </div>
+
+                <div id="onboarding-step">
+                    {% if dna %}
+                        {% include "core/onboarding/_dna.html" %}
+                    {% elif run and run.status in "running pending" %}
+                        {% include "core/onboarding/_progress.html" %}
+                    {% else %}
+                        {% include "core/onboarding/_source_form.html" %}
+                    {% endif %}
+                </div>
+            </section>
+
+            <aside class="space-y-4">
+                <div class="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
+                    <p class="text-sm uppercase tracking-[0.2em] text-slate-400">Workspace</p>
+                    <h2 class="mt-2 text-xl font-medium">{{ company.name }}</h2>
+                    <p class="mt-2 text-sm text-slate-400">{{ company.schema_name }}.zeus.cais.uno</p>
+                </div>
+                <div class="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
+                    <p class="text-sm uppercase tracking-[0.2em] text-slate-400">Cosa succede</p>
+                    <ol class="mt-4 space-y-3 text-sm text-slate-300">
+                        <li class="flex gap-3"><span class="mt-1 h-2 w-2 rounded-full bg-cyan-300"></span>ZEUS legge il sito aziendale</li>
+                        <li class="flex gap-3"><span class="mt-1 h-2 w-2 rounded-full bg-cyan-300"></span>Genera una bozza di DNA</li>
+                        <li class="flex gap-3"><span class="mt-1 h-2 w-2 rounded-full bg-cyan-300"></span>Puoi rivederlo nella prossima slice</li>
+                    </ol>
+                </div>
+            </aside>
+        </main>
+    </div>
+</body>
+</html>
