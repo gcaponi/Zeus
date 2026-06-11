@@ -3,7 +3,9 @@ import logging
 from pathlib import Path
 
 from celery import shared_task
+from django.db import connection
 from django.utils import timezone
+from django_tenants.utils import schema_context
 
 from apps.companies.llm_client import LLM_MODEL, get_llm_client
 from apps.companies.models import CompanyDNA, LLMCall, PipelineRun, Source
@@ -49,67 +51,81 @@ def _generate_dna(source: Source, company):
 
 
 @shared_task
-def scrape_source(source_id: int):
-    try:
-        source = Source.objects.get(pk=source_id)
-    except Source.DoesNotExist:
-        logger.error("scrape_source: source %d not found", source_id)
-        return
+def scrape_source(source_id: int, tenant_schema: str | None = None):
+    def _run():
+        try:
+            source = Source.objects.get(pk=source_id)
+        except Source.DoesNotExist:
+            logger.error("scrape_source: source %d not found", source_id)
+            return
 
-    source.status = Source.STATUS_SCRAPING
-    source.save(update_fields=["status"])
+        source.status = Source.STATUS_SCRAPING
+        source.save(update_fields=["status"])
 
-    scraper = get_scraper()
+        scraper = get_scraper()
 
-    try:
-        result = scraper.scrape(source.url)
-        source.scraped_data = result
-        source.status = Source.STATUS_SCRAPED
-        source.save(update_fields=["scraped_data", "status"])
-    except Exception:
-        logger.exception("Scrape failed for source %d (%s)", source_id, source.url)
-        source.status = Source.STATUS_FAILED
-        source.error_msg = "scrape failed"
-        source.save(update_fields=["status", "error_msg"])
-
-
-@shared_task
-def run_pipeline(pipeline_run_id: int):
-    try:
-        run = PipelineRun.objects.select_related("company", "source").get(pk=pipeline_run_id)
-    except PipelineRun.DoesNotExist:
-        logger.error("run_pipeline: pipeline run %d not found", pipeline_run_id)
-        return
-
-    run.status = PipelineRun.STATUS_RUNNING
-    run.current_step = "scrape"
-    run.save(update_fields=["status", "current_step"])
-
-    source = run.source
-    try:
-        if source.status != Source.STATUS_SCRAPED:
-            run.current_step = "scrape"
-            run.save(update_fields=["current_step"])
-            scraper = get_scraper()
+        try:
             result = scraper.scrape(source.url)
             source.scraped_data = result
             source.status = Source.STATUS_SCRAPED
             source.save(update_fields=["scraped_data", "status"])
+        except Exception:
+            logger.exception("Scrape failed for source %d (%s)", source_id, source.url)
+            source.status = Source.STATUS_FAILED
+            source.error_msg = "scrape failed"
+            source.save(update_fields=["status", "error_msg"])
 
-        run.current_step = "generate_dna"
-        run.save(update_fields=["current_step"])
-        dna, llm_call = _generate_dna(source, run.company)
+    if tenant_schema and hasattr(connection, "tenant"):
+        with schema_context(tenant_schema):
+            _run()
+    else:
+        _run()
 
-        run.current_step = "done"
-        run.status = PipelineRun.STATUS_COMPLETED
-        run.completed_at = timezone.now()
-        run.save(update_fields=["current_step", "status", "completed_at"])
-        logger.info(
-            "Pipeline %d completed: DNA v%d, cost $%.4f",
-            pipeline_run_id, dna.version, llm_call.cost_usd,
-        )
-    except Exception:
-        logger.exception("Pipeline %d failed", pipeline_run_id)
-        run.status = PipelineRun.STATUS_FAILED
-        run.error_msg = "pipeline failed"
-        run.save(update_fields=["status", "error_msg"])
+
+@shared_task
+def run_pipeline(pipeline_run_id: int, tenant_schema: str | None = None):
+    def _run():
+        try:
+            run = PipelineRun.objects.select_related("company", "source").get(pk=pipeline_run_id)
+        except PipelineRun.DoesNotExist:
+            logger.error("run_pipeline: pipeline run %d not found", pipeline_run_id)
+            return
+
+        run.status = PipelineRun.STATUS_RUNNING
+        run.current_step = "scrape"
+        run.save(update_fields=["status", "current_step"])
+
+        source = run.source
+        try:
+            if source.status != Source.STATUS_SCRAPED:
+                run.current_step = "scrape"
+                run.save(update_fields=["current_step"])
+                scraper = get_scraper()
+                result = scraper.scrape(source.url)
+                source.scraped_data = result
+                source.status = Source.STATUS_SCRAPED
+                source.save(update_fields=["scraped_data", "status"])
+
+            run.current_step = "generate_dna"
+            run.save(update_fields=["current_step"])
+            dna, llm_call = _generate_dna(source, run.company)
+
+            run.current_step = "done"
+            run.status = PipelineRun.STATUS_COMPLETED
+            run.completed_at = timezone.now()
+            run.save(update_fields=["current_step", "status", "completed_at"])
+            logger.info(
+                "Pipeline %d completed: DNA v%d, cost $%.4f",
+                pipeline_run_id, dna.version, llm_call.cost_usd,
+            )
+        except Exception:
+            logger.exception("Pipeline %d failed", pipeline_run_id)
+            run.status = PipelineRun.STATUS_FAILED
+            run.error_msg = "pipeline failed"
+            run.save(update_fields=["status", "error_msg"])
+
+    if tenant_schema and hasattr(connection, "tenant"):
+        with schema_context(tenant_schema):
+            _run()
+    else:
+        _run()

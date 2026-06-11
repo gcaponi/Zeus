@@ -118,7 +118,11 @@ def onboarding_source_create(request):
         source=source,
         status=PipelineRun.STATUS_PENDING,
     )
-    run_pipeline.delay(run.id)
+    tenant_schema = getattr(request, "tenant", None)
+    run_pipeline.delay(
+        run.id,
+        tenant_schema=tenant_schema.schema_name if tenant_schema else None,
+    )
     run.refresh_from_db()
     source.refresh_from_db()
 
@@ -235,7 +239,11 @@ def source_list_create(request):
         status=Source.STATUS_PENDING,
     )
 
-    scrape_source.delay(source.id)
+    tenant_schema = getattr(request, "tenant", None)
+    scrape_source.delay(
+        source.id,
+        tenant_schema=tenant_schema.schema_name if tenant_schema else None,
+    )
 
     return JsonResponse({
         "id": source.id,
@@ -321,7 +329,11 @@ def pipeline_run_create(request):
         source=source,
         status=PipelineRun.STATUS_PENDING,
     )
-    run_pipeline.delay(run.id)
+    tenant_schema = getattr(request, "tenant", None)
+    run_pipeline.delay(
+        run.id,
+        tenant_schema=tenant_schema.schema_name if tenant_schema else None,
+    )
 
     return JsonResponse({
         "id": run.id,
