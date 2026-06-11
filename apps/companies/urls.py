@@ -10,6 +10,7 @@ urlpatterns = [
     path("company/dna/generate/", views.dna_generate, name="dna-generate"),
     path("company/dna/<int:pk>/feedback/", views.dna_feedback, name="dna-feedback"),
     path("company/dna/review/", views.dna_review, name="dna-review"),
+    path("company/dna/download/", views.dna_download_pdf, name="dna-download-pdf"),
     path(
         "company/dna/<int:pk>/section/<str:section_key>/approve/",
         views.dna_section_approve,

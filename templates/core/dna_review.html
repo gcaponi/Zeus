@@ -35,6 +35,9 @@
                     {% if dna.confidence_score %}
                         <p class="mt-1 text-sm text-cyan-200">Score {{ dna.confidence_score }}/5</p>
                     {% endif %}
+                    {% if is_fully_approved %}
+                        <a href="{% url 'dna-download-pdf' %}" class="mt-3 inline-flex rounded-xl bg-cyan-300 px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-cyan-200">Scarica DNA_aziendale.pdf</a>
+                    {% endif %}
                 </div>
             </div>
         </div>

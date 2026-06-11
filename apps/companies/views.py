@@ -1,6 +1,8 @@
 import json
 import logging
+import textwrap
 
+import fitz
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
@@ -39,12 +41,14 @@ def _onboarding_context(request):
     latest_run = company.pipeline_runs.select_related("source").order_by("-created_at").first()
     latest_dna = company.dna_versions.filter(is_current=True).order_by("-version").first()
     sections = _dna_sections(latest_dna.content) if latest_dna else []
+    step = 4 if latest_dna else 3 if latest_run else 2
     return {
         "company": company,
         "source": latest_source,
         "run": latest_run,
         "dna": latest_dna,
         "sections": sections,
+        "step": step,
         "is_done": latest_dna is not None,
     }
 
@@ -577,3 +581,60 @@ def dna_section_edit(request, pk, section_key):
         ],
         "missing_sections": new_dna.missing_sections(),
     })
+
+
+@login_required
+def dna_download_pdf(request):
+    """Download PDF for the current approved DNA."""
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    dna = company.dna_versions.filter(is_current=True).first()
+    if not dna:
+        return HttpResponse("DNA not found", status=404)
+    if not dna.is_fully_approved():
+        return HttpResponse("DNA non ancora approvato", status=403)
+
+    pdf_bytes = _render_dna_pdf(company, dna, _dna_sections(dna.content))
+    response = HttpResponse(pdf_bytes, content_type="application/pdf")
+    response["Content-Disposition"] = 'attachment; filename="DNA_aziendale.pdf"'
+    return response
+
+
+def _render_dna_pdf(company, dna, sections):
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    margin = 54
+    y = 54
+
+    def new_page():
+        nonlocal page, y
+        page = doc.new_page(width=595, height=842)
+        y = 54
+
+    def write(text, size=11, color=(0, 0, 0), gap=6, width=92):
+        nonlocal y
+        for line in textwrap.wrap(str(text), width=width) or [""]:
+            if y > 780:
+                new_page()
+            page.insert_text((margin, y), line, fontsize=size, fontname="helv", color=color)
+            y += size + 5
+        y += gap
+
+    write("DNA Aziendale", size=24, color=(0.02, 0.18, 0.32), gap=10, width=60)
+    write(company.name, size=14, color=(0.18, 0.18, 0.18), gap=4)
+    approved_at = dna.is_approved.strftime("%d/%m/%Y %H:%M") if dna.is_approved else "n/d"
+    write(
+        f"Versione {dna.version} · Approvato il {approved_at}",
+        size=9,
+        color=(0.35, 0.35, 0.35),
+        gap=18,
+    )
+
+    for section in sections:
+        if y > 720:
+            new_page()
+        write(section["label"].upper(), size=13, color=(0.0, 0.42, 0.55), gap=4, width=70)
+        write(section["value"], size=10.5, color=(0.08, 0.08, 0.08), gap=16)
+
+    return doc.tobytes()
