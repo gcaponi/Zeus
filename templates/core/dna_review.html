@@ -60,6 +60,7 @@
                         {% else %}
                             <button
                                 hx-post="{% url 'dna-section-approve' dna.id section.key %}"
+                                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
                                 hx-vals='{"is_clarification": false}'
                                 hx-swap="none"
                                 hx-on::after-request="window.location.reload()"
@@ -75,6 +76,7 @@
                             </button>
                             <button
                                 hx-post="{% url 'dna-section-approve' dna.id section.key %}"
+                                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
                                 hx-vals='{"is_clarification": true}'
                                 hx-swap="outerHTML"
                                 hx-target="this"

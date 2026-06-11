@@ -38,11 +38,13 @@ def _onboarding_context(request):
     latest_source = company.sources.order_by("-created_at").first()
     latest_run = company.pipeline_runs.select_related("source").order_by("-created_at").first()
     latest_dna = company.dna_versions.filter(is_current=True).order_by("-version").first()
+    sections = _dna_sections(latest_dna.content) if latest_dna else []
     return {
         "company": company,
         "source": latest_source,
         "run": latest_run,
         "dna": latest_dna,
+        "sections": sections,
         "is_done": latest_dna is not None,
     }
 
@@ -76,7 +78,7 @@ def _dna_sections(content, old_content=None):
 
 
 def _request_data(request):
-    if request.content_type == "application/json":
+    if request.content_type.startswith("application/json"):
         try:
             return json.loads(request.body or b"{}")
         except json.JSONDecodeError:

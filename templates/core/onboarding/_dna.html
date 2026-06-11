@@ -9,15 +9,35 @@
         {% endif %}
     </div>
 
-    <div class="mt-6 space-y-4">
-        {% for section in sections %}
-            <section class="rounded-2xl border border-white/10 bg-slate-950 p-4">
-                <h3 class="font-medium text-cyan-200">{{ section.label }}</h3>
-                <p class="mt-2 text-sm leading-6 text-slate-300">{{ section.value }}</p>
-            </section>
-        {% empty %}
-            <pre class="whitespace-pre-wrap rounded-2xl border border-white/10 bg-slate-950 p-4 text-sm text-slate-300">{{ dna.content }}</pre>
-        {% endfor %}
+    <div class="mt-6 rounded-3xl border border-cyan-300/20 bg-slate-950/70 p-4 shadow-inner shadow-cyan-950/20">
+        <div class="mb-4 flex items-center justify-between gap-3">
+            <div>
+                <p class="text-xs uppercase tracking-[0.25em] text-slate-500">Anteprima leggibile</p>
+                <h3 class="mt-1 text-lg font-semibold text-slate-100">Le 5 sezioni del DNA</h3>
+            </div>
+            <span class="rounded-full bg-cyan-300/10 px-3 py-1 text-xs text-cyan-200">Pronto per review</span>
+        </div>
+
+        <div class="grid gap-3">
+            {% for section in sections %}
+                <section class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <div class="mb-2 flex items-center gap-2">
+                        <span class="h-2 w-2 rounded-full bg-cyan-300"></span>
+                        <h4 class="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-200">{{ section.label }}</h4>
+                    </div>
+                    <p class="whitespace-pre-line text-sm leading-7 text-slate-200">{{ section.value }}</p>
+                </section>
+            {% empty %}
+                <section class="rounded-2xl border border-amber-300/20 bg-amber-300/5 p-4">
+                    <h4 class="font-medium text-amber-200">DNA non ancora strutturato</h4>
+                    <p class="mt-2 text-sm leading-6 text-slate-300">
+                        ZEUS ha salvato una bozza raw. Rigenera il DNA per ottenere la vista a sezioni.
+                    </p>
+                    <pre class="mt-4 max-h-64 overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-slate-950 p-4 text-xs text-slate-300">{{ dna.content }}</pre>
+                </section>
+            {% endfor %}
+        </div>
+    </div>
     </div>
 
     <div class="mt-6 flex flex-wrap gap-3">
