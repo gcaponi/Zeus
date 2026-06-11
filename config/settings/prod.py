@@ -1,7 +1,5 @@
 import os
 
-from . import base
-
 DEBUG = False
 
 ALLOWED_HOSTS = [".zeus.cais.uno", "91.230.110.7", "localhost", "127.0.0.1"]
@@ -24,7 +22,7 @@ DATABASES = {
 
 STORAGES = {
     "staticfiles": {
-        "BACKEND": base.STORAGES["staticfiles"],
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
     },
 }
 
