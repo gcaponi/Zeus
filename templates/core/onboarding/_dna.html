@@ -1,8 +1,8 @@
 <div id="dna-result">
     <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
-            <p class="text-sm uppercase tracking-[0.2em] text-cyan-300">DNA v{{ dna.version }}</p>
-            <h2 class="text-2xl font-semibold">DNA generato</h2>
+            <p class="text-sm uppercase tracking-[0.2em] text-cyan-300">{% if dna.dna_type == 'complete' %}DNA completo{% else %}Pre-DNA{% endif %} v{{ dna.version }}</p>
+            <h2 class="text-2xl font-semibold">{% if dna.dna_type == 'complete' %}DNA completo generato{% else %}Pre-DNA generato{% endif %}</h2>
         </div>
         {% if dna.confidence_score %}
             <span class="rounded-full bg-cyan-300/10 px-3 py-1 text-sm text-cyan-200">Score {{ dna.confidence_score }}/5</span>
@@ -13,9 +13,9 @@
         <div class="mb-4 flex items-center justify-between gap-3">
             <div>
                 <p class="text-xs uppercase tracking-[0.25em] text-slate-500">Anteprima leggibile</p>
-                <h3 class="mt-1 text-lg font-semibold text-slate-100">Le 5 sezioni del DNA</h3>
+                <h3 class="mt-1 text-lg font-semibold text-slate-100">Le 5 sezioni del {% if dna.dna_type == 'complete' %}DNA completo{% else %}pre-DNA{% endif %}</h3>
             </div>
-            <span class="rounded-full bg-cyan-300/10 px-3 py-1 text-xs text-cyan-200">Pronto per review</span>
+            <span class="rounded-full bg-cyan-300/10 px-3 py-1 text-xs text-cyan-200">{% if dna.dna_type == 'complete' %}Pronto per review finale{% else %}Da completare con 10 domande{% endif %}</span>
         </div>
 
         <div class="grid gap-3">
@@ -38,10 +38,14 @@
             {% endfor %}
         </div>
     </div>
-    </div>
 
     <div class="mt-6 flex flex-wrap gap-3">
         <a href="{% url 'onboarding-index' %}" class="rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:bg-white/10">Torna all'onboarding</a>
-        <a href="{% url 'dna-review' %}" class="rounded-2xl bg-cyan-300 px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-cyan-200">Review DNA →</a>
+        {% if dna.dna_type == 'complete' %}
+            <a href="{% url 'dna-review' %}" class="rounded-2xl bg-cyan-300 px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-cyan-200">Review DNA →</a>
+        {% else %}
+            <a href="{% url 'dna-review' %}" class="rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:bg-white/10">Review pre-DNA</a>
+            <a href="{% url 'dna-questions' %}" class="rounded-2xl bg-cyan-300 px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-cyan-200">Rispondi alle 10 domande →</a>
+        {% endif %}
     </div>
 </div>

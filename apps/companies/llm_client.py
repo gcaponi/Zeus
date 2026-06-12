@@ -1,5 +1,6 @@
 """LLM client wrapper — raw OpenAI SDK, no Langchain."""
 
+import json
 import logging
 import os
 import time
@@ -69,6 +70,50 @@ class OpenAIClient(LLMClient):
 
 class MockLLMClient(LLMClient):
     def generate(self, prompt: str, model: str | None = None) -> LLMResult:
+        if "GENERA_DOMANDE_A1_A20" in prompt:
+            plan_slug = "starter"
+            answer_depth = "generica"
+            if "PIANO: professional" in prompt:
+                plan_slug = "professional"
+                answer_depth = "mirata"
+            elif "PIANO: enterprise" in prompt:
+                plan_slug = "enterprise"
+                answer_depth = "analitica"
+            guidance = {
+                "starter": "Risposta sintetica utile a completare un DNA base di almeno 2 pagine.",
+                "professional": "Risposta completa, specifica e basata su quanto emerso dai dati.",
+                "enterprise": (
+                    "Risposta analitica sulla mentalita aziendale e sui criteri decisionali."
+                ),
+            }[plan_slug]
+            anchor = "pre-DNA"
+            if "ISO 9001" in prompt:
+                anchor = "ISO 9001"
+            if plan_slug == "enterprise":
+                anchor = "mentalita aziendale"
+            questions = []
+            sections = ["chi_siamo", "mission", "pilastri", "mercato", "settore"]
+            for index in range(10):
+                code = f"A{index + 1}"
+                questions.append({
+                    "code": code,
+                    "section_key": sections[index % len(sections)],
+                    "principle": f"Principio {code}",
+                    "question": (
+                        f"Domanda {code} per piano {plan_slug}: chiarisci {anchor} "
+                        "partendo dal pre-DNA generato."
+                    ),
+                    "answer_depth": answer_depth,
+                    "answer_guidance": guidance,
+                })
+            return LLMResult(
+                text=json.dumps({"questions": questions}, ensure_ascii=False),
+                tokens_in=500,
+                tokens_out=300,
+                cost=0.0002,
+                latency_ms=900,
+            )
+
         return LLMResult(
             text=(
                 '{"chi_siamo": "Rossi Metalli SRL opera da 40 anni nel settore siderurgico '

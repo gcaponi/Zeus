@@ -13,7 +13,7 @@
         <header class="mb-8 flex items-center justify-between gap-4">
             <div>
                 <p class="text-sm uppercase tracking-[0.3em] text-cyan-300">ZEUS</p>
-                <h1 class="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Review DNA</h1>
+                <h1 class="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">{% if dna.dna_type == 'complete' %}Review DNA completo{% else %}Review pre-DNA{% endif %}</h1>
             </div>
             <a href="{% url 'onboarding-index' %}" class="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:bg-white/10">Torna all'onboarding</a>
         </header>
@@ -23,8 +23,10 @@
                 <div>
                     <p class="text-sm uppercase tracking-[0.2em] text-slate-400">Stato</p>
                     <p class="mt-1 text-lg font-medium">
-                        {% if is_fully_approved %}
-                            <span class="text-green-400">✅ DNA approvato</span>
+                        {% if is_export_ready %}
+                            <span class="text-green-400">✅ DNA completo approvato</span>
+                        {% elif is_fully_approved %}
+                            <span class="text-cyan-300">Pre-DNA approvato, mancano le 10 domande</span>
                         {% else %}
                             <span class="text-amber-400">⏳ {{ missing_keys|length }} sezioni da approvare</span>
                         {% endif %}
@@ -35,8 +37,10 @@
                     {% if dna.confidence_score %}
                         <p class="mt-1 text-sm text-cyan-200">Score {{ dna.confidence_score }}/5</p>
                     {% endif %}
-                    {% if is_fully_approved %}
+                    {% if is_export_ready %}
                         <a href="{% url 'dna-download-pdf' %}" class="mt-3 inline-flex rounded-xl bg-cyan-300 px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-cyan-200">Scarica DNA_aziendale.pdf</a>
+                    {% elif dna.dna_type != 'complete' %}
+                        <a href="{% url 'dna-questions' %}" class="mt-3 inline-flex rounded-xl bg-cyan-300 px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-cyan-200">Vai alle 10 domande</a>
                     {% endif %}
                 </div>
             </div>

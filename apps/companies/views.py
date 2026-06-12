@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import textwrap
 
 import fitz
@@ -9,18 +10,54 @@ from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
+from apps.companies.llm_client import LLM_MODEL, get_llm_client
 from apps.companies.models import (
     Company,
     CompanyDNA,
+    CompanyFile,
+    CompanyQuestion,
     DNAFeedback,
+    LLMCall,
     PipelineRun,
     SectionApproval,
     Source,
 )
 from apps.companies.tasks import _generate_dna, run_pipeline, scrape_source
-from apps.core.models import WorkspaceSubscription
+from apps.core.models import Plan, WorkspaceSubscription
 
 logger = logging.getLogger(__name__)
+
+QUESTION_GENERATION_PROFILES = {
+    Plan.SLUG_STARTER: {
+        "label": "Starter - domande generiche per DNA base",
+        "answer_depth": "generica",
+        "instruction": (
+            "Genera domande semplici e comprensibili. Devono completare un DNA "
+            "Aziendale base di almeno 2 pagine. Le risposte attese possono essere "
+            "sintetiche, ma devono chiarire identita, promessa, clienti, limiti e tono."
+        ),
+    },
+    Plan.SLUG_PROFESSIONAL: {
+        "label": "Professional - domande mirate su sito, file e pre-DNA",
+        "answer_depth": "mirata",
+        "instruction": (
+            "Genera domande mirate e contestuali. Ogni domanda deve partire da una "
+            "cosa specifica emersa da scraping, file caricati o pre-DNA: una lacuna, "
+            "un'ambiguita, un'affermazione da verificare, un mercato, un vincolo, "
+            "una prova o una contraddizione. Le risposte attese devono essere complete."
+        ),
+    },
+    Plan.SLUG_ENTERPRISE: {
+        "label": "Enterprise - analisi profonda della mentalita aziendale",
+        "answer_depth": "analitica",
+        "instruction": (
+            "Agisci come un analista aziendale senior. Genera domande profonde, non "
+            "ovvie, per estrarre mentalita aziendale, filosofia decisionale, cultura, "
+            "trade-off, antideriva, governance della risposta e verita non negoziabili. "
+            "Le risposte attese devono essere analitiche e molto complete."
+        ),
+    },
+}
 
 
 def _tenant_company(request):
@@ -40,6 +77,43 @@ def _workspace_block_reason(company):
     ).first()
     if subscription and not subscription.can_use_workspace():
         return "Workspace sospeso. Contatta l'amministratore ZEUS."
+    return None
+
+
+def _subscription_for_company(company):
+    return WorkspaceSubscription.objects.select_related("plan").filter(
+        client__schema_name=company.schema_name,
+    ).first()
+
+
+def _plan_slug_for_company(company):
+    subscription = _subscription_for_company(company)
+    if not subscription or not subscription.plan:
+        return Plan.SLUG_STARTER
+    if subscription.plan.slug in QUESTION_GENERATION_PROFILES:
+        return subscription.plan.slug
+    return Plan.SLUG_STARTER
+
+
+def _question_plan_label(plan_slug):
+    return QUESTION_GENERATION_PROFILES.get(
+        plan_slug,
+        QUESTION_GENERATION_PROFILES[Plan.SLUG_STARTER],
+    )["label"]
+
+
+def _company_file_block_reason(company):
+    subscription = _subscription_for_company(company)
+    if not subscription:
+        return None
+    current_count = company.company_files.count()
+    if subscription.company_files_used != current_count:
+        subscription.company_files_used = current_count
+        subscription.save(update_fields=["company_files_used"])
+    if not subscription.can_use_workspace():
+        return "Workspace sospeso. Contatta l'amministratore ZEUS."
+    if not subscription.can_add_company_file():
+        return "Limite file aziendali raggiunto per il piano attuale."
     return None
 
 
@@ -91,8 +165,238 @@ def _dna_sections(content, old_content=None):
     return sections
 
 
+def _as_text(value):
+    if isinstance(value, list):
+        return ", ".join(map(str, value))
+    return str(value or "")
+
+
+def _section_context(content, section_key):
+    if not isinstance(content, dict):
+        return "Non disponibile"
+    text = _as_text(content.get(section_key)).strip()
+    if not text:
+        return "Non disponibile"
+    return text[:240]
+
+
+def _company_document_context(company):
+    snippets = []
+    for company_file in company.company_files.all()[:3]:
+        text = " ".join(company_file.content_text.split())[:220]
+        if text:
+            snippets.append(f"{company_file.original_name}: {text}")
+    return " | ".join(snippets) or "Nessun documento aziendale caricato"
+
+
+def _question_generation_prompt(company, dna, plan_slug):
+    profile = QUESTION_GENERATION_PROFILES[plan_slug]
+    content = json.dumps(dna.content, ensure_ascii=False, indent=2)
+    documents = _company_document_context(company)
+    return f"""
+GENERA_DOMANDE_A1_A20
+
+Sei ZEUS. Devi generare 10 domande per il cliente DOPO aver creato un pre-DNA.
+Le domande NON devono essere fisse o da template: devono nascere interpretando il
+pre-DNA, lo scraping e i file caricati.
+
+PIANO: {plan_slug}
+PROFILO: {profile["label"]}
+ISTRUZIONE DI PROFONDITA: {profile["instruction"]}
+
+Regole obbligatorie:
+- Genera esattamente 10 domande originali.
+- Ogni domanda deve partire da una lacuna, ambiguita, affermazione o opportunita
+  che noti nel pre-DNA o nei documenti.
+- Non fare domande generiche se il piano e Professional o Enterprise.
+- Per Enterprise comportati da vero analista professionale: devi estrarre
+  mentalita aziendale, filosofia decisionale e anti-deriva.
+- Usa i principi A1-A20 come assi di analisi, ma scegli tu i 10 piu utili.
+- Rispondi SOLO JSON valido, senza markdown.
+
+Formato JSON:
+{{
+  "questions": [
+    {{
+      "code": "A1",
+      "section_key": "chi_siamo|mission|settore|mercato|pilastri",
+      "principle": "nome breve del principio usato",
+      "question": "domanda al cliente",
+      "answer_depth": "generica|mirata|analitica",
+      "answer_guidance": "che tipo di risposta ti aspetti dal cliente"
+    }}
+  ]
+}}
+
+PRE-DNA:
+{content}
+
+DOCUMENTI / NOTE AZIENDALI:
+{documents}
+""".strip()
+
+
+def _parse_question_generation(text):
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
+        if not match:
+            raise ValueError("LLM did not return JSON") from None
+        payload = json.loads(match.group(1))
+
+    questions = payload.get("questions") if isinstance(payload, dict) else payload
+    if not isinstance(questions, list) or len(questions) != 10:
+        raise ValueError("LLM must return exactly 10 questions")
+    return questions
+
+
+def _generate_company_questions(company, dna):
+    existing = list(dna.questions.all())
+    if existing:
+        return existing
+
+    plan_slug = _plan_slug_for_company(company)
+    profile = QUESTION_GENERATION_PROFILES[plan_slug]
+    prompt = _question_generation_prompt(company, dna, plan_slug)
+    client = get_llm_client()
+    result = client.generate(prompt)
+    LLMCall.objects.create(
+        company=company,
+        model_name=LLM_MODEL,
+        prompt_text=prompt,
+        response_text=result.text,
+        tokens_in=result.tokens_in,
+        tokens_out=result.tokens_out,
+        cost_usd=result.cost,
+        latency_ms=result.latency_ms,
+    )
+
+    section_keys = {"chi_siamo", "mission", "settore", "mercato", "pilastri"}
+    for raw_question in _parse_question_generation(result.text):
+        section_key = raw_question.get("section_key", "pilastri")
+        if section_key not in section_keys:
+            section_key = "pilastri"
+        CompanyQuestion.objects.create(
+            company=company,
+            dna=dna,
+            code=str(raw_question.get("code", "A?")).strip()[:4],
+            plan_slug=plan_slug,
+            section_key=section_key,
+            principle=str(raw_question.get("principle", "A1-A20"))[:120],
+            question=str(raw_question.get("question", "")).strip(),
+            answer_depth=str(raw_question.get("answer_depth") or profile["answer_depth"])[:40],
+            answer_guidance=str(raw_question.get("answer_guidance", "")).strip(),
+        )
+    return list(dna.questions.all())
+
+
+def _create_complete_dna(company, pre_dna, user):
+    questions = list(pre_dna.questions.all())
+    plan_slug = questions[0].plan_slug if questions else _plan_slug_for_company(company)
+    content = dict(pre_dna.content) if isinstance(pre_dna.content, dict) else {}
+    section_keys = ["chi_siamo", "mission", "settore", "mercato", "pilastri"]
+    answers_by_section = {key: [] for key in section_keys}
+
+    for question in questions:
+        section_key = (
+            question.section_key
+            if question.section_key in answers_by_section
+            else "pilastri"
+        )
+        answers_by_section[section_key].append(
+            f"{question.code} - {question.principle}: {question.answer.strip()}"
+        )
+
+    for section_key, answers in answers_by_section.items():
+        if not answers:
+            continue
+        base_text = _as_text(content.get(section_key)).strip()
+        content[section_key] = (
+            f"{base_text}\n\nApprofondimenti cliente:\n"
+            + "\n".join(f"- {answer}" for answer in answers)
+        ).strip()
+
+    content["questionario_a1_a20"] = [
+        {
+            "code": question.code,
+            "section_key": question.section_key,
+            "principle": question.principle,
+            "question": question.question,
+            "answer": question.answer,
+        }
+        for question in questions
+    ]
+    content["profilo_questionario"] = {
+        "plan": plan_slug,
+        "plan_label": _question_plan_label(plan_slug),
+        "starter_minimum_pages": 2 if plan_slug == Plan.SLUG_STARTER else None,
+        "answer_depth": questions[0].answer_depth if questions else "generica",
+    }
+
+    last_version = company.dna_versions.order_by("-version").first()
+    next_version = (last_version.version + 1) if last_version else 1
+    company.dna_versions.filter(is_current=True).update(is_current=False)
+    return CompanyDNA.objects.create(
+        company=company,
+        version=next_version,
+        dna_type=CompanyDNA.TYPE_COMPLETE,
+        content=content,
+        created_by=user if user.is_authenticated else None,
+    )
+
+
+def _extract_company_file_text(uploaded_file):
+    raw = uploaded_file.read()
+    name = uploaded_file.name or "documento-azienda.txt"
+    if name.lower().endswith(".pdf"):
+        doc = fitz.open(stream=raw, filetype="pdf")
+        return "\n".join(page.get_text() for page in doc)[:30000], len(raw), name
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        text = raw.decode("latin-1", errors="ignore")
+    return text[:30000], len(raw), name
+
+
+def _save_company_file_from_request(company, request):
+    notes = request.POST.get("company_notes", "").strip()
+    uploaded_file = getattr(request, "FILES", {}).get("company_file")
+    if not notes and not uploaded_file:
+        return None
+
+    block_reason = _company_file_block_reason(company)
+    if block_reason:
+        return block_reason
+
+    if uploaded_file:
+        content_text, file_size, original_name = _extract_company_file_text(uploaded_file)
+        if notes:
+            content_text = f"{content_text}\n\nNote aggiuntive:\n{notes}".strip()
+    else:
+        content_text = notes[:30000]
+        file_size = len(content_text.encode("utf-8"))
+        original_name = "note-azienda.txt"
+
+    if not content_text.strip():
+        return "Il documento aziendale non contiene testo leggibile."
+
+    CompanyFile.objects.create(
+        company=company,
+        original_name=original_name,
+        content_text=content_text,
+        file_size=file_size,
+        uploaded_by=request.user if request.user.is_authenticated else None,
+    )
+    subscription = _subscription_for_company(company)
+    if subscription:
+        subscription.company_files_used = company.company_files.count()
+        subscription.save(update_fields=["company_files_used"])
+    return None
+
+
 def _request_data(request):
-    if request.content_type.startswith("application/json"):
+    if (request.content_type or "").startswith("application/json"):
         try:
             return json.loads(request.body or b"{}")
         except json.JSONDecodeError:
@@ -141,6 +445,12 @@ def onboarding_source_create(request):
     if block_reason:
         return render(request, "core/onboarding/_source_form.html", {
             "error": block_reason,
+        }, status=403)
+
+    file_error = _save_company_file_from_request(company, request)
+    if file_error:
+        return render(request, "core/onboarding/_source_form.html", {
+            "error": file_error,
         }, status=403)
 
     source = Source.objects.create(company=company, url=url, status=Source.STATUS_PENDING)
@@ -224,6 +534,8 @@ def dna_current(request):
         "content": dna.content,
         "created_at": dna.created_at.isoformat(),
         "created_by": dna.created_by.email if dna.created_by else None,
+        "dna_type": dna.dna_type,
+        "export_ready": dna.is_export_ready(),
     })
 
 
@@ -236,7 +548,7 @@ def dna_history(request):
     if not company:
         return JsonResponse({"error": "company not found"}, status=404)
     versions = company.dna_versions.all().values(
-        "id", "version", "is_current", "created_at", "created_by__email"
+        "id", "version", "dna_type", "is_current", "created_at", "created_by__email"
     )
     return JsonResponse(list(versions), safe=False)
 
@@ -338,6 +650,8 @@ def dna_generate(request):
         "dna_id": dna.id,
         "version": dna.version,
         "content": dna.content,
+        "dna_type": dna.dna_type,
+        "export_ready": dna.is_export_ready(),
         "llm_call_id": llm_call.id,
         "tokens_in": llm_call.tokens_in,
         "tokens_out": llm_call.tokens_out,
@@ -472,14 +786,67 @@ def dna_create(request):
         company=company,
         version=next_version,
         content=content,
+        dna_type=body.get("dna_type", CompanyDNA.TYPE_PRE),
         created_by=request.user if request.user.is_authenticated else None,
     )
     return JsonResponse({
         "id": dna.id,
         "version": dna.version,
         "content": dna.content,
+        "dna_type": dna.dna_type,
         "created_at": dna.created_at.isoformat(),
     }, status=201)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def dna_questions(request):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+
+    pre_dna = company.dna_versions.filter(dna_type=CompanyDNA.TYPE_PRE).order_by("-version").first()
+    complete_dna = company.dna_versions.filter(
+        dna_type=CompanyDNA.TYPE_COMPLETE,
+        is_current=True,
+    ).first()
+    if not pre_dna:
+        return HttpResponse("Pre-DNA not found", status=404)
+
+    error = None
+    try:
+        questions = _generate_company_questions(company, pre_dna)
+    except ValueError as exc:
+        questions = []
+        error = f"ZEUS non e riuscito a generare le domande: {exc}"
+    if request.method == "POST" and not error:
+        body = _request_data(request)
+        missing = []
+        for question in questions:
+            answer = body.get(f"answer_{question.id}", "").strip()
+            if not answer:
+                missing.append(question.code)
+                continue
+            question.answer = answer
+            question.answered_at = timezone.now()
+            question.save(update_fields=["answer", "answered_at"])
+        if missing:
+            error = "Rispondi a tutte le domande prima di generare il DNA completo."
+        else:
+            complete_dna = _create_complete_dna(company, pre_dna, request.user)
+
+    status_code = 400 if error else 200
+    return render(request, "core/dna_questions.html", {
+        "company": company,
+        "pre_dna": pre_dna,
+        "complete_dna": complete_dna,
+        "questions": questions,
+        "plan_slug": questions[0].plan_slug if questions else _plan_slug_for_company(company),
+        "plan_label": _question_plan_label(
+            questions[0].plan_slug if questions else _plan_slug_for_company(company)
+        ),
+        "error": error,
+    }, status=status_code)
 
 
 @login_required
@@ -497,6 +864,7 @@ def dna_review(request):
         "approved_keys": dna.approved_sections(),
         "missing_keys": dna.missing_sections(),
         "is_fully_approved": dna.is_fully_approved(),
+        "is_export_ready": dna.is_export_ready(),
     })
 
 
@@ -585,6 +953,7 @@ def dna_section_edit(request, pk, section_key):
     new_dna = CompanyDNA.objects.create(
         company=company,
         version=old_dna.version + 1,
+        dna_type=old_dna.dna_type,
         content=content,
         created_by=request.user,
     )
@@ -624,8 +993,8 @@ def dna_download_pdf(request):
     dna = company.dna_versions.filter(is_current=True).first()
     if not dna:
         return HttpResponse("DNA not found", status=404)
-    if not dna.is_fully_approved():
-        return HttpResponse("DNA non ancora approvato", status=403)
+    if not dna.is_export_ready():
+        return HttpResponse("DNA completo non ancora approvato", status=403)
 
     pdf_bytes = _render_dna_pdf(company, dna, _dna_sections(dna.content))
     response = HttpResponse(pdf_bytes, content_type="application/pdf")

@@ -1,12 +1,29 @@
 from django.contrib import admin
 
-from apps.companies.models import Company, CompanyDNA, DNAFeedback, LLMCall, PipelineRun, Source
+from apps.companies.models import (
+    Company,
+    CompanyDNA,
+    CompanyFile,
+    CompanyQuestion,
+    DNAFeedback,
+    LLMCall,
+    PipelineRun,
+    Source,
+)
 
 
 class CompanyDNAInline(admin.StackedInline):
     model = CompanyDNA
     extra = 0
-    fields = ["version", "confidence_score", "content", "is_current", "created_by", "created_at"]
+    fields = [
+        "version",
+        "dna_type",
+        "confidence_score",
+        "content",
+        "is_current",
+        "created_by",
+        "created_at",
+    ]
     readonly_fields = ["version", "confidence_score", "created_at"]
     ordering = ["-version"]
 
@@ -33,6 +50,29 @@ class SourceAdmin(admin.ModelAdmin):
     list_filter = ["status"]
     search_fields = ["url", "company__name"]
     readonly_fields = ["scraped_data", "error_msg", "created_at", "updated_at"]
+
+
+@admin.register(CompanyFile)
+class CompanyFileAdmin(admin.ModelAdmin):
+    list_display = ["original_name", "company", "file_size", "created_at"]
+    search_fields = ["original_name", "company__name", "content_text"]
+    readonly_fields = ["content_text", "file_size", "created_at"]
+
+
+@admin.register(CompanyQuestion)
+class CompanyQuestionAdmin(admin.ModelAdmin):
+    list_display = [
+        "code",
+        "company",
+        "plan_slug",
+        "section_key",
+        "principle",
+        "answered_at",
+        "created_at",
+    ]
+    list_filter = ["plan_slug", "section_key", "code", "principle"]
+    search_fields = ["question", "answer", "company__name"]
+    readonly_fields = ["question", "answer_guidance", "answer", "answered_at", "created_at"]
 
 
 @admin.register(DNAFeedback)

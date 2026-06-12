@@ -35,12 +35,25 @@ class DNAFeedback(models.Model):
 
 
 class CompanyDNA(models.Model):
+    TYPE_PRE = "pre"
+    TYPE_COMPLETE = "complete"
+
+    DNA_TYPE_CHOICES = [
+        (TYPE_PRE, "Pre-DNA"),
+        (TYPE_COMPLETE, "DNA completo"),
+    ]
+
     company = models.ForeignKey(
         Company,
         on_delete=models.CASCADE,
         related_name="dna_versions",
     )
     version = models.PositiveIntegerField()
+    dna_type = models.CharField(
+        max_length=20,
+        choices=DNA_TYPE_CHOICES,
+        default=TYPE_PRE,
+    )
     content = models.JSONField()
     confidence_score = models.FloatField(null=True, blank=True)
     is_current = models.BooleanField(default=True)
@@ -87,6 +100,9 @@ class CompanyDNA(models.Model):
     def is_fully_approved(self):
         return self.is_approved is not None
 
+    def is_export_ready(self):
+        return self.dna_type == self.TYPE_COMPLETE and self.is_fully_approved()
+
     def approved_sections(self):
         return {s.section_key for s in self.section_approvals.filter(is_clarification=False)}
 
@@ -125,6 +141,65 @@ class SectionApproval(models.Model):
 
     def __str__(self):
         return f"{self.section_key} on DNA {self.dna_id}"
+
+
+class CompanyFile(models.Model):
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name="company_files",
+    )
+    original_name = models.CharField(max_length=255)
+    content_text = models.TextField()
+    file_size = models.PositiveIntegerField(default=0)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.original_name
+
+
+class CompanyQuestion(models.Model):
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name="company_questions",
+    )
+    dna = models.ForeignKey(
+        CompanyDNA,
+        on_delete=models.CASCADE,
+        related_name="questions",
+    )
+    code = models.CharField(max_length=4)
+    plan_slug = models.CharField(max_length=20, default="starter")
+    section_key = models.CharField(max_length=20, default="pilastri")
+    principle = models.CharField(max_length=120)
+    question = models.TextField()
+    answer_depth = models.CharField(max_length=40, default="generica")
+    answer_guidance = models.TextField(blank=True)
+    answer = models.TextField(blank=True)
+    answered_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["dna", "code"],
+                name="unique_company_question_per_dna_code",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.code} - {self.company.name}"
 
 
 class Source(models.Model):

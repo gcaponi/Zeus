@@ -19,7 +19,16 @@ def _generate_dna(source: Source, company):
     """Shared DNA generation logic — called by view or pipeline task."""
     prompt_path = Path(__file__).parent / "prompts" / "dna_aziendale_v0.1.md"
     prompt_template = prompt_path.read_text(encoding="utf-8")
-    prompt = prompt_template.replace("{{scraped_content}}", source.scraped_data.get("markdown", ""))
+    documents = []
+    for company_file in company.company_files.all()[:10]:
+        documents.append(f"# {company_file.original_name}\n{company_file.content_text}")
+    prompt = prompt_template.replace(
+        "{{scraped_content}}",
+        source.scraped_data.get("markdown", ""),
+    ).replace(
+        "{{company_documents}}",
+        "\n\n".join(documents) or "Nessun documento aziendale caricato.",
+    )
 
     client = get_llm_client()
     result = client.generate(prompt)
@@ -55,6 +64,7 @@ def _generate_dna(source: Source, company):
     dna = CompanyDNA.objects.create(
         company=company,
         version=next_version,
+        dna_type=CompanyDNA.TYPE_PRE,
         content=content,
     )
     return dna, llm_call

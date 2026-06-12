@@ -7,7 +7,16 @@ from django.test import Client as TestClient
 from django.urls import reverse
 
 from apps.companies import views
-from apps.companies.models import Company, CompanyDNA, DNAFeedback, LLMCall, PipelineRun, Source
+from apps.companies.models import (
+    Company,
+    CompanyDNA,
+    CompanyFile,
+    CompanyQuestion,
+    DNAFeedback,
+    LLMCall,
+    PipelineRun,
+    Source,
+)
 from apps.core.models import Client, Plan, WorkspaceSubscription
 
 User = get_user_model()
@@ -532,6 +541,44 @@ class TestOnboardingViews:
         assert PipelineRun.objects.filter(company__schema_name="test-tenant").count() == 1
         assert CompanyDNA.objects.filter(company__schema_name="test-tenant").count() == 1
 
+    def test_onboarding_source_create_uses_company_notes(self, rf_with_tenant):
+        from apps.companies.llm_client import MockLLMClient
+
+        with patch("apps.companies.tasks.get_llm_client", return_value=MockLLMClient()):
+            req = rf_with_tenant("post", "/onboarding/source/", {
+                "url": "https://rossi-metalli.it",
+                "company_notes": "Certificazione ISO 9001 e tempi rapidi.",
+            }, form=True)
+            resp = views.onboarding_source_create(req)
+
+        assert resp.status_code == 200
+        company = Company.objects.get(schema_name="test-tenant")
+        assert company.company_files.count() == 1
+        assert "Certificazione ISO 9001" in company.company_files.first().content_text
+        assert "Certificazione ISO 9001" in LLMCall.objects.first().prompt_text
+
+    def test_company_file_quota_blocks_onboarding(self, rf_with_tenant, monkeypatch):
+        monkeypatch.setattr(Client, "auto_create_schema", False)
+        tenant = Client.objects.create(schema_name="test-tenant", name="Test Tenant")
+        WorkspaceSubscription.objects.create(client=tenant, plan=Plan.get_default())
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        for index in range(5):
+            CompanyFile.objects.create(
+                company=company,
+                original_name=f"doc-{index}.txt",
+                content_text="test",
+            )
+
+        req = rf_with_tenant("post", "/onboarding/source/", {
+            "url": "https://rossi-metalli.it",
+            "company_notes": "Nuovo documento oltre quota.",
+        }, form=True)
+        resp = views.onboarding_source_create(req)
+
+        assert resp.status_code == 403
+        assert b"Limite file aziendali" in resp.content
+        assert Source.objects.count() == 0
+
     def test_onboarding_source_create_invalid_url(self, rf_with_tenant):
         Company.objects.create(schema_name="test-tenant", name="Test Tenant")
         req = rf_with_tenant("post", "/onboarding/source/", {}, form=True)
@@ -558,6 +605,138 @@ class TestOnboardingViews:
         assert resp.status_code == 200
         assert data["status"] == "completed"
         assert data["dna_id"] is not None
+
+
+@pytest.mark.django_db
+class TestDNAQuestions:
+    def _make_pre_dna(self, company):
+        return CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_PRE,
+            content={
+                "chi_siamo": "Azienda manifatturiera B2B.",
+                "mission": "Servire clienti tecnici.",
+                "settore": "Meccanica.",
+                "mercato": "Italia ed Europa.",
+                "pilastri": ["Qualita", "Rapidita"],
+            },
+        )
+
+    def test_questions_page_creates_ten_a_questions(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        self._make_pre_dna(company)
+
+        req = rf_with_tenant("get", reverse("dna-questions"))
+        resp = views.dna_questions(req)
+
+        assert resp.status_code == 200
+        assert CompanyQuestion.objects.filter(company=company).count() == 10
+        assert b"A1" in resp.content
+        assert b"A20" in resp.content
+        first_question = CompanyQuestion.objects.filter(company=company).first()
+        assert first_question.plan_slug == Plan.SLUG_STARTER
+        assert first_question.answer_depth == "generica"
+        assert "almeno 2 pagine" in first_question.answer_guidance
+        assert LLMCall.objects.filter(company=company).count() == 1
+
+    def test_professional_questions_use_context_and_documents(
+        self,
+        rf_with_tenant,
+        monkeypatch,
+    ):
+        monkeypatch.setattr(Client, "auto_create_schema", False)
+        tenant = Client.objects.create(schema_name="test-tenant", name="Test Tenant")
+        plan, _ = Plan.objects.update_or_create(
+            slug=Plan.SLUG_PROFESSIONAL,
+            defaults=Plan.default_values(Plan.SLUG_PROFESSIONAL),
+        )
+        WorkspaceSubscription.objects.create(client=tenant, plan=plan)
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        self._make_pre_dna(company)
+        CompanyFile.objects.create(
+            company=company,
+            original_name="certificazioni.txt",
+            content_text="ISO 9001 e tracciabilita dei lotti.",
+        )
+
+        resp = views.dna_questions(rf_with_tenant("get", reverse("dna-questions")))
+
+        assert resp.status_code == 200
+        questions = list(CompanyQuestion.objects.filter(company=company))
+        assert questions[0].plan_slug == Plan.SLUG_PROFESSIONAL
+        assert questions[0].answer_depth == "mirata"
+        assert any("ISO 9001" in question.question for question in questions)
+
+    def test_enterprise_questions_use_analyst_depth(
+        self,
+        rf_with_tenant,
+        monkeypatch,
+    ):
+        monkeypatch.setattr(Client, "auto_create_schema", False)
+        tenant = Client.objects.create(schema_name="test-tenant", name="Test Tenant")
+        plan, _ = Plan.objects.update_or_create(
+            slug=Plan.SLUG_ENTERPRISE,
+            defaults=Plan.default_values(Plan.SLUG_ENTERPRISE),
+        )
+        WorkspaceSubscription.objects.create(client=tenant, plan=plan)
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        self._make_pre_dna(company)
+
+        resp = views.dna_questions(rf_with_tenant("get", reverse("dna-questions")))
+
+        assert resp.status_code == 200
+        question = CompanyQuestion.objects.filter(company=company).first()
+        assert question.plan_slug == Plan.SLUG_ENTERPRISE
+        assert question.answer_depth == "analitica"
+        assert "mentalita" in question.question
+        assert "mentalita" in question.answer_guidance
+
+    def test_submit_answers_creates_complete_dna(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        pre_dna = self._make_pre_dna(company)
+
+        get_req = rf_with_tenant("get", reverse("dna-questions"))
+        views.dna_questions(get_req)
+        questions = list(pre_dna.questions.all())
+        data = {f"answer_{question.id}": f"Risposta {question.code}" for question in questions}
+
+        post_req = rf_with_tenant("post", reverse("dna-questions"), data, form=True)
+        resp = views.dna_questions(post_req)
+
+        assert resp.status_code == 200
+        complete_dna = CompanyDNA.objects.get(company=company, dna_type=CompanyDNA.TYPE_COMPLETE)
+        assert complete_dna.version == 2
+        assert complete_dna.is_current is True
+        assert complete_dna.is_export_ready() is False
+        assert len(complete_dna.content["questionario_a1_a20"]) == 10
+        assert complete_dna.content["profilo_questionario"]["plan"] == Plan.SLUG_STARTER
+        assert complete_dna.content["profilo_questionario"]["starter_minimum_pages"] == 2
+        assert "Risposta A1" in complete_dna.content["chi_siamo"]
+        pre_dna.refresh_from_db()
+        assert pre_dna.is_current is False
+
+    def test_submit_answers_requires_all_answers(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        pre_dna = CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_PRE,
+            content={"chi_siamo": "Test"},
+        )
+        views.dna_questions(rf_with_tenant("get", reverse("dna-questions")))
+        first_question = pre_dna.questions.first()
+
+        req = rf_with_tenant("post", reverse("dna-questions"), {
+            f"answer_{first_question.id}": "Solo una risposta",
+        }, form=True)
+        resp = views.dna_questions(req)
+
+        assert resp.status_code == 400
+        assert CompanyDNA.objects.filter(
+            company=company,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+        ).count() == 0
 
 
 @pytest.fixture
