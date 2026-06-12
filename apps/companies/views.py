@@ -18,6 +18,7 @@ from apps.companies.models import (
     Source,
 )
 from apps.companies.tasks import _generate_dna, run_pipeline, scrape_source
+from apps.core.models import WorkspaceSubscription
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,15 @@ def _tenant_company(request):
         defaults={"name": tenant.name},
     )
     return company
+
+
+def _workspace_block_reason(company):
+    subscription = WorkspaceSubscription.objects.select_related("plan").filter(
+        client__schema_name=company.schema_name,
+    ).first()
+    if subscription and not subscription.can_use_workspace():
+        return "Workspace sospeso. Contatta l'amministratore ZEUS."
+    return None
 
 
 def _onboarding_context(request):
@@ -126,6 +136,12 @@ def onboarding_source_create(request):
         return render(request, "core/onboarding/_source_form.html", {
             "error": "Inserisci un URL valido.",
         }, status=400)
+
+    block_reason = _workspace_block_reason(company)
+    if block_reason:
+        return render(request, "core/onboarding/_source_form.html", {
+            "error": block_reason,
+        }, status=403)
 
     source = Source.objects.create(company=company, url=url, status=Source.STATUS_PENDING)
     run = PipelineRun.objects.create(
@@ -243,6 +259,10 @@ def source_list_create(request):
         )
         return JsonResponse(list(sources), safe=False)
 
+    block_reason = _workspace_block_reason(company)
+    if block_reason:
+        return JsonResponse({"error": block_reason}, status=403)
+
     body = json.loads(request.body)
     url = body.get("url")
     if not url:
@@ -298,6 +318,10 @@ def dna_generate(request):
         schema_name=tenant.schema_name,
         defaults={"name": tenant.name},
     )
+    block_reason = _workspace_block_reason(company)
+    if block_reason:
+        return JsonResponse({"error": block_reason}, status=403)
+
     body = json.loads(request.body)
     source_id = body.get("source_id")
     if not source_id:
@@ -331,6 +355,10 @@ def pipeline_run_create(request):
         schema_name=tenant.schema_name,
         defaults={"name": tenant.name},
     )
+    block_reason = _workspace_block_reason(company)
+    if block_reason:
+        return JsonResponse({"error": block_reason}, status=403)
+
     body = json.loads(request.body)
     source_id = body.get("source_id")
     if not source_id:
@@ -421,6 +449,10 @@ def dna_create(request):
         schema_name=tenant.schema_name,
         defaults={"name": tenant.name},
     )
+    block_reason = _workspace_block_reason(company)
+    if block_reason:
+        return JsonResponse({"error": block_reason}, status=403)
+
     try:
         body = json.loads(request.body)
     except (json.JSONDecodeError, AttributeError):

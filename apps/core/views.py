@@ -9,7 +9,7 @@ from django.shortcuts import redirect, render
 from django_tenants.utils import schema_context
 
 from apps.core.forms import ZEUSSignupForm
-from apps.core.models import Client, Domain, WorkspaceAccess
+from apps.core.models import Client, Domain, Plan, WorkspaceAccess, WorkspaceSubscription
 
 WORKSPACE_COOKIE = "zeus_workspace"
 WORKSPACE_COOKIE_MAX_AGE = 60 * 60 * 24 * 30
@@ -40,6 +40,11 @@ class ZEUSSignupView(SignupView):
         WorkspaceAccess.objects.create(
             email=email,
             tenant_domain=domain.domain,
+        )
+
+        WorkspaceSubscription.objects.create(
+            client=tenant,
+            plan=Plan.get_default(),
         )
 
         with schema_context(slug):

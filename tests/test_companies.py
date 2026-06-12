@@ -6,8 +6,9 @@ from django.contrib.auth import get_user_model
 from django.test import Client as TestClient
 from django.urls import reverse
 
-from apps.companies.models import Company, CompanyDNA, DNAFeedback, LLMCall, PipelineRun, Source
 from apps.companies import views
+from apps.companies.models import Company, CompanyDNA, DNAFeedback, LLMCall, PipelineRun, Source
+from apps.core.models import Client, Plan, WorkspaceSubscription
 
 User = get_user_model()
 
@@ -359,7 +360,11 @@ class TestPipelineAPI:
     def test_create_enqueues_pipeline(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="T")
         source = Source.objects.create(company=company, url="https://rossi-metalli.it")
-        request = rf_with_tenant("post", reverse("pipeline-run-create"), data={"source_id": source.id})
+        request = rf_with_tenant(
+            "post",
+            reverse("pipeline-run-create"),
+            data={"source_id": source.id},
+        )
         response = views.pipeline_run_create(request)
         assert response.status_code == 201
         data = json.loads(response.content)
@@ -367,6 +372,28 @@ class TestPipelineAPI:
 
         run = PipelineRun.objects.get(pk=data["id"])
         assert run.status in ("running", "completed")
+
+    def test_suspended_workspace_cannot_create_pipeline(self, rf_with_tenant, monkeypatch):
+        monkeypatch.setattr(Client, "auto_create_schema", False)
+        tenant = Client.objects.create(schema_name="test-tenant", name="Test Tenant")
+        WorkspaceSubscription.objects.create(
+            client=tenant,
+            plan=Plan.get_default(),
+            status=WorkspaceSubscription.STATUS_SUSPENDED,
+        )
+        company = Company.objects.create(schema_name="test-tenant", name="T")
+        source = Source.objects.create(company=company, url="https://rossi-metalli.it")
+
+        request = rf_with_tenant(
+            "post",
+            reverse("pipeline-run-create"),
+            data={"source_id": source.id},
+        )
+        response = views.pipeline_run_create(request)
+
+        assert response.status_code == 403
+        assert "Workspace sospeso" in response.content.decode()
+        assert PipelineRun.objects.count() == 0
 
     def test_detail_returns_status(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="T")
