@@ -6,7 +6,7 @@ import textwrap
 import fitz
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
@@ -29,6 +29,7 @@ from apps.companies.models import (
 )
 from apps.companies.tasks import _generate_dna, run_pipeline, scrape_source
 from apps.core.models import Plan, WorkspaceSubscription
+from apps.core.views import redirect_to_workspace_or_login
 
 logger = logging.getLogger(__name__)
 
@@ -425,8 +426,13 @@ def company_detail(request):
     })
 
 
-@login_required
 def onboarding_index(request):
+    tenant = getattr(request, "tenant", None)
+    if not tenant or tenant.schema_name == "public":
+        return redirect_to_workspace_or_login(request)
+    if not request.user.is_authenticated:
+        return redirect("https://zeus.cais.uno/accounts/login/")
+
     context = _onboarding_context(request)
     if not context:
         return HttpResponse("No tenant", status=400)
@@ -496,6 +502,16 @@ def onboarding_status(request, pk):
     if not run:
         return JsonResponse({"error": "not found"}, status=404)
     dna = company.dna_versions.filter(is_current=True).order_by("-version").first()
+    if request.headers.get("HX-Request") == "true":
+        if run.status == PipelineRun.STATUS_COMPLETED and dna:
+            return render(request, "core/onboarding/_dna.html", {
+                "dna": dna,
+                "sections": _dna_sections(dna.content),
+            })
+        return render(request, "core/onboarding/_progress.html", {
+            "run": run,
+            "source": run.source,
+        })
     return JsonResponse({
         "id": run.id,
         "status": run.status,

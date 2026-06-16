@@ -1,7 +1,9 @@
 import pytest
 from django.contrib import admin
+from django.test import RequestFactory
 
-from apps.core.models import Client, Plan, WorkspaceAccess, WorkspaceSubscription
+from apps.core.models import Client, Domain, Plan, WorkspaceAccess, WorkspaceSubscription
+from apps.core.views import WORKSPACE_COOKIE, public_onboarding_redirect
 
 
 @pytest.fixture
@@ -86,3 +88,29 @@ class TestCoreAdmin:
         assert Plan in admin.site._registry
         assert WorkspaceAccess in admin.site._registry
         assert WorkspaceSubscription in admin.site._registry
+
+
+@pytest.mark.django_db
+class TestWorkspaceCookieRedirect:
+    def test_valid_workspace_cookie_redirects_to_workspace(self, tenant_client):
+        Domain.objects.create(
+            domain="admin-test.zeus.cais.uno",
+            tenant=tenant_client,
+            is_primary=True,
+        )
+        request = RequestFactory().get("/onboarding/")
+        request.COOKIES[WORKSPACE_COOKIE] = "admin-test.zeus.cais.uno"
+
+        response = public_onboarding_redirect(request)
+
+        assert response.status_code == 302
+        assert response["Location"] == "https://admin-test.zeus.cais.uno/onboarding/"
+
+    def test_invalid_workspace_cookie_redirects_to_login(self):
+        request = RequestFactory().get("/onboarding/")
+        request.COOKIES[WORKSPACE_COOKIE] = "old-workspace.zeus.cais.uno"
+
+        response = public_onboarding_redirect(request)
+
+        assert response.status_code == 302
+        assert response["Location"] == "https://zeus.cais.uno/accounts/login/"

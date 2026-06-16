@@ -1,14 +1,29 @@
 <div class="text-center py-8">
-    <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-brand-cyan/10 mb-4">
-        <div class="w-8 h-8 rounded-full border-3 border-brand-cyan-light border-t-transparent animate-spin"></div>
-    </div>
-    <h3 class="text-lg font-bold font-display">Analisi in corso...</h3>
-    <p class="mt-2 text-sm text-content-secondary">ZEUS sta leggendo il sito <strong>{{ source.url }}</strong></p>
-    <p class="mt-1 text-xs text-content-muted">Step: {{ run.current_step|default:"avvio" }}</p>
-
-    <div class="mt-6" hx-get="{% url 'onboarding-status' run.pk %}" hx-trigger="every 3s" hx-swap="outerHTML">
-        <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
-            <p class="text-sm text-content-muted">Aggiornamento automatico ogni 3 secondi...</p>
+    {% if run.status == "failed" %}
+        <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-400/10 mb-4">
+            <span class="text-2xl text-red-500">!</span>
         </div>
-    </div>
+        <h3 class="text-lg font-bold font-display">Analisi non completata</h3>
+        <p class="mt-2 text-sm text-content-secondary">{{ run.error_msg|default:"Si è verificato un errore durante l'analisi." }}</p>
+        <a href="{% url 'onboarding-index' %}" class="zeus-btn zeus-btn-secondary mt-6 inline-flex">Riprova</a>
+    {% else %}
+        <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-brand-cyan/10 mb-4">
+            <div class="w-8 h-8 rounded-full border-3 border-brand-cyan-light border-t-transparent animate-spin"></div>
+        </div>
+        <h3 class="text-lg font-bold font-display">Analisi in corso...</h3>
+        <p class="mt-2 text-sm text-content-secondary">ZEUS sta leggendo il sito <strong>{{ source.url }}</strong></p>
+        <p class="mt-1 text-xs text-content-muted">Step: {{ run.current_step|default:"avvio" }}</p>
+
+        <div
+            class="mt-6"
+            hx-get="{% url 'onboarding-status' run.pk %}"
+            hx-trigger="every 3s"
+            hx-target="#onboarding-step"
+            hx-swap="innerHTML"
+        >
+            <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <p class="text-sm text-content-muted">Aggiornamento automatico ogni 3 secondi...</p>
+            </div>
+        </div>
+    {% endif %}
 </div>

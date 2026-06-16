@@ -3,7 +3,9 @@ from unittest.mock import patch
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.test import Client as TestClient
+from django.test import RequestFactory
 from django.urls import reverse
 
 from apps.companies import views
@@ -22,7 +24,8 @@ from apps.companies.models import (
     ProductSectionApproval,
     Source,
 )
-from apps.core.models import Client, Plan, WorkspaceSubscription
+from apps.core.models import Client, Domain, Plan, WorkspaceSubscription
+from apps.core.views import WORKSPACE_COOKIE
 
 User = get_user_model()
 
@@ -188,15 +191,16 @@ class TestScraperClient:
             client.scrape("https://x.com")
 
     def test_factory_returns_mock_when_no_key(self):
-        from apps.companies.scraper import get_scraper, MockScraperClient
+        from apps.companies.scraper import MockScraperClient, get_scraper
 
         with patch.dict("os.environ", {}, clear=True):
             client = get_scraper()
             assert isinstance(client, MockScraperClient)
 
     def test_retry_on_failure(self):
-        from apps.companies.scraper import FireCrawlClient, RETRY_MAX
         from httpx import RequestError
+
+        from apps.companies.scraper import RETRY_MAX, FireCrawlClient
 
         client = FireCrawlClient(api_key="test-key", base_url="http://localhost:1")
         with pytest.raises(RuntimeError, match="after 3 attempts"):
@@ -300,7 +304,7 @@ class TestLLMClient:
         assert result.cost == 0.0001
 
     def test_factory_returns_mock_when_no_key(self):
-        from apps.companies.llm_client import get_llm_client, MockLLMClient
+        from apps.companies.llm_client import MockLLMClient, get_llm_client
         with patch.dict("os.environ", {}, clear=True):
             client = get_llm_client()
             assert isinstance(client, MockLLMClient)
@@ -526,6 +530,24 @@ class TestDNAFeedback:
 
 @pytest.mark.django_db
 class TestOnboardingViews:
+    def test_public_onboarding_uses_workspace_cookie(self, monkeypatch):
+        monkeypatch.setattr(Client, "auto_create_schema", False)
+        tenant = Client.objects.create(schema_name="test-tenant", name="Test Tenant")
+        Domain.objects.create(
+            domain="test-tenant.zeus.cais.uno",
+            tenant=tenant,
+            is_primary=True,
+        )
+        req = RequestFactory().get("/onboarding/")
+        req.tenant = type("PublicTenant", (), {"schema_name": "public"})()
+        req.user = AnonymousUser()
+        req.COOKIES[WORKSPACE_COOKIE] = "test-tenant.zeus.cais.uno"
+
+        resp = views.onboarding_index(req)
+
+        assert resp.status_code == 302
+        assert resp["Location"] == "https://test-tenant.zeus.cais.uno/onboarding/"
+
     def test_onboarding_index_shows_source_form(self, rf_with_tenant):
         Company.objects.create(schema_name="test-tenant", name="Test Tenant")
         req = rf_with_tenant("get", "/onboarding/")
@@ -610,6 +632,54 @@ class TestOnboardingViews:
         assert resp.status_code == 200
         assert data["status"] == "completed"
         assert data["dna_id"] is not None
+
+    def test_onboarding_status_htmx_returns_progress_html(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        source = Source.objects.create(
+            company=company,
+            url="https://rossi-metalli.it",
+            status=Source.STATUS_PENDING,
+        )
+        run = PipelineRun.objects.create(
+            company=company,
+            source=source,
+            status=PipelineRun.STATUS_RUNNING,
+            current_step="scrape",
+        )
+        req = rf_with_tenant("get", f"/onboarding/status/{run.id}/")
+        req.META["HTTP_HX_REQUEST"] = "true"
+
+        resp = views.onboarding_status(req, pk=run.id)
+
+        assert resp.status_code == 200
+        assert b"Analisi in corso" in resp.content
+        assert b'"current_step"' not in resp.content
+
+    def test_onboarding_status_htmx_returns_dna_html(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        source = Source.objects.create(
+            company=company,
+            url="https://rossi-metalli.it",
+            status=Source.STATUS_SCRAPED,
+        )
+        run = PipelineRun.objects.create(
+            company=company,
+            source=source,
+            status=PipelineRun.STATUS_COMPLETED,
+        )
+        CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            content={"chi_siamo": "Rossi Metalli"},
+        )
+        req = rf_with_tenant("get", f"/onboarding/status/{run.id}/")
+        req.META["HTTP_HX_REQUEST"] = "true"
+
+        resp = views.onboarding_status(req, pk=run.id)
+
+        assert resp.status_code == 200
+        assert b"DNA Aziendale generato" in resp.content
+        assert b'"current_step"' not in resp.content
 
 
 @pytest.mark.django_db

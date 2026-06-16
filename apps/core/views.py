@@ -19,6 +19,41 @@ def health_check(request):
     return JsonResponse({"status": "ok"})
 
 
+def _set_workspace_cookie(response, workspace):
+    response.set_cookie(
+        WORKSPACE_COOKIE,
+        workspace,
+        max_age=WORKSPACE_COOKIE_MAX_AGE,
+        samesite="Lax",
+    )
+    return response
+
+
+def _clear_workspace_cookie(response):
+    response.delete_cookie(WORKSPACE_COOKIE)
+    response.delete_cookie(WORKSPACE_COOKIE, domain=".zeus.cais.uno")
+    return response
+
+
+def _valid_workspace_cookie(request):
+    workspace = request.COOKIES.get(WORKSPACE_COOKIE, "").strip().lower()
+    if not workspace:
+        return None
+    if "/" in workspace or not workspace.endswith(".zeus.cais.uno"):
+        return None
+    if not Domain.objects.filter(domain=workspace).exists():
+        return None
+    return workspace
+
+
+def redirect_to_workspace_or_login(request):
+    workspace = _valid_workspace_cookie(request)
+    if workspace:
+        return redirect(f"https://{workspace}/onboarding/")
+    response = redirect("https://zeus.cais.uno/accounts/login/")
+    return _clear_workspace_cookie(response)
+
+
 class ZEUSSignupView(SignupView):
     form_class = ZEUSSignupForm
     template_name = "account/signup.html"
@@ -52,13 +87,7 @@ class ZEUSSignupView(SignupView):
             perform_login(self.request, user, email_verification=False)
 
         response = redirect(f"https://{domain.domain}/onboarding/")
-        response.set_cookie(
-            WORKSPACE_COOKIE,
-            domain.domain,
-            max_age=WORKSPACE_COOKIE_MAX_AGE,
-            samesite="Lax",
-        )
-        return response
+        return _set_workspace_cookie(response, domain.domain)
 
 
 def public_login(request):
@@ -84,13 +113,7 @@ def public_login(request):
         auth_login(request, user)
 
         response = redirect(f"https://{access.tenant_domain}/onboarding/")
-        response.set_cookie(
-            WORKSPACE_COOKIE,
-            access.tenant_domain,
-            max_age=WORKSPACE_COOKIE_MAX_AGE,
-            samesite="Lax",
-        )
-        return response
+        return _set_workspace_cookie(response, access.tenant_domain)
 
     return render(request, "account/login.html", {"error": None})
 
@@ -99,7 +122,7 @@ def tenant_landing(request):
     tenant = request.tenant if hasattr(request, "tenant") else None
     is_public = tenant is None or tenant.schema_name == "public"
     if is_public and request.user.is_authenticated:
-        workspace = request.COOKIES.get(WORKSPACE_COOKIE)
+        workspace = _valid_workspace_cookie(request)
         if workspace:
             return redirect(f"https://{workspace}/onboarding/")
     return render(request, "core/tenant_landing.html", {
@@ -110,11 +133,7 @@ def tenant_landing(request):
 
 def public_onboarding_redirect(request):
     """Redirect intelligente da zeus.cais.uno/onboarding/ al workspace corretto."""
-    workspace = request.COOKIES.get(WORKSPACE_COOKIE)
-    if workspace:
-        return redirect(f"https://{workspace}/onboarding/")
-    # Se non c'è cookie, redirect a login
-    return redirect("https://zeus.cais.uno/accounts/login/")
+    return redirect_to_workspace_or_login(request)
 
 
 @login_required
@@ -130,5 +149,4 @@ def public_logout(request):
     """Logout from any domain and redirect to public login with cookie cleared."""
     auth_logout(request)
     response = redirect("https://zeus.cais.uno/accounts/login/")
-    response.delete_cookie(WORKSPACE_COOKIE)
-    return response
+    return _clear_workspace_cookie(response)
