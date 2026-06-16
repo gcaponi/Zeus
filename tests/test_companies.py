@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -22,6 +23,7 @@ from apps.companies.models import (
     ProductFile,
     ProductQuestion,
     ProductSectionApproval,
+    SectionApproval,
     Source,
 )
 from apps.core.models import Client, Domain, Plan, WorkspaceSubscription
@@ -839,6 +841,86 @@ class TestDNAQuestions:
             dna_type=CompanyDNA.TYPE_COMPLETE,
         ).count() == 0
 
+    def test_duplicate_llm_question_codes_are_normalized(self):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        pre_dna = self._make_pre_dna(company)
+        payload = {
+            "questions": [
+                {
+                    "code": "A1",
+                    "section_key": "chi_siamo",
+                    "principle": f"Principio {index}",
+                    "question": f"Domanda {index}",
+                    "answer_depth": "generica",
+                    "answer_guidance": "Guida",
+                }
+                for index in range(10)
+            ]
+        }
+        result = SimpleNamespace(
+            text=json.dumps(payload),
+            tokens_in=1,
+            tokens_out=1,
+            cost=0,
+            latency_ms=1,
+        )
+        client = SimpleNamespace(generate=lambda prompt: result)
+
+        with patch("apps.companies.views.get_llm_client", return_value=client):
+            questions = views._generate_company_questions(company, pre_dna)
+
+        assert len(questions) == 10
+        assert len({question.code for question in questions}) == 10
+
+
+@pytest.mark.django_db
+class TestDNAReviewViews:
+    def test_section_approve_htmx_redirects_to_review(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        dna = CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            content={"chi_siamo": "Test"},
+        )
+        req = rf_with_tenant(
+            "post",
+            reverse("dna-section-approve", args=[dna.pk, "chi_siamo"]),
+            {},
+            form=True,
+        )
+        req.META["HTTP_HX_REQUEST"] = "true"
+
+        resp = views.dna_section_approve(req, dna.pk, "chi_siamo")
+
+        assert resp.status_code == 204
+        assert resp["HX-Redirect"] == reverse("dna-review")
+        assert SectionApproval.objects.filter(dna=dna, section_key="chi_siamo").exists()
+
+    def test_section_edit_htmx_redirects_to_review(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        dna = CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            content={"chi_siamo": "Test"},
+        )
+        req = rf_with_tenant(
+            "post",
+            reverse("dna-section-edit", args=[dna.pk, "chi_siamo"]),
+            {"text": "Test aggiornato"},
+            form=True,
+        )
+        req.META["HTTP_HX_REQUEST"] = "true"
+
+        resp = views.dna_section_edit(req, dna.pk, "chi_siamo")
+
+        assert resp.status_code == 204
+        assert resp["HX-Redirect"] == reverse("dna-review")
+        new_dna = CompanyDNA.objects.get(company=company, is_current=True)
+        assert new_dna.version == 2
+        assert new_dna.content["chi_siamo"] == "Test aggiornato"
+
 
 @pytest.fixture
 def rf_with_tenant(django_user_model):
@@ -932,9 +1014,110 @@ class TestProductViews:
         assert response.status_code == 200
         assert Product.objects.filter(name="Vasca BVCI").exists()
 
+    def test_product_create_with_subscription_uses_current_count(self, rf_with_tenant, monkeypatch):
+        monkeypatch.setattr(Client, "auto_create_schema", False)
+        tenant = Client.objects.create(schema_name="test-tenant", name="Test Tenant")
+        WorkspaceSubscription.objects.create(client=tenant, plan=Plan.get_default())
+
+        request = rf_with_tenant("post", "/products/", data={"name": "Vasca BVCI"}, form=True)
+        response = views.product_list_create(request)
+
+        assert response.status_code == 200
+        assert Product.objects.filter(name="Vasca BVCI").exists()
+        tenant.subscription.refresh_from_db()
+        assert tenant.subscription.product_dnas_used == 1
+
     def test_product_detail(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
         product = Product.objects.create(company=company, name="Vasca", slug="vasca")
         request = rf_with_tenant("get", f"/products/{product.pk}/")
         response = views.product_detail(request, product.pk)
         assert response.status_code == 200
+
+    def test_duplicate_product_question_codes_are_normalized(self):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        dna = ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_PRE,
+            content={"descrizione": "Test"},
+        )
+        payload = {
+            "questions": [
+                {
+                    "code": "D1",
+                    "section_key": "descrizione",
+                    "principle": f"Principio {index}",
+                    "question": f"Domanda {index}",
+                    "answer_depth": "generica",
+                    "answer_guidance": "Guida",
+                }
+                for index in range(10)
+            ]
+        }
+        result = SimpleNamespace(
+            text=json.dumps(payload),
+            tokens_in=1,
+            tokens_out=1,
+            cost=0,
+            latency_ms=1,
+        )
+        client = SimpleNamespace(generate=lambda prompt: result)
+
+        with patch("apps.companies.views.get_llm_client", return_value=client):
+            questions = views._generate_product_questions(product, dna)
+
+        assert len(questions) == 10
+        assert len({question.code for question in questions}) == 10
+
+    def test_product_section_approve_htmx_redirects_to_review(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        dna = ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            content={"descrizione": "Test"},
+        )
+        req = rf_with_tenant(
+            "post",
+            reverse("product-section-approve", args=[product.pk, "descrizione"]),
+            {},
+            form=True,
+        )
+        req.META["HTTP_HX_REQUEST"] = "true"
+
+        resp = views.product_section_approve(req, product.pk, "descrizione")
+
+        assert resp.status_code == 204
+        assert resp["HX-Redirect"] == reverse("product-review", args=[product.pk])
+        assert ProductSectionApproval.objects.filter(
+            dna=dna,
+            section_key="descrizione",
+        ).exists()
+
+    def test_product_section_edit_htmx_redirects_to_review(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            content={"descrizione": "Test"},
+        )
+        req = rf_with_tenant(
+            "post",
+            reverse("product-section-edit", args=[product.pk, "descrizione"]),
+            {"text": "Test aggiornato"},
+            form=True,
+        )
+        req.META["HTTP_HX_REQUEST"] = "true"
+
+        resp = views.product_section_edit(req, product.pk, "descrizione")
+
+        assert resp.status_code == 204
+        assert resp["HX-Redirect"] == reverse("product-review", args=[product.pk])
+        new_dna = ProductDNA.objects.get(product=product, is_current=True)
+        assert new_dna.version == 2
+        assert new_dna.content["descrizione"] == "Test aggiornato"

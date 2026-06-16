@@ -304,6 +304,11 @@
         {% block content %}{% endblock %}
     </main>
 
+    <script>
+        document.body.addEventListener('htmx:configRequest', function(event) {
+            event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
+        });
+    </script>
     {% block extra_scripts %}{% endblock %}
 </body>
 </html>

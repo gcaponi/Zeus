@@ -7,6 +7,7 @@ import fitz
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
@@ -279,20 +280,26 @@ def _generate_company_questions(company, dna):
     )
 
     section_keys = {"chi_siamo", "mission", "settore", "mercato", "pilastri"}
+    used_codes = set(dna.questions.values_list("code", flat=True))
     for raw_question in _parse_question_generation(result.text):
         section_key = raw_question.get("section_key", "pilastri")
         if section_key not in section_keys:
             section_key = "pilastri"
-        CompanyQuestion.objects.create(
-            company=company,
+        code = _unique_question_code(raw_question.get("code"), used_codes, "A?")
+        CompanyQuestion.objects.update_or_create(
             dna=dna,
-            code=str(raw_question.get("code", "A?")).strip()[:4],
-            plan_slug=plan_slug,
-            section_key=section_key,
-            principle=str(raw_question.get("principle", "A1-A20"))[:120],
-            question=str(raw_question.get("question", "")).strip(),
-            answer_depth=str(raw_question.get("answer_depth") or profile["answer_depth"])[:40],
-            answer_guidance=str(raw_question.get("answer_guidance", "")).strip(),
+            code=code,
+            defaults={
+                "company": company,
+                "plan_slug": plan_slug,
+                "section_key": section_key,
+                "principle": str(raw_question.get("principle", "A1-A20"))[:120],
+                "question": str(raw_question.get("question", "")).strip(),
+                "answer_depth": str(
+                    raw_question.get("answer_depth") or profile["answer_depth"]
+                )[:40],
+                "answer_guidance": str(raw_question.get("answer_guidance", "")).strip(),
+            },
         )
     return list(dna.questions.all())
 
@@ -408,6 +415,31 @@ def _request_data(request):
         except json.JSONDecodeError:
             return {}
     return request.POST
+
+
+def _unique_question_code(raw_code, used_codes, fallback):
+    base_code = str(raw_code or fallback).strip()[:4] or fallback
+    code = base_code
+    counter = 2
+    while code in used_codes:
+        suffix = str(counter)
+        code = f"{base_code[:max(1, 4 - len(suffix))]}{suffix}"[:4]
+        counter += 1
+    used_codes.add(code)
+    return code
+
+
+def _redirect_after_htmx_action(request, viewname, *args):
+    url = reverse(viewname, args=args)
+    if request.headers.get("HX-Request") == "true":
+        response = HttpResponse(status=204)
+        response["HX-Redirect"] = url
+        return response
+    return redirect(url)
+
+
+def _action_error(message, status=400):
+    return HttpResponse(message, status=status)
 
 
 @login_required
@@ -947,6 +979,9 @@ def dna_section_approve(request, pk, section_key):
             'text-amber-300">Richiesta inviata ✓</span>'
         )
 
+    if request.headers.get("HX-Request") == "true":
+        return _redirect_after_htmx_action(request, "dna-review")
+
     return JsonResponse({
         "section_key": section_key,
         "is_clarification": is_clarification,
@@ -972,6 +1007,8 @@ def dna_section_edit(request, pk, section_key):
     body = _request_data(request)
     new_text = body.get("text", "").strip()
     if not new_text:
+        if request.headers.get("HX-Request") == "true":
+            return _action_error("Testo sezione obbligatorio.", status=400)
         return JsonResponse({"error": "text is required"}, status=400)
 
     # Build new content with modified section
@@ -1000,6 +1037,9 @@ def dna_section_edit(request, pk, section_key):
                 comment=approval.comment,
                 is_clarification=approval.is_clarification,
             )
+
+    if request.headers.get("HX-Request") == "true":
+        return _redirect_after_htmx_action(request, "dna-review")
 
     return JsonResponse({
         "dna_id": new_dna.id,
@@ -1204,20 +1244,26 @@ def _generate_product_questions(product, dna):
     )
 
     section_keys = {"descrizione", "applicazione", "specifiche", "vincoli", "valore"}
+    used_codes = set(dna.questions.values_list("code", flat=True))
     for raw_question in _parse_product_question_generation(result.text):
         section_key = raw_question.get("section_key", "valore")
         if section_key not in section_keys:
             section_key = "valore"
-        ProductQuestion.objects.create(
-            product=product,
+        code = _unique_question_code(raw_question.get("code"), used_codes, "D?")
+        ProductQuestion.objects.update_or_create(
             dna=dna,
-            code=str(raw_question.get("code", "D?")).strip()[:4],
-            plan_slug=plan_slug,
-            section_key=section_key,
-            principle=str(raw_question.get("principle", "D1-D20"))[:120],
-            question=str(raw_question.get("question", "")).strip(),
-            answer_depth=str(raw_question.get("answer_depth") or profile["answer_depth"])[:40],
-            answer_guidance=str(raw_question.get("answer_guidance", "")).strip(),
+            code=code,
+            defaults={
+                "product": product,
+                "plan_slug": plan_slug,
+                "section_key": section_key,
+                "principle": str(raw_question.get("principle", "D1-D20"))[:120],
+                "question": str(raw_question.get("question", "")).strip(),
+                "answer_depth": str(
+                    raw_question.get("answer_depth") or profile["answer_depth"]
+                )[:40],
+                "answer_guidance": str(raw_question.get("answer_guidance", "")).strip(),
+            },
         )
     return list(dna.questions.all())
 
@@ -1293,9 +1339,12 @@ def _product_block_reason(company):
     if not subscription:
         return None
     current_count = company.products.count()
+    if subscription.product_dnas_used != current_count:
+        subscription.product_dnas_used = current_count
+        subscription.save(update_fields=["product_dnas_used"])
     if not subscription.can_use_workspace():
         return "Workspace sospeso. Contatta l'amministratore ZEUS."
-    if not subscription.can_add_product_dna(current_count):
+    if not subscription.can_add_product_dna():
         return "Limite prodotti raggiunto per il piano attuale."
     return None
 
@@ -1558,6 +1607,9 @@ def product_section_approve(request, pk, section_key):
             'text-amber-300">Richiesta inviata ✓</span>'
         )
 
+    if request.headers.get("HX-Request") == "true":
+        return _redirect_after_htmx_action(request, "product-review", product.pk)
+
     return JsonResponse({
         "section_key": section_key,
         "is_clarification": is_clarification,
@@ -1585,6 +1637,8 @@ def product_section_edit(request, pk, section_key):
     body = _request_data(request)
     new_text = body.get("text", "").strip()
     if not new_text:
+        if request.headers.get("HX-Request") == "true":
+            return _action_error("Testo sezione obbligatorio.", status=400)
         return JsonResponse({"error": "text is required"}, status=400)
 
     content = dict(old_dna.content) if isinstance(old_dna.content, dict) else {}
@@ -1609,6 +1663,9 @@ def product_section_edit(request, pk, section_key):
                 comment=approval.comment,
                 is_clarification=approval.is_clarification,
             )
+
+    if request.headers.get("HX-Request") == "true":
+        return _redirect_after_htmx_action(request, "product-review", product.pk)
 
     return JsonResponse({
         "dna_id": new_dna.id,
