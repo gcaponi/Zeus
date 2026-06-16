@@ -1,0 +1,82 @@
+{% extends "core/base.html" %}
+
+{% block title %}{{ product.name }} — ZEUS{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-4xl">
+    <header class="mb-8">
+        <a href="{% url 'product-list-create' %}" class="text-sm text-brand-cyan hover:underline">← Prodotti</a>
+        <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">{{ product.name }}</h1>
+        <p class="mt-2 text-content-secondary">Gestione DNA prodotto</p>
+    </header>
+
+    {% if not dna %}
+        <div class="zeus-card p-6">
+            <h2 class="text-lg font-bold font-display">Genera pre-DNA</h2>
+            <p class="mt-2 text-sm text-content-secondary">Carica prima dei file prodotto, poi genera il pre-DNA.</p>
+
+            <form method="post" action="{% url 'product-file-upload' product.pk %}" enctype="multipart/form-data" class="mt-6 space-y-4">
+                {% csrf_token %}
+                <div>
+                    <label class="zeus-label">File prodotto (PDF, TXT, MD)</label>
+                    <input type="file" name="file" class="zeus-input" style="padding: 0.6rem;">
+                </div>
+                <div>
+                    <label class="zeus-label">Note aggiuntive</label>
+                    <textarea name="notes" rows="3" class="zeus-input" placeholder="Descrizione, specifiche, ecc."></textarea>
+                </div>
+                <button type="submit" class="zeus-btn zeus-btn-primary">Carica</button>
+            </form>
+
+            {% if product.product_files.exists %}
+                <div class="mt-6 border-t border-gray-200 pt-6">
+                    <h3 class="zeus-label">File caricati</h3>
+                    <ul class="mt-2 space-y-2">
+                        {% for file in product.product_files.all %}
+                            <li class="text-sm text-content-muted">📄 {{ file.original_name }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+
+            <form method="post" action="{% url 'product-dna-generate' product.pk %}" class="mt-6">
+                {% csrf_token %}
+                <button type="submit" class="zeus-btn zeus-btn-primary w-full">Genera pre-DNA →</button>
+            </form>
+        </div>
+    {% else %}
+        <div class="space-y-6">
+            <div class="zeus-card p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-lg font-bold font-display">DNA v{{ dna.version }}</h2>
+                        <p class="mt-1 text-sm text-content-muted">{{ dna.dna_type }} · {{ dna.created_at|date:"d/m/Y H:i" }}</p>
+                    </div>
+                    {% if dna.is_approved %}
+                        <span class="zeus-badge zeus-badge-lime">Approvato</span>
+                    {% endif %}
+                </div>
+
+                <div class="mt-6 space-y-4">
+                    {% for section in sections %}
+                        <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                            <h3 class="text-sm font-bold uppercase tracking-wider text-brand-cyan">{{ section.label }}</h3>
+                            <p class="mt-2 text-sm text-content-primary whitespace-pre-line">{{ section.value|default:"Non disponibile" }}</p>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            {% if dna.dna_type == "pre" and not dna.is_approved %}
+                <a href="{% url 'product-questions' product.pk %}" class="zeus-btn zeus-btn-primary w-full block text-center">
+                    Rispondi alle domande D1-D20 →
+                </a>
+            {% elif dna.dna_type == "complete" and not dna.is_approved %}
+                <a href="{% url 'product-review' product.pk %}" class="zeus-btn zeus-btn-primary w-full block text-center">
+                    Vai alla review finale →
+                </a>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

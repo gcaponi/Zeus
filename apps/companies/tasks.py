@@ -9,7 +9,7 @@ from django.utils import timezone
 from django_tenants.utils import schema_context
 
 from apps.companies.llm_client import LLM_MODEL, get_llm_client
-from apps.companies.models import CompanyDNA, LLMCall, PipelineRun, Source
+from apps.companies.models import CompanyDNA, LLMCall, PipelineRun, Product, ProductDNA, Source
 from apps.companies.scraper import get_scraper
 
 logger = logging.getLogger(__name__)
@@ -65,6 +65,78 @@ def _generate_dna(source: Source, company):
         company=company,
         version=next_version,
         dna_type=CompanyDNA.TYPE_PRE,
+        content=content,
+    )
+    return dna, llm_call
+
+
+def _generate_product_dna(product: Product, company):
+    """Generate ProductDNA from product files and company DNA."""
+    documents = []
+    for product_file in product.product_files.all()[:10]:
+        documents.append(f"# {product_file.original_name}\n{product_file.content_text}")
+
+    company_dna = company.dna_versions.filter(
+        dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True
+    ).first()
+    company_context = ""
+    if company_dna:
+        company_context = json.dumps(company_dna.content, ensure_ascii=False, indent=2)
+
+    prompt = f"""
+Sei ZEUS. Genera un pre-DNA per il prodotto "{product.name}" dell'azienda {company.name}.
+
+DNA AZIENDALE:
+{company_context or "Non disponibile"}
+
+DOCUMENTI PRODOTTO:
+{chr(10).join(documents) or "Nessun documento prodotto caricato."}
+
+Genera un JSON con queste sezioni:
+{{
+  "descrizione": "Descrizione sintetica del prodotto",
+  "applicazione": "Come e dove si usa il prodotto",
+  "specifiche": "Specifiche tecniche principali",
+  "vincoli": "Vincoli tecnici, produttivi o applicativi",
+  "valore": "Valore differenziante del prodotto"
+}}
+
+Rispondi SOLO JSON valido, senza markdown.
+""".strip()
+
+    client = get_llm_client()
+    result = client.generate(prompt)
+
+    llm_call = LLMCall.objects.create(
+        company=company,
+        model_name=LLM_MODEL,
+        prompt_text=prompt,
+        response_text=result.text,
+        tokens_in=result.tokens_in,
+        tokens_out=result.tokens_out,
+        cost_usd=result.cost,
+        latency_ms=result.latency_ms,
+    )
+
+    last_version = product.dna_versions.order_by("-version").first()
+    next_version = (last_version.version + 1) if last_version else 1
+    try:
+        content = json.loads(result.text)
+    except json.JSONDecodeError:
+        match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", result.text, re.DOTALL)
+        if match:
+            try:
+                content = json.loads(match.group(1))
+            except json.JSONDecodeError:
+                content = {"raw": result.text}
+        else:
+            content = {"raw": result.text}
+
+    product.dna_versions.filter(is_current=True).update(is_current=False)
+    dna = ProductDNA.objects.create(
+        product=product,
+        version=next_version,
+        dna_type=ProductDNA.TYPE_PRE,
         content=content,
     )
     return dna, llm_call

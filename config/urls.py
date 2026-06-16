@@ -8,6 +8,7 @@ from apps.core.views import (
     health_check,
     public_login,
     public_logout,
+    public_onboarding_redirect,
     tenant_dashboard,
     tenant_landing,
 )
@@ -21,6 +22,7 @@ urlpatterns = [
     path("accounts/logout/", public_logout, name="account_logout"),
     path("accounts/", include("allauth.urls")),
     path("dashboard/", tenant_dashboard, name="tenant-dashboard"),
+    path("onboarding/", public_onboarding_redirect, name="public-onboarding-redirect"),
     path("api/", include(companies_urls)),
     path("", tenant_landing, name="tenant-landing"),
 ]

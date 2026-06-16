@@ -1,6 +1,6 @@
 {% extends "core/base.html" %}
 
-{% block title %}Review DNA — ZEUS{% endblock %}
+{% block title %}Review Prodotto · {{ product.name }} — ZEUS{% endblock %}
 
 {% block extra_head %}
 <script src="https://unpkg.com/htmx.org@1.9.12"></script>
@@ -9,18 +9,15 @@
 {% block content %}
 <div class="mx-auto max-w-4xl">
     <header class="mb-8">
-        <a href="{% url 'onboarding-index' %}" class="text-sm text-brand-cyan hover:underline">← Onboarding</a>
-        <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">Review DNA Aziendale</h1>
+        <a href="{% url 'product-detail' product.pk %}" class="text-sm text-brand-cyan hover:underline">← {{ product.name }}</a>
+        <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">Review DNA Prodotto</h1>
         <p class="mt-2 text-content-secondary">Versione {{ dna.version }} · Approva ogni sezione per completare il DNA.</p>
     </header>
 
     {% if is_fully_approved %}
         <div class="mb-6 zeus-card p-5" style="border-color: rgba(34, 197, 94, 0.3); background: rgba(34, 197, 94, 0.05);">
-            <p class="zeus-label text-green-600">DNA aziendale approvato</p>
+            <p class="zeus-label text-green-600">DNA prodotto approvato</p>
             <p class="mt-2 text-lg font-bold font-display">Tutte le sezioni sono state approvate.</p>
-            {% if is_export_ready %}
-                <a href="{% url 'dna-download-pdf' %}" class="zeus-btn zeus-btn-primary mt-4">Scarica PDF →</a>
-            {% endif %}
         </div>
     {% endif %}
 
@@ -39,10 +36,10 @@
 
                 {% if section.key not in approved_keys and not is_fully_approved %}
                     <div class="mt-4 flex gap-3">
-                        <button hx-post="{% url 'dna-section-approve' dna.pk section.key %}" hx-swap="outerHTML" class="zeus-btn" style="background: #22c55e; color: white;">Approva</button>
+                        <button hx-post="{% url 'product-section-approve' product.pk section.key %}" hx-swap="outerHTML" class="zeus-btn" style="background: #22c55e; color: white;">Approva</button>
                         <button onclick="document.getElementById('edit-{{ section.key }}').classList.toggle('hidden')" class="zeus-btn zeus-btn-ghost">Modifica</button>
                     </div>
-                    <form id="edit-{{ section.key }}" class="hidden mt-4" hx-post="{% url 'dna-section-edit' dna.pk section.key %}" hx-swap="outerHTML" hx-target="closest section">
+                    <form id="edit-{{ section.key }}" class="hidden mt-4" hx-post="{% url 'product-section-edit' product.pk section.key %}" hx-swap="outerHTML" hx-target="closest section">
                         {% csrf_token %}
                         <textarea name="text" rows="4" class="zeus-input">{{ section.value }}</textarea>
                         <button type="submit" class="zeus-btn zeus-btn-primary mt-3">Salva e crea nuova versione</button>
@@ -54,8 +51,8 @@
 
     {% if is_fully_approved %}
         <div class="mt-8 zeus-card p-6 text-center">
-            <p class="text-content-secondary">DNA aziendale completo e approvato. Ora puoi creare i DNA dei tuoi prodotti.</p>
-            <a href="{% url 'product-list-create' %}" class="zeus-btn zeus-btn-primary mt-4">Vai ai prodotti →</a>
+            <p class="text-content-secondary">DNA prodotto completo e approvato. Puoi creare altri prodotti o procedere all'export.</p>
+            <a href="{% url 'product-list-create' %}" class="zeus-btn zeus-btn-primary mt-4">Torna ai prodotti</a>
         </div>
     {% endif %}
 </div>

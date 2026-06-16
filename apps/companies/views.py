@@ -19,6 +19,11 @@ from apps.companies.models import (
     DNAFeedback,
     LLMCall,
     PipelineRun,
+    Product,
+    ProductDNA,
+    ProductFile,
+    ProductQuestion,
+    ProductSectionApproval,
     SectionApproval,
     Source,
 )
@@ -1039,3 +1044,548 @@ def _render_dna_pdf(company, dna, sections):
         write(section["value"], size=10.5, color=(0.08, 0.08, 0.08), gap=16)
 
     return doc.tobytes()
+
+
+def _product_dna_sections(content, old_content=None):
+    labels = {
+        "descrizione": "Descrizione",
+        "applicazione": "Applicazione",
+        "specifiche": "Specifiche",
+        "vincoli": "Vincoli",
+        "valore": "Valore",
+    }
+    sections = []
+    for key, label in labels.items():
+        value = content.get(key) if isinstance(content, dict) else None
+        if isinstance(value, list):
+            value = ", ".join(map(str, value))
+        old_value = None
+        if old_content and isinstance(old_content, dict):
+            old_value = old_content.get(key)
+            if isinstance(old_value, list):
+                old_value = ", ".join(map(str, old_value))
+        sections.append({
+            "key": key,
+            "label": label,
+            "value": value or "",
+            "old_value": old_value or "",
+            "changed": bool(old_value and old_value != value),
+        })
+    return sections
+
+
+def _product_document_context(product):
+    snippets = []
+    for product_file in product.product_files.all()[:3]:
+        text = " ".join(product_file.content_text.split())[:220]
+        if text:
+            snippets.append(f"{product_file.original_name}: {text}")
+    return " | ".join(snippets) or "Nessun documento prodotto caricato"
+
+
+def _product_question_generation_prompt(product, dna, plan_slug):
+    profile = QUESTION_GENERATION_PROFILES[plan_slug]
+    content = json.dumps(dna.content, ensure_ascii=False, indent=2)
+    documents = _product_document_context(product)
+    company_dna = product.company.dna_versions.filter(
+        dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True
+    ).first()
+    company_context = ""
+    if company_dna:
+        company_context = json.dumps(company_dna.content, ensure_ascii=False, indent=2)
+
+    return f"""
+GENERA_DOMANDE_D1_D20
+
+Sei ZEUS. Devi generare 10 domande per il cliente DOPO aver creato un pre-DNA prodotto.
+Le domande NON devono essere fisse o da template: devono nascere interpretando il
+pre-DNA prodotto, i file caricati e il DNA aziendale.
+
+PIANO: {plan_slug}
+PROFILO: {profile["label"]}
+ISTRUZIONE DI PROFONDITA: {profile["instruction"]}
+
+Regole obbligatorie:
+- Genera esattamente 10 domande originali.
+- Ogni domanda deve partire da una lacuna, ambiguita, affermazione o opportunita
+  che noti nel pre-DNA prodotto o nei documenti.
+- Non fare domande generiche se il piano e Professional o Enterprise.
+- Per Enterprise comportati da vero analista professionale: devi estrarre
+  logica applicativa, vincoli tecnici, valore differenziante.
+- Usa i principi D1-D20 come assi di analisi, ma scegli tu i 10 piu utili.
+- Rispondi SOLO JSON valido, senza markdown.
+
+Formato JSON:
+{{
+  "questions": [
+    {{
+      "code": "D1",
+      "section_key": "descrizione|applicazione|specifiche|vincoli|valore",
+      "principle": "nome breve del principio usato",
+      "question": "domanda al cliente",
+      "answer_depth": "generica|mirata|analitica",
+      "answer_guidance": "che tipo di risposta ti aspetti dal cliente"
+    }}
+  ]
+}}
+
+PRE-DNA PRODOTTO:
+{content}
+
+DOCUMENTI / NOTE PRODOTTO:
+{documents}
+
+DNA AZIENDALE (se disponibile):
+{company_context}
+""".strip()
+
+
+def _parse_product_question_generation(text):
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
+        if not match:
+            raise ValueError("LLM did not return JSON") from None
+        payload = json.loads(match.group(1))
+
+    questions = payload.get("questions") if isinstance(payload, dict) else payload
+    if not isinstance(questions, list) or len(questions) != 10:
+        raise ValueError("LLM must return exactly 10 questions")
+    return questions
+
+
+def _generate_product_questions(product, dna):
+    existing = list(dna.questions.all())
+    if existing:
+        return existing
+
+    plan_slug = _plan_slug_for_company(product.company)
+    profile = QUESTION_GENERATION_PROFILES[plan_slug]
+    prompt = _product_question_generation_prompt(product, dna, plan_slug)
+    client = get_llm_client()
+    result = client.generate(prompt)
+    LLMCall.objects.create(
+        company=product.company,
+        model_name=LLM_MODEL,
+        prompt_text=prompt,
+        response_text=result.text,
+        tokens_in=result.tokens_in,
+        tokens_out=result.tokens_out,
+        cost_usd=result.cost,
+        latency_ms=result.latency_ms,
+    )
+
+    section_keys = {"descrizione", "applicazione", "specifiche", "vincoli", "valore"}
+    for raw_question in _parse_product_question_generation(result.text):
+        section_key = raw_question.get("section_key", "valore")
+        if section_key not in section_keys:
+            section_key = "valore"
+        ProductQuestion.objects.create(
+            product=product,
+            dna=dna,
+            code=str(raw_question.get("code", "D?")).strip()[:4],
+            plan_slug=plan_slug,
+            section_key=section_key,
+            principle=str(raw_question.get("principle", "D1-D20"))[:120],
+            question=str(raw_question.get("question", "")).strip(),
+            answer_depth=str(raw_question.get("answer_depth") or profile["answer_depth"])[:40],
+            answer_guidance=str(raw_question.get("answer_guidance", "")).strip(),
+        )
+    return list(dna.questions.all())
+
+
+def _create_complete_product_dna(product, pre_dna, user):
+    questions = list(pre_dna.questions.all())
+    plan_slug = questions[0].plan_slug if questions else _plan_slug_for_company(product.company)
+    content = dict(pre_dna.content) if isinstance(pre_dna.content, dict) else {}
+    section_keys = ["descrizione", "applicazione", "specifiche", "vincoli", "valore"]
+    answers_by_section = {key: [] for key in section_keys}
+
+    for question in questions:
+        section_key = (
+            question.section_key
+            if question.section_key in answers_by_section
+            else "valore"
+        )
+        answers_by_section[section_key].append(
+            f"{question.code} - {question.principle}: {question.answer.strip()}"
+        )
+
+    for section_key, answers in answers_by_section.items():
+        if not answers:
+            continue
+        base_text = _as_text(content.get(section_key)).strip()
+        content[section_key] = (
+            f"{base_text}\n\nApprofondimenti cliente:\n"
+            + "\n".join(f"- {answer}" for answer in answers)
+        ).strip()
+
+    content["questionario_d1_d20"] = [
+        {
+            "code": question.code,
+            "section_key": question.section_key,
+            "principle": question.principle,
+            "question": question.question,
+            "answer": question.answer,
+        }
+        for question in questions
+    ]
+    content["profilo_questionario"] = {
+        "plan": plan_slug,
+        "plan_label": _question_plan_label(plan_slug),
+        "answer_depth": questions[0].answer_depth if questions else "generica",
+    }
+
+    last_version = product.dna_versions.order_by("-version").first()
+    next_version = (last_version.version + 1) if last_version else 1
+    product.dna_versions.filter(is_current=True).update(is_current=False)
+    return ProductDNA.objects.create(
+        product=product,
+        version=next_version,
+        dna_type=ProductDNA.TYPE_COMPLETE,
+        content=content,
+        created_by=user if user.is_authenticated else None,
+    )
+
+
+def _product_file_block_reason(product):
+    subscription = _subscription_for_company(product.company)
+    if not subscription:
+        return None
+    current_count = product.product_files.count()
+    if not subscription.can_use_workspace():
+        return "Workspace sospeso. Contatta l'amministratore ZEUS."
+    if not subscription.can_add_product_file(current_count):
+        return "Limite file per prodotto raggiunto per il piano attuale."
+    return None
+
+
+def _product_block_reason(company):
+    subscription = _subscription_for_company(company)
+    if not subscription:
+        return None
+    current_count = company.products.count()
+    if not subscription.can_use_workspace():
+        return "Workspace sospeso. Contatta l'amministratore ZEUS."
+    if not subscription.can_add_product_dna(current_count):
+        return "Limite prodotti raggiunto per il piano attuale."
+    return None
+
+
+@login_required
+def product_list_create(request):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+
+    products = company.products.all()
+
+    if request.method == "POST":
+        block_reason = _product_block_reason(company)
+        if block_reason:
+            return render(request, "core/product_list.html", {
+                "company": company,
+                "products": products,
+                "error": block_reason,
+            }, status=403)
+
+        name = request.POST.get("name", "").strip()
+        if not name:
+            return render(request, "core/product_list.html", {
+                "company": company,
+                "products": products,
+                "error": "Nome prodotto obbligatorio.",
+            }, status=400)
+
+        from django.utils.text import slugify
+        slug = slugify(name)
+        if Product.objects.filter(company=company, slug=slug).exists():
+            return render(request, "core/product_list.html", {
+                "company": company,
+                "products": products,
+                "error": "Prodotto con questo nome gia esistente.",
+            }, status=400)
+
+        Product.objects.create(company=company, name=name, slug=slug)
+        subscription = _subscription_for_company(company)
+        if subscription:
+            subscription.product_dnas_used = company.products.count()
+            subscription.save(update_fields=["product_dnas_used"])
+        products = company.products.all()
+
+    return render(request, "core/product_list.html", {
+        "company": company,
+        "products": products,
+    })
+
+
+@login_required
+def product_detail(request, pk):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    product = Product.objects.filter(pk=pk, company=company).first()
+    if not product:
+        return HttpResponse("Prodotto non trovato", status=404)
+
+    dna = product.dna_versions.filter(is_current=True).first()
+    sections = _product_dna_sections(dna.content) if dna else []
+
+    return render(request, "core/product_detail.html", {
+        "product": product,
+        "dna": dna,
+        "sections": sections,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def product_file_upload(request, pk):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    product = Product.objects.filter(pk=pk, company=company).first()
+    if not product:
+        return HttpResponse("Prodotto non trovato", status=404)
+
+    block_reason = _product_file_block_reason(product)
+    if block_reason:
+        return JsonResponse({"error": block_reason}, status=403)
+
+    notes = request.POST.get("notes", "").strip()
+    uploaded_file = request.FILES.get("file")
+
+    if not notes and not uploaded_file:
+        return JsonResponse({"error": "File o note obbligatori"}, status=400)
+
+    if uploaded_file:
+        content_text, file_size, original_name = _extract_company_file_text(uploaded_file)
+        if notes:
+            content_text = f"{content_text}\n\nNote aggiuntive:\n{notes}".strip()
+    else:
+        content_text = notes[:30000]
+        file_size = len(content_text.encode("utf-8"))
+        original_name = "note-prodotto.txt"
+
+    if not content_text.strip():
+        return JsonResponse({"error": "Contenuto vuoto"}, status=400)
+
+    ProductFile.objects.create(
+        product=product,
+        original_name=original_name,
+        content_text=content_text,
+        file_size=file_size,
+        uploaded_by=request.user if request.user.is_authenticated else None,
+    )
+
+    return JsonResponse({"status": "ok", "files_count": product.product_files.count()})
+
+
+@login_required
+@require_http_methods(["POST"])
+def product_dna_generate(request, pk):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    product = Product.objects.filter(pk=pk, company=company).first()
+    if not product:
+        return HttpResponse("Prodotto non trovato", status=404)
+
+    block_reason = _workspace_block_reason(company)
+    if block_reason:
+        return JsonResponse({"error": block_reason}, status=403)
+
+    from apps.companies.tasks import _generate_product_dna
+    dna, llm_call = _generate_product_dna(product, company)
+
+    return JsonResponse({
+        "dna_id": dna.id,
+        "version": dna.version,
+        "content": dna.content,
+        "dna_type": dna.dna_type,
+    }, status=201)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def product_questions(request, pk):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    product = Product.objects.filter(pk=pk, company=company).first()
+    if not product:
+        return HttpResponse("Prodotto non trovato", status=404)
+
+    pre_dna = product.dna_versions.filter(dna_type=ProductDNA.TYPE_PRE).order_by("-version").first()
+    complete_dna = product.dna_versions.filter(
+        dna_type=ProductDNA.TYPE_COMPLETE,
+        is_current=True,
+    ).first()
+    if not pre_dna:
+        return HttpResponse("Pre-DNA prodotto non trovato", status=404)
+
+    error = None
+    try:
+        questions = _generate_product_questions(product, pre_dna)
+    except ValueError as exc:
+        questions = []
+        error = f"ZEUS non e riuscito a generare le domande: {exc}"
+
+    if request.method == "POST" and not error:
+        body = _request_data(request)
+        missing = []
+        for question in questions:
+            answer = body.get(f"answer_{question.id}", "").strip()
+            if not answer:
+                missing.append(question.code)
+                continue
+            question.answer = answer
+            question.answered_at = timezone.now()
+            question.save(update_fields=["answer", "answered_at"])
+        if missing:
+            error = "Rispondi a tutte le domande prima di generare il DNA completo."
+        else:
+            complete_dna = _create_complete_product_dna(product, pre_dna, request.user)
+
+    status_code = 400 if error else 200
+    return render(request, "core/product_questions.html", {
+        "product": product,
+        "pre_dna": pre_dna,
+        "complete_dna": complete_dna,
+        "questions": questions,
+        "plan_slug": questions[0].plan_slug if questions else _plan_slug_for_company(company),
+        "plan_label": _question_plan_label(
+            questions[0].plan_slug if questions else _plan_slug_for_company(company)
+        ),
+        "error": error,
+    }, status=status_code)
+
+
+@login_required
+def product_review(request, pk):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    product = Product.objects.filter(pk=pk, company=company).first()
+    if not product:
+        return HttpResponse("Prodotto non trovato", status=404)
+    dna = product.dna_versions.filter(is_current=True).first()
+    if not dna:
+        return HttpResponse("DNA prodotto non trovato", status=404)
+    return render(request, "core/product_review.html", {
+        "product": product,
+        "dna": dna,
+        "sections": _product_dna_sections(dna.content),
+        "approved_keys": dna.approved_sections(),
+        "missing_keys": dna.missing_sections(),
+        "is_fully_approved": dna.is_fully_approved(),
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def product_section_approve(request, pk, section_key):
+    company = _tenant_company(request)
+    if not company:
+        return JsonResponse({"error": "no tenant"}, status=400)
+    product = Product.objects.filter(pk=pk, company=company).first()
+    if not product:
+        return JsonResponse({"error": "product not found"}, status=404)
+    dna = ProductDNA.objects.filter(product=product, is_current=True).first()
+    if not dna:
+        return JsonResponse({"error": "dna not found"}, status=404)
+    if section_key not in {"descrizione", "applicazione", "specifiche", "vincoli", "valore"}:
+        return JsonResponse({"error": "invalid section_key"}, status=400)
+
+    body = _request_data(request)
+    comment = body.get("comment", "")
+    is_clarification = str(body.get("is_clarification", False)).lower() == "true"
+
+    if is_clarification:
+        ProductSectionApproval.objects.create(
+            dna=dna,
+            section_key=section_key,
+            approved_by=request.user,
+            comment=comment,
+            is_clarification=True,
+        )
+    else:
+        ProductSectionApproval.objects.update_or_create(
+            dna=dna,
+            section_key=section_key,
+            is_clarification=False,
+            defaults={
+                "approved_by": request.user,
+                "comment": comment,
+            },
+        )
+        dna.refresh_from_db()
+        if not dna.missing_sections():
+            dna.is_approved = timezone.now()
+            dna.save(update_fields=["is_approved"])
+
+    if is_clarification and request.headers.get("HX-Request"):
+        return HttpResponse(
+            '<span class="rounded-xl bg-amber-400/10 px-3 py-2 text-sm '
+            'text-amber-300">Richiesta inviata ✓</span>'
+        )
+
+    return JsonResponse({
+        "section_key": section_key,
+        "is_clarification": is_clarification,
+        "approved": not is_clarification,
+        "is_fully_approved": dna.is_fully_approved(),
+        "missing_sections": dna.missing_sections(),
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def product_section_edit(request, pk, section_key):
+    company = _tenant_company(request)
+    if not company:
+        return JsonResponse({"error": "no tenant"}, status=400)
+    product = Product.objects.filter(pk=pk, company=company).first()
+    if not product:
+        return JsonResponse({"error": "product not found"}, status=404)
+    old_dna = ProductDNA.objects.filter(product=product, is_current=True).first()
+    if not old_dna:
+        return JsonResponse({"error": "dna not found"}, status=404)
+    if section_key not in {"descrizione", "applicazione", "specifiche", "vincoli", "valore"}:
+        return JsonResponse({"error": "invalid section_key"}, status=400)
+
+    body = _request_data(request)
+    new_text = body.get("text", "").strip()
+    if not new_text:
+        return JsonResponse({"error": "text is required"}, status=400)
+
+    content = dict(old_dna.content) if isinstance(old_dna.content, dict) else {}
+    content[section_key] = new_text
+
+    product.dna_versions.filter(is_current=True).update(is_current=False)
+
+    new_dna = ProductDNA.objects.create(
+        product=product,
+        version=old_dna.version + 1,
+        dna_type=old_dna.dna_type,
+        content=content,
+        created_by=request.user,
+    )
+
+    for approval in old_dna.section_approvals.all():
+        if approval.section_key != section_key:
+            ProductSectionApproval.objects.create(
+                dna=new_dna,
+                section_key=approval.section_key,
+                approved_by=approval.approved_by,
+                comment=approval.comment,
+                is_clarification=approval.is_clarification,
+            )
+
+    return JsonResponse({
+        "dna_id": new_dna.id,
+        "version": new_dna.version,
+        "section_key": section_key,
+        "missing_sections": new_dna.missing_sections(),
+    })

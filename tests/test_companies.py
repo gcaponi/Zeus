@@ -15,6 +15,11 @@ from apps.companies.models import (
     DNAFeedback,
     LLMCall,
     PipelineRun,
+    Product,
+    ProductDNA,
+    ProductFile,
+    ProductQuestion,
+    ProductSectionApproval,
     Source,
 )
 from apps.core.models import Client, Plan, WorkspaceSubscription
@@ -526,7 +531,7 @@ class TestOnboardingViews:
         req = rf_with_tenant("get", "/onboarding/")
         resp = views.onboarding_index(req)
         assert resp.status_code == 200
-        assert b"Aggiungi il sito web" in resp.content
+        assert b"URL del sito aziendale" in resp.content
 
     def test_onboarding_source_create_generates_dna(self, rf_with_tenant):
         from apps.companies.llm_client import MockLLMClient
@@ -536,7 +541,7 @@ class TestOnboardingViews:
             resp = views.onboarding_source_create(req)
 
         assert resp.status_code == 200
-        assert b"DNA generato" in resp.content
+        assert b"DNA Aziendale generato" in resp.content
         assert Company.objects.get(schema_name="test-tenant").sources.count() == 1
         assert PipelineRun.objects.filter(company__schema_name="test-tenant").count() == 1
         assert CompanyDNA.objects.filter(company__schema_name="test-tenant").count() == 1
@@ -765,3 +770,75 @@ def rf_with_tenant(django_user_model):
         return req
 
     return _make
+
+
+@pytest.mark.django_db
+class TestProductModel:
+    def test_product_creation(self):
+        company = Company.objects.create(schema_name="testco", name="TestCo")
+        product = Product.objects.create(company=company, name="Vasca BVCI", slug="vasca-bvci")
+        assert product.name == "Vasca BVCI"
+        assert str(product) == "Vasca BVCI"
+        assert product.company == company
+
+    def test_unique_slug_per_company(self):
+        company = Company.objects.create(schema_name="testco", name="TestCo")
+        Product.objects.create(company=company, name="Vasca A", slug="vasca-a")
+        with pytest.raises(Exception):
+            Product.objects.create(company=company, name="Vasca A dup", slug="vasca-a")
+
+
+@pytest.mark.django_db
+class TestProductDNAModel:
+    def test_product_dna_creation(self, django_user_model):
+        user = django_user_model.objects.create_user(username="t", email="test@x.it", password="pw")
+        company = Company.objects.create(schema_name="testco", name="TestCo")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        dna = ProductDNA.objects.create(
+            product=product,
+            version=1,
+            content={"descrizione": "test"},
+            created_by=user,
+        )
+        assert dna.is_current is True
+        assert dna.version == 1
+        assert str(dna) == "Vasca v1"
+
+    def test_product_dna_missing_sections(self, django_user_model):
+        user = django_user_model.objects.create_user(username="t", email="test@x.it", password="pw")
+        company = Company.objects.create(schema_name="testco", name="TestCo")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        dna = ProductDNA.objects.create(
+            product=product,
+            version=1,
+            content={"descrizione": "test"},
+            created_by=user,
+        )
+        assert len(dna.missing_sections()) == 5
+        ProductSectionApproval.objects.create(
+            dna=dna,
+            section_key="descrizione",
+            approved_by=user,
+        )
+        assert len(dna.missing_sections()) == 4
+
+
+@pytest.mark.django_db
+class TestProductViews:
+    def test_product_list_create(self, rf_with_tenant):
+        request = rf_with_tenant("get", "/products/")
+        response = views.product_list_create(request)
+        assert response.status_code == 200
+
+    def test_product_create(self, rf_with_tenant):
+        request = rf_with_tenant("post", "/products/", data={"name": "Vasca BVCI"}, form=True)
+        response = views.product_list_create(request)
+        assert response.status_code == 200
+        assert Product.objects.filter(name="Vasca BVCI").exists()
+
+    def test_product_detail(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        request = rf_with_tenant("get", f"/products/{product.pk}/")
+        response = views.product_detail(request, product.pk)
+        assert response.status_code == 200

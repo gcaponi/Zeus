@@ -108,6 +108,15 @@ def tenant_landing(request):
     })
 
 
+def public_onboarding_redirect(request):
+    """Redirect intelligente da zeus.cais.uno/onboarding/ al workspace corretto."""
+    workspace = request.COOKIES.get(WORKSPACE_COOKIE)
+    if workspace:
+        return redirect(f"https://{workspace}/onboarding/")
+    # Se non c'è cookie, redirect a login
+    return redirect("https://zeus.cais.uno/accounts/login/")
+
+
 @login_required
 def tenant_dashboard(request):
     tenant = request.tenant if hasattr(request, "tenant") else None

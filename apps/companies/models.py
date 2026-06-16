@@ -101,7 +101,17 @@ class CompanyDNA(models.Model):
         return self.is_approved is not None
 
     def is_export_ready(self):
-        return self.dna_type == self.TYPE_COMPLETE and self.is_fully_approved()
+        if self.dna_type != self.TYPE_COMPLETE or not self.is_fully_approved():
+            return False
+        # Check if all products have approved DNA
+        products = self.company.products.all()
+        if not products:
+            return True  # No products required
+        for product in products:
+            product_dna = product.dna_versions.filter(is_current=True).first()
+            if not product_dna or not product_dna.is_fully_approved():
+                return False
+        return True
 
     def approved_sections(self):
         return {s.section_key for s in self.section_approvals.filter(is_clarification=False)}
@@ -300,3 +310,175 @@ class LLMCall(models.Model):
 
     def __str__(self):
         return f"{self.model_name} @ {self.created_at:%H:%M}"
+
+
+class Product(models.Model):
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name="products",
+    )
+    name = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "slug"],
+                name="unique_product_slug_per_company",
+            ),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class ProductDNA(models.Model):
+    TYPE_PRE = "pre"
+    TYPE_COMPLETE = "complete"
+
+    DNA_TYPE_CHOICES = [
+        (TYPE_PRE, "Pre-DNA"),
+        (TYPE_COMPLETE, "DNA completo"),
+    ]
+
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="dna_versions",
+    )
+    version = models.PositiveIntegerField()
+    dna_type = models.CharField(
+        max_length=20,
+        choices=DNA_TYPE_CHOICES,
+        default=TYPE_PRE,
+    )
+    content = models.JSONField()
+    is_current = models.BooleanField(default=True)
+    is_approved = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Product DNA"
+        verbose_name_plural = "Product DNAs"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["product", "is_current"],
+                condition=models.Q(is_current=True),
+                name="unique_current_product_dna_per_product",
+            ),
+        ]
+        ordering = ["-version"]
+
+    def __str__(self):
+        return f"{self.product.name} v{self.version}"
+
+    def is_fully_approved(self):
+        return self.is_approved is not None
+
+    def approved_sections(self):
+        return {s.section_key for s in self.section_approvals.filter(is_clarification=False)}
+
+    def missing_sections(self):
+        all_keys = {"descrizione", "applicazione", "specifiche", "vincoli", "valore"}
+        return sorted(all_keys - self.approved_sections())
+
+
+class ProductFile(models.Model):
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="product_files",
+    )
+    original_name = models.CharField(max_length=255)
+    content_text = models.TextField()
+    file_size = models.PositiveIntegerField(default=0)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.original_name
+
+
+class ProductQuestion(models.Model):
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="product_questions",
+    )
+    dna = models.ForeignKey(
+        ProductDNA,
+        on_delete=models.CASCADE,
+        related_name="questions",
+    )
+    code = models.CharField(max_length=4)
+    plan_slug = models.CharField(max_length=20, default="starter")
+    section_key = models.CharField(max_length=20, default="valore")
+    principle = models.CharField(max_length=120)
+    question = models.TextField()
+    answer_depth = models.CharField(max_length=40, default="generica")
+    answer_guidance = models.TextField(blank=True)
+    answer = models.TextField(blank=True)
+    answered_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["dna", "code"],
+                name="unique_product_question_per_dna_code",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.code} - {self.product.name}"
+
+
+class ProductSectionApproval(models.Model):
+    SECTION_KEYS = [
+        ("descrizione", "Descrizione"),
+        ("applicazione", "Applicazione"),
+        ("specifiche", "Specifiche"),
+        ("vincoli", "Vincoli"),
+        ("valore", "Valore"),
+    ]
+
+    dna = models.ForeignKey(
+        ProductDNA,
+        on_delete=models.CASCADE,
+        related_name="section_approvals",
+    )
+    section_key = models.CharField(max_length=20, choices=SECTION_KEYS)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    approved_at = models.DateTimeField(auto_now_add=True)
+    comment = models.TextField(null=True, blank=True)
+    is_clarification = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-approved_at"]
+
+    def __str__(self):
+        return f"{self.section_key} on ProductDNA {self.dna_id}"

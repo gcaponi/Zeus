@@ -1,6 +1,12 @@
 from django.contrib import admin
+from django.contrib.auth import get_user_model
+from django.shortcuts import redirect, render
+from django.urls import path, reverse
+from django_tenants.utils import schema_context
 
 from apps.core.models import Client, Domain, Plan, WorkspaceAccess, WorkspaceSubscription
+
+User = get_user_model()
 
 
 class DomainInline(admin.TabularInline):
@@ -33,6 +39,7 @@ class ClientAdmin(admin.ModelAdmin):
         "owner_email",
         "plan_name",
         "subscription_status",
+        "change_password_link",
         "created_on",
     ]
     search_fields = ["name", "schema_name", "domains__domain"]
@@ -68,6 +75,81 @@ class ClientAdmin(admin.ModelAdmin):
     def subscription_status(self, obj):
         subscription = getattr(obj, "subscription", None)
         return subscription.status if subscription else "-"
+
+    @admin.display(description="Password")
+    def change_password_link(self, obj):
+        from django.utils.html import format_html
+        return format_html(
+            '<a href="{}" class="button">Cambia password</a>',
+            reverse("admin:core_client_change_password", args=[obj.pk]),
+        )
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "<int:client_id>/change-password/",
+                self.admin_site.admin_view(self.change_password_view),
+                name="core_client_change_password",
+            ),
+        ]
+        return custom_urls + urls
+
+    def change_password_view(self, request, client_id):
+        client = Client.objects.get(pk=client_id)
+        domain = next((d.domain for d in client.domains.all() if d.is_primary), None)
+        if not domain:
+            self.message_user(request, "Nessun dominio trovato per questo client.", level="error")
+            return redirect("admin:core_client_changelist")
+
+        email = WorkspaceAccess.objects.filter(tenant_domain=domain).values_list(
+            "email", flat=True,
+        ).first()
+
+        if request.method == "POST":
+            new_password = request.POST.get("new_password", "")
+            confirm_password = request.POST.get("confirm_password", "")
+
+            if not new_password:
+                return render(request, "admin/change_password.html", {
+                    "client": client,
+                    "email": email,
+                    "error": "Password obbligatoria.",
+                })
+
+            if new_password != confirm_password:
+                return render(request, "admin/change_password.html", {
+                    "client": client,
+                    "email": email,
+                    "error": "Le password non coincidono.",
+                })
+
+            if len(new_password) < 8:
+                return render(request, "admin/change_password.html", {
+                    "client": client,
+                    "email": email,
+                    "error": "Password troppo corta (minimo 8 caratteri).",
+                })
+
+            tenant_schema = client.schema_name
+            with schema_context(tenant_schema):
+                user = User.objects.filter(email__iexact=email).first()
+                if not user:
+                    return render(request, "admin/change_password.html", {
+                        "client": client,
+                        "email": email,
+                        "error": "Utente non trovato nel tenant.",
+                    })
+                user.set_password(new_password)
+                user.save()
+
+            self.message_user(request, f"Password cambiata per {email}.")
+            return redirect("admin:core_client_changelist")
+
+        return render(request, "admin/change_password.html", {
+            "client": client,
+            "email": email,
+        })
 
 
 @admin.register(Domain)

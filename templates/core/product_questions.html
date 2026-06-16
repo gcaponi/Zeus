@@ -1,6 +1,6 @@
 {% extends "core/base.html" %}
 
-{% block title %}Domande DNA — ZEUS{% endblock %}
+{% block title %}Domande Prodotto · {{ product.name }} — ZEUS{% endblock %}
 
 {% block extra_head %}
 <script src="https://unpkg.com/htmx.org@1.9.12"></script>
@@ -9,17 +9,17 @@
 {% block content %}
 <div class="mx-auto max-w-4xl">
     <header class="mb-8">
-        <p class="zeus-badge zeus-badge-cyan mb-3">ZEUS</p>
-        <h1 class="text-3xl font-bold tracking-tight sm:text-4xl font-display">10 domande per completare il DNA</h1>
-        <p class="mt-2 text-content-secondary">Generate dai principi A1-A20 sul pre-DNA v{{ pre_dna.version }}.</p>
+        <a href="{% url 'product-detail' product.pk %}" class="text-sm text-brand-cyan hover:underline">← {{ product.name }}</a>
+        <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">10 domande per il DNA prodotto</h1>
+        <p class="mt-2 text-content-secondary">Generate dai principi D1-D20 sul pre-DNA v{{ pre_dna.version }}.</p>
         <span class="zeus-badge zeus-badge-cyan mt-3">{{ plan_label }}</span>
     </header>
 
     {% if complete_dna %}
         <div class="mb-6 zeus-card p-5" style="border-color: rgba(34, 197, 94, 0.3); background: rgba(34, 197, 94, 0.05);">
-            <p class="zeus-label text-green-600">DNA completo generato</p>
-            <p class="mt-2 text-lg font-bold font-display">Versione {{ complete_dna.version }} pronta per review finale.</p>
-            <a href="{% url 'dna-review' %}" class="zeus-btn zeus-btn-primary mt-4">Vai alla review finale →</a>
+            <p class="zeus-label text-green-600">DNA prodotto completo generato</p>
+            <p class="mt-2 text-lg font-bold font-display">Versione {{ complete_dna.version }} pronta per review.</p>
+            <a href="{% url 'product-review' product.pk %}" class="zeus-btn zeus-btn-primary mt-4">Vai alla review finale →</a>
         </div>
     {% endif %}
 
@@ -46,7 +46,7 @@
             </section>
         {% endfor %}
         <div class="sticky bottom-4 zeus-card p-4" style="background: rgba(255,255,255,0.95);">
-            <button type="submit" class="zeus-btn zeus-btn-primary w-full">Genera DNA completo</button>
+            <button type="submit" class="zeus-btn zeus-btn-primary w-full">Genera DNA prodotto completo</button>
         </div>
     </form>
 </div>

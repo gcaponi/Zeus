@@ -1,51 +1,22 @@
-<div id="dna-result">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-        <div>
-            <p class="text-sm uppercase tracking-[0.2em] text-cyan-300">{% if dna.dna_type == 'complete' %}DNA completo{% else %}Pre-DNA{% endif %} v{{ dna.version }}</p>
-            <h2 class="text-2xl font-semibold">{% if dna.dna_type == 'complete' %}DNA completo generato{% else %}Pre-DNA generato{% endif %}</h2>
-        </div>
-        {% if dna.confidence_score %}
-            <span class="rounded-full bg-cyan-300/10 px-3 py-1 text-sm text-cyan-200">Score {{ dna.confidence_score }}/5</span>
-        {% endif %}
+<div class="space-y-6">
+    <div class="rounded-xl border border-green-400/30 bg-green-400/10 p-4">
+        <p class="zeus-label text-green-600">DNA Aziendale generato</p>
+        <p class="mt-1 text-lg font-bold font-display">Versione {{ dna.version }}</p>
+        <p class="mt-1 text-sm text-content-secondary">Rivedi le sezioni e procedi con le domande di approfondimento.</p>
     </div>
 
-    <div class="mt-6 rounded-3xl border border-cyan-300/20 bg-slate-950/70 p-4 shadow-inner shadow-cyan-950/20">
-        <div class="mb-4 flex items-center justify-between gap-3">
-            <div>
-                <p class="text-xs uppercase tracking-[0.25em] text-slate-500">Anteprima leggibile</p>
-                <h3 class="mt-1 text-lg font-semibold text-slate-100">Le 5 sezioni del {% if dna.dna_type == 'complete' %}DNA completo{% else %}pre-DNA{% endif %}</h3>
+    <div class="space-y-4">
+        {% for section in sections %}
+            <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <h4 class="text-sm font-bold uppercase tracking-wider text-brand-cyan">{{ section.label }}</h4>
+                <p class="mt-2 text-sm text-content-primary whitespace-pre-line">{{ section.value|default:"Non disponibile" }}</p>
             </div>
-            <span class="rounded-full bg-cyan-300/10 px-3 py-1 text-xs text-cyan-200">{% if dna.dna_type == 'complete' %}Pronto per review finale{% else %}Da completare con 10 domande{% endif %}</span>
-        </div>
-
-        <div class="grid gap-3">
-            {% for section in sections %}
-                <section class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                    <div class="mb-2 flex items-center gap-2">
-                        <span class="h-2 w-2 rounded-full bg-cyan-300"></span>
-                        <h4 class="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-200">{{ section.label }}</h4>
-                    </div>
-                    <p class="whitespace-pre-line text-sm leading-7 text-slate-200">{{ section.value }}</p>
-                </section>
-            {% empty %}
-                <section class="rounded-2xl border border-amber-300/20 bg-amber-300/5 p-4">
-                    <h4 class="font-medium text-amber-200">DNA non ancora strutturato</h4>
-                    <p class="mt-2 text-sm leading-6 text-slate-300">
-                        ZEUS ha salvato una bozza raw. Rigenera il DNA per ottenere la vista a sezioni.
-                    </p>
-                    <pre class="mt-4 max-h-64 overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-slate-950 p-4 text-xs text-slate-300">{{ dna.content }}</pre>
-                </section>
-            {% endfor %}
-        </div>
+        {% endfor %}
     </div>
 
-    <div class="mt-6 flex flex-wrap gap-3">
-        <a href="{% url 'onboarding-index' %}" class="rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:bg-white/10">Torna all'onboarding</a>
-        {% if dna.dna_type == 'complete' %}
-            <a href="{% url 'dna-review' %}" class="rounded-2xl bg-cyan-300 px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-cyan-200">Review DNA →</a>
-        {% else %}
-            <a href="{% url 'dna-review' %}" class="rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:bg-white/10">Review pre-DNA</a>
-            <a href="{% url 'dna-questions' %}" class="rounded-2xl bg-cyan-300 px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-cyan-200">Rispondi alle 10 domande →</a>
-        {% endif %}
+    <div class="flex gap-3">
+        <a href="{% url 'dna-questions' %}" class="zeus-btn zeus-btn-primary flex-1">
+            Rispondi alle domande A1-A20 →
+        </a>
     </div>
 </div>
