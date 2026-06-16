@@ -445,22 +445,30 @@ def onboarding_source_create(request):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
+    is_htmx = request.headers.get("HX-Request") == "true"
+
+    def _source_form_response(context, status=200):
+        if is_htmx:
+            return render(request, "core/onboarding/_source_form.html", context, status=status)
+        page_context = _onboarding_context(request) or {"company": company, "step": 2}
+        page_context.update(context)
+        return render(request, "core/onboarding.html", page_context, status=status)
 
     url = request.POST.get("url", "").strip()
     if not url:
-        return render(request, "core/onboarding/_source_form.html", {
+        return _source_form_response({
             "error": "Inserisci un URL valido.",
         }, status=400)
 
     block_reason = _workspace_block_reason(company)
     if block_reason:
-        return render(request, "core/onboarding/_source_form.html", {
+        return _source_form_response({
             "error": block_reason,
         }, status=403)
 
     file_error = _save_company_file_from_request(company, request)
     if file_error:
-        return render(request, "core/onboarding/_source_form.html", {
+        return _source_form_response({
             "error": file_error,
         }, status=403)
 
@@ -477,6 +485,9 @@ def onboarding_source_create(request):
     )
     run.refresh_from_db()
     source.refresh_from_db()
+
+    if not is_htmx:
+        return redirect("onboarding-index")
 
     dna = company.dna_versions.filter(is_current=True).order_by("-version").first()
     if run.status == PipelineRun.STATUS_COMPLETED and dna:

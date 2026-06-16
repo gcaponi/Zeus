@@ -1,4 +1,13 @@
-<form method="post" action="{% url 'onboarding-source-create' %}" enctype="multipart/form-data" class="space-y-5">
+<form
+    method="post"
+    action="{% url 'onboarding-source-create' %}"
+    enctype="multipart/form-data"
+    hx-post="{% url 'onboarding-source-create' %}"
+    hx-target="#onboarding-step"
+    hx-swap="innerHTML"
+    hx-encoding="multipart/form-data"
+    class="space-y-5"
+>
     {% csrf_token %}
 
     {% if error %}

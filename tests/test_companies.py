@@ -554,12 +554,20 @@ class TestOnboardingViews:
         resp = views.onboarding_index(req)
         assert resp.status_code == 200
         assert b"URL del sito aziendale" in resp.content
+        assert b"hx-post" in resp.content
+        assert b"hx-target=\"#onboarding-step\"" in resp.content
 
     def test_onboarding_source_create_generates_dna(self, rf_with_tenant):
         from apps.companies.llm_client import MockLLMClient
 
         with patch("apps.companies.tasks.get_llm_client", return_value=MockLLMClient()):
-            req = rf_with_tenant("post", "/onboarding/source/", {"url": "https://rossi-metalli.it"}, form=True)
+            req = rf_with_tenant(
+                "post",
+                "/onboarding/source/",
+                {"url": "https://rossi-metalli.it"},
+                form=True,
+            )
+            req.META["HTTP_HX_REQUEST"] = "true"
             resp = views.onboarding_source_create(req)
 
         assert resp.status_code == 200
@@ -576,6 +584,7 @@ class TestOnboardingViews:
                 "url": "https://rossi-metalli.it",
                 "company_notes": "Certificazione ISO 9001 e tempi rapidi.",
             }, form=True)
+            req.META["HTTP_HX_REQUEST"] = "true"
             resp = views.onboarding_source_create(req)
 
         assert resp.status_code == 200
@@ -600,6 +609,7 @@ class TestOnboardingViews:
             "url": "https://rossi-metalli.it",
             "company_notes": "Nuovo documento oltre quota.",
         }, form=True)
+        req.META["HTTP_HX_REQUEST"] = "true"
         resp = views.onboarding_source_create(req)
 
         assert resp.status_code == 403
@@ -609,9 +619,25 @@ class TestOnboardingViews:
     def test_onboarding_source_create_invalid_url(self, rf_with_tenant):
         Company.objects.create(schema_name="test-tenant", name="Test Tenant")
         req = rf_with_tenant("post", "/onboarding/source/", {}, form=True)
+        req.META["HTTP_HX_REQUEST"] = "true"
         resp = views.onboarding_source_create(req)
         assert resp.status_code == 400
         assert b"Inserisci un URL valido" in resp.content
+
+    def test_onboarding_source_create_non_htmx_redirects_to_full_page(self, rf_with_tenant):
+        from apps.companies.llm_client import MockLLMClient
+
+        with patch("apps.companies.tasks.get_llm_client", return_value=MockLLMClient()):
+            req = rf_with_tenant(
+                "post",
+                "/onboarding/source/",
+                {"url": "https://rossi-metalli.it"},
+                form=True,
+            )
+            resp = views.onboarding_source_create(req)
+
+        assert resp.status_code == 302
+        assert resp["Location"] == reverse("onboarding-index")
 
     def test_onboarding_status_completed(self, rf_with_tenant):
         from apps.companies.llm_client import MockLLMClient
