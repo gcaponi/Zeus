@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client as TestClient
 from django.test import RequestFactory
 from django.urls import reverse
@@ -815,7 +816,9 @@ class TestDNAQuestions:
         assert len(complete_dna.content["questionario_a1_a20"]) == 10
         assert complete_dna.content["profilo_questionario"]["plan"] == Plan.SLUG_STARTER
         assert complete_dna.content["profilo_questionario"]["starter_minimum_pages"] == 2
-        assert "Risposta A1" in complete_dna.content["chi_siamo"]
+        assert "riformulata integrando le risposte" in complete_dna.content["chi_siamo"]
+        assert "Approfondimenti cliente" not in complete_dna.content["chi_siamo"]
+        assert "Risposta A1" not in complete_dna.content["chi_siamo"]
         pre_dna.refresh_from_db()
         assert pre_dna.is_current is False
 
@@ -1034,6 +1037,88 @@ class TestProductViews:
         response = views.product_detail(request, product.pk)
         assert response.status_code == 200
 
+    def test_product_detail_shows_uploaded_files(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        ProductFile.objects.create(
+            product=product,
+            original_name="scheda.txt",
+            content_text="Scheda tecnica",
+        )
+
+        request = rf_with_tenant("get", f"/products/{product.pk}/")
+        response = views.product_detail(request, product.pk)
+
+        assert response.status_code == 200
+        assert b"File prodotto caricati" in response.content
+        assert b"scheda.txt" in response.content
+
+    def test_product_file_upload_browser_redirects_to_detail(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        request = rf_with_tenant(
+            "post",
+            reverse("product-file-upload", args=[product.pk]),
+            {"notes": "Nota prodotto"},
+            form=True,
+        )
+
+        response = views.product_file_upload(request, product.pk)
+
+        assert response.status_code == 302
+        assert response["Location"] == reverse("product-detail", args=[product.pk])
+        assert product.product_files.filter(original_name="note-prodotto.txt").exists()
+
+    def test_product_image_upload_stores_placeholder_text(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        request = rf_with_tenant(
+            "post",
+            reverse("product-file-upload", args=[product.pk]),
+            {
+                "file": SimpleUploadedFile(
+                    "brochure.png",
+                    b"\x89PNG\r\n\x1a\n",
+                    content_type="image/png",
+                ),
+            },
+            form=True,
+        )
+
+        response = views.product_file_upload(request, product.pk)
+
+        assert response.status_code == 302
+        product_file = product.product_files.get(original_name="brochure.png")
+        assert "OCR/vision non ancora attiva" in product_file.content_text
+
+    def test_product_dna_generate_browser_redirects_to_detail(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        ProductFile.objects.create(
+            product=product,
+            original_name="scheda.txt",
+            content_text="Scheda tecnica",
+        )
+        dna = ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_PRE,
+            content={"descrizione": "Test"},
+        )
+        request = rf_with_tenant(
+            "post",
+            reverse("product-dna-generate", args=[product.pk]),
+            form=True,
+        )
+        with patch(
+            "apps.companies.tasks._generate_product_dna",
+            return_value=(dna, SimpleNamespace(cost_usd=0)),
+        ):
+            response = views.product_dna_generate(request, product.pk)
+
+        assert response.status_code == 302
+        assert response["Location"] == reverse("product-detail", args=[product.pk])
+
     def test_duplicate_product_question_codes_are_normalized(self):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
         product = Product.objects.create(company=company, name="Vasca", slug="vasca")
@@ -1070,6 +1155,33 @@ class TestProductViews:
 
         assert len(questions) == 10
         assert len({question.code for question in questions}) == 10
+
+    def test_complete_product_dna_rewrites_sections_instead_of_appending_answers(self):
+        user = User.objects.create_user(username="p", email="p@x.it", password="pw")
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        pre_dna = ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_PRE,
+            content={"descrizione": "Descrizione base"},
+        )
+        ProductQuestion.objects.create(
+            product=product,
+            dna=pre_dna,
+            code="D1",
+            section_key="descrizione",
+            principle="Identita prodotto",
+            question="Cosa distingue il prodotto?",
+            answer="Risposta tecnica cliente",
+        )
+
+        complete_dna = views._create_complete_product_dna(product, pre_dna, user)
+
+        assert complete_dna.version == 2
+        assert "riformulata integrando le risposte" in complete_dna.content["descrizione"]
+        assert "Approfondimenti cliente" not in complete_dna.content["descrizione"]
+        assert "Risposta tecnica cliente" not in complete_dna.content["descrizione"]
 
     def test_product_section_approve_htmx_redirects_to_review(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")

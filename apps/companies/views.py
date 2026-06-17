@@ -258,6 +258,96 @@ def _parse_question_generation(text):
     return questions
 
 
+def _parse_json_object(text):
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
+        if not match:
+            raise ValueError("LLM did not return JSON object") from None
+        payload = json.loads(match.group(1))
+    if not isinstance(payload, dict):
+        raise ValueError("LLM JSON response must be an object")
+    return payload
+
+
+def _answers_by_section(questions, section_keys, fallback_section):
+    answers = {key: [] for key in section_keys}
+    for question in questions:
+        answer = (question.answer or "").strip()
+        if not answer:
+            continue
+        section_key = question.section_key if question.section_key in answers else fallback_section
+        answers[section_key].append({
+            "code": question.code,
+            "principle": question.principle,
+            "question": question.question,
+            "answer": answer,
+        })
+    return answers
+
+
+def _rewrite_sections_with_answers(company, content, answers_by_section, section_keys, marker):
+    relevant_answers = {
+        key: answers for key, answers in answers_by_section.items() if answers
+    }
+    if not relevant_answers:
+        return content
+
+    base_sections = {key: _as_text(content.get(key)).strip() for key in section_keys}
+    prompt = f"""
+{marker}
+
+Sei ZEUS. Devi creare il DNA finale riformulando le sezioni esistenti.
+Non devi appendere domande e risposte. Devi integrare il contenuto delle risposte
+nel testo naturale della sezione corrispondente, riscrivendo la sezione come testo
+finale pronto da approvare.
+
+Regole obbligatorie:
+- Mantieni la stessa struttura JSON e le stesse chiavi.
+- Rispondi SOLO JSON valido, senza markdown.
+- Non usare frasi come "Approfondimenti cliente".
+- Non elencare codici domanda (A1, D1, ecc.) nel testo finale.
+- Non copiare la domanda: estrai il significato della risposta e fondilo nel testo.
+- Se una sezione non ha risposte cliente, puoi migliorare leggermente il testo base
+  ma non inventare dettagli nuovi.
+
+SEZIONI_BASE_JSON:
+{json.dumps(base_sections, ensure_ascii=False, indent=2)}
+
+RISPOSTE_CLIENTE_JSON:
+{json.dumps(relevant_answers, ensure_ascii=False, indent=2)}
+""".strip()
+    client = get_llm_client()
+    try:
+        result = client.generate(prompt)
+        LLMCall.objects.create(
+            company=company,
+            model_name=LLM_MODEL,
+            prompt_text=prompt,
+            response_text=result.text,
+            tokens_in=result.tokens_in,
+            tokens_out=result.tokens_out,
+            cost_usd=result.cost,
+            latency_ms=result.latency_ms,
+        )
+        rewritten = _parse_json_object(result.text)
+    except Exception:
+        logger.exception("DNA rewrite failed for company %s", company.schema_name)
+        updated = dict(content)
+        updated["rewrite_warning"] = "Riformulazione LLM fallita; testo base preservato."
+        return updated
+
+    updated = dict(content)
+    for key in section_keys:
+        value = rewritten.get(key)
+        if isinstance(value, list):
+            value = "\n".join(str(item) for item in value)
+        if isinstance(value, str) and value.strip():
+            updated[key] = value.strip()
+    return updated
+
+
 def _generate_company_questions(company, dna):
     existing = list(dna.questions.all())
     if existing:
@@ -309,26 +399,14 @@ def _create_complete_dna(company, pre_dna, user):
     plan_slug = questions[0].plan_slug if questions else _plan_slug_for_company(company)
     content = dict(pre_dna.content) if isinstance(pre_dna.content, dict) else {}
     section_keys = ["chi_siamo", "mission", "settore", "mercato", "pilastri"]
-    answers_by_section = {key: [] for key in section_keys}
-
-    for question in questions:
-        section_key = (
-            question.section_key
-            if question.section_key in answers_by_section
-            else "pilastri"
-        )
-        answers_by_section[section_key].append(
-            f"{question.code} - {question.principle}: {question.answer.strip()}"
-        )
-
-    for section_key, answers in answers_by_section.items():
-        if not answers:
-            continue
-        base_text = _as_text(content.get(section_key)).strip()
-        content[section_key] = (
-            f"{base_text}\n\nApprofondimenti cliente:\n"
-            + "\n".join(f"- {answer}" for answer in answers)
-        ).strip()
+    answers_by_section = _answers_by_section(questions, section_keys, "pilastri")
+    content = _rewrite_sections_with_answers(
+        company,
+        content,
+        answers_by_section,
+        section_keys,
+        "RIFORMULA_DNA_CON_RISPOSTE",
+    )
 
     content["questionario_a1_a20"] = [
         {
@@ -365,6 +443,12 @@ def _extract_company_file_text(uploaded_file):
     if name.lower().endswith(".pdf"):
         doc = fitz.open(stream=raw, filetype="pdf")
         return "\n".join(page.get_text() for page in doc)[:30000], len(raw), name
+    if name.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+        return (
+            f"Immagine caricata: {name}. Estrazione OCR/vision non ancora attiva in questo MVP.",
+            len(raw),
+            name,
+        )
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError:
@@ -1273,26 +1357,14 @@ def _create_complete_product_dna(product, pre_dna, user):
     plan_slug = questions[0].plan_slug if questions else _plan_slug_for_company(product.company)
     content = dict(pre_dna.content) if isinstance(pre_dna.content, dict) else {}
     section_keys = ["descrizione", "applicazione", "specifiche", "vincoli", "valore"]
-    answers_by_section = {key: [] for key in section_keys}
-
-    for question in questions:
-        section_key = (
-            question.section_key
-            if question.section_key in answers_by_section
-            else "valore"
-        )
-        answers_by_section[section_key].append(
-            f"{question.code} - {question.principle}: {question.answer.strip()}"
-        )
-
-    for section_key, answers in answers_by_section.items():
-        if not answers:
-            continue
-        base_text = _as_text(content.get(section_key)).strip()
-        content[section_key] = (
-            f"{base_text}\n\nApprofondimenti cliente:\n"
-            + "\n".join(f"- {answer}" for answer in answers)
-        ).strip()
+    answers_by_section = _answers_by_section(questions, section_keys, "valore")
+    content = _rewrite_sections_with_answers(
+        product.company,
+        content,
+        answers_by_section,
+        section_keys,
+        "RIFORMULA_PRODUCT_DNA_CON_RISPOSTE",
+    )
 
     content["questionario_d1_d20"] = [
         {
@@ -1396,6 +1468,30 @@ def product_list_create(request):
     })
 
 
+def _wants_json(request):
+    accept = request.headers.get("Accept", "")
+    return "application/json" in accept and "text/html" not in accept
+
+
+def _product_detail_context(product, error=None):
+    dna = product.dna_versions.filter(is_current=True).first()
+    sections = _product_dna_sections(dna.content) if dna else []
+    product_files = list(product.product_files.all())
+    subscription = _subscription_for_company(product.company)
+    product_file_limit = None
+    if subscription and subscription.plan and not subscription.plan.unlimited_files_per_product:
+        product_file_limit = subscription.plan.max_files_per_product
+    return {
+        "product": product,
+        "dna": dna,
+        "sections": sections,
+        "product_files": product_files,
+        "product_files_count": len(product_files),
+        "product_file_limit": product_file_limit,
+        "error": error,
+    }
+
+
 @login_required
 def product_detail(request, pk):
     company = _tenant_company(request)
@@ -1405,14 +1501,7 @@ def product_detail(request, pk):
     if not product:
         return HttpResponse("Prodotto non trovato", status=404)
 
-    dna = product.dna_versions.filter(is_current=True).first()
-    sections = _product_dna_sections(dna.content) if dna else []
-
-    return render(request, "core/product_detail.html", {
-        "product": product,
-        "dna": dna,
-        "sections": sections,
-    })
+    return render(request, "core/product_detail.html", _product_detail_context(product))
 
 
 @login_required
@@ -1427,12 +1516,26 @@ def product_file_upload(request, pk):
 
     block_reason = _product_file_block_reason(product)
     if block_reason:
+        if not _wants_json(request):
+            return render(
+                request,
+                "core/product_detail.html",
+                _product_detail_context(product, block_reason),
+                status=403,
+            )
         return JsonResponse({"error": block_reason}, status=403)
 
     notes = request.POST.get("notes", "").strip()
     uploaded_file = request.FILES.get("file")
 
     if not notes and not uploaded_file:
+        if not _wants_json(request):
+            return render(
+                request,
+                "core/product_detail.html",
+                _product_detail_context(product, "File o note obbligatori."),
+                status=400,
+            )
         return JsonResponse({"error": "File o note obbligatori"}, status=400)
 
     if uploaded_file:
@@ -1445,6 +1548,13 @@ def product_file_upload(request, pk):
         original_name = "note-prodotto.txt"
 
     if not content_text.strip():
+        if not _wants_json(request):
+            return render(
+                request,
+                "core/product_detail.html",
+                _product_detail_context(product, "Contenuto vuoto."),
+                status=400,
+            )
         return JsonResponse({"error": "Contenuto vuoto"}, status=400)
 
     ProductFile.objects.create(
@@ -1455,6 +1565,8 @@ def product_file_upload(request, pk):
         uploaded_by=request.user if request.user.is_authenticated else None,
     )
 
+    if not _wants_json(request):
+        return redirect("product-detail", pk=product.pk)
     return JsonResponse({"status": "ok", "files_count": product.product_files.count()})
 
 
@@ -1470,11 +1582,31 @@ def product_dna_generate(request, pk):
 
     block_reason = _workspace_block_reason(company)
     if block_reason:
+        if not _wants_json(request):
+            return render(
+                request,
+                "core/product_detail.html",
+                _product_detail_context(product, block_reason),
+                status=403,
+            )
         return JsonResponse({"error": block_reason}, status=403)
 
-    from apps.companies.tasks import _generate_product_dna
-    dna, llm_call = _generate_product_dna(product, company)
+    if not product.product_files.exists():
+        error = "Carica almeno un file o una nota prodotto prima di generare il pre-DNA."
+        if not _wants_json(request):
+            return render(
+                request,
+                "core/product_detail.html",
+                _product_detail_context(product, error),
+                status=400,
+            )
+        return JsonResponse({"error": error}, status=400)
 
+    from apps.companies.tasks import _generate_product_dna
+    dna, _llm_call = _generate_product_dna(product, company)
+
+    if not _wants_json(request):
+        return redirect("product-detail", pk=product.pk)
     return JsonResponse({
         "dna_id": dna.id,
         "version": dna.version,

@@ -70,6 +70,40 @@ class OpenAIClient(LLMClient):
 
 class MockLLMClient(LLMClient):
     def generate(self, prompt: str, model: str | None = None) -> LLMResult:
+        if "RIFORMULA_DNA_CON_RISPOSTE" in prompt:
+            sections = ["chi_siamo", "mission", "settore", "mercato", "pilastri"]
+            content = {
+                section: (
+                    f"Sezione {section} riformulata integrando le risposte del cliente "
+                    "nel testo finale, senza elenco domanda-risposta."
+                )
+                for section in sections
+            }
+            return LLMResult(
+                text=json.dumps(content, ensure_ascii=False),
+                tokens_in=600,
+                tokens_out=260,
+                cost=0.0002,
+                latency_ms=800,
+            )
+
+        if "RIFORMULA_PRODUCT_DNA_CON_RISPOSTE" in prompt:
+            sections = ["descrizione", "applicazione", "specifiche", "vincoli", "valore"]
+            content = {
+                section: (
+                    f"Sezione prodotto {section} riformulata integrando le risposte "
+                    "del cliente nel testo finale, senza elenco domanda-risposta."
+                )
+                for section in sections
+            }
+            return LLMResult(
+                text=json.dumps(content, ensure_ascii=False),
+                tokens_in=600,
+                tokens_out=260,
+                cost=0.0002,
+                latency_ms=800,
+            )
+
         if "GENERA_DOMANDE_A1_A20" in prompt:
             plan_slug = "starter"
             answer_depth = "generica"
