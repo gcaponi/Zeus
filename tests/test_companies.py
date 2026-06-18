@@ -557,6 +557,7 @@ class TestOnboardingViews:
         resp = views.onboarding_index(req)
         assert resp.status_code == 200
         assert b"URL del sito aziendale" in resp.content
+        assert b"cais.uno" in resp.content
         assert b"hx-post" in resp.content
         assert b"hx-target=\"#onboarding-step\"" in resp.content
 
@@ -578,6 +579,23 @@ class TestOnboardingViews:
         assert Company.objects.get(schema_name="test-tenant").sources.count() == 1
         assert PipelineRun.objects.filter(company__schema_name="test-tenant").count() == 1
         assert CompanyDNA.objects.filter(company__schema_name="test-tenant").count() == 1
+
+    def test_onboarding_source_create_accepts_bare_domain(self, rf_with_tenant):
+        from apps.companies.llm_client import MockLLMClient
+
+        with patch("apps.companies.tasks.get_llm_client", return_value=MockLLMClient()):
+            req = rf_with_tenant(
+                "post",
+                "/onboarding/source/",
+                {"url": "cais.uno"},
+                form=True,
+            )
+            req.META["HTTP_HX_REQUEST"] = "true"
+            resp = views.onboarding_source_create(req)
+
+        assert resp.status_code == 200
+        source = Source.objects.get(company__schema_name="test-tenant")
+        assert source.url == "https://cais.uno"
 
     def test_onboarding_source_create_uses_company_notes(self, rf_with_tenant):
         from apps.companies.llm_client import MockLLMClient

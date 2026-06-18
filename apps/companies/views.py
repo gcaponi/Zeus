@@ -2,6 +2,7 @@ import json
 import logging
 import re
 import textwrap
+from urllib.parse import urlparse
 
 import fitz
 from django.contrib.auth.decorators import login_required
@@ -85,6 +86,21 @@ def _workspace_block_reason(company):
     if subscription and not subscription.can_use_workspace():
         return "Workspace sospeso. Contatta l'amministratore ZEUS."
     return None
+
+
+def _normalize_source_url(raw_url):
+    url = (raw_url or "").strip()
+    if not url:
+        return ""
+    if not re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", url):
+        url = f"https://{url}"
+    parsed = urlparse(url)
+    hostname = parsed.hostname or ""
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return ""
+    if "." not in hostname and hostname != "localhost":
+        return ""
+    return url
 
 
 def _subscription_for_company(company):
@@ -654,7 +670,7 @@ def onboarding_source_create(request):
         page_context.update(context)
         return render(request, "core/onboarding.html", page_context, status=status)
 
-    url = request.POST.get("url", "").strip()
+    url = _normalize_source_url(request.POST.get("url", ""))
     if not url:
         return _source_form_response({
             "error": "Inserisci un URL valido.",
