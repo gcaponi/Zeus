@@ -85,9 +85,34 @@ class TestZeusAdminDashboard:
         response = views.dashboard(request)
 
         assert response.status_code == 200
-        assert b"Dashboard ZEUS" in response.content
+        assert b"Dashboard" in response.content
         assert b"Rossi Metalli" in response.content
         assert b"rossi.zeus.cais.uno" in response.content
         assert b"Foundation" in response.content
         assert b"DNA completo" in response.content
         assert b"2500" in response.content
+        assert b"Sistema" in response.content
+        assert b"Database" in response.content
+        assert b"Celery Worker" in response.content
+        assert b"Storage" in response.content
+
+    def test_system_health_in_context(self, monkeypatch):
+        monkeypatch.setattr(TenantClient, "auto_create_schema", False)
+        staff = User.objects.create_user(
+            username="health-staff",
+            email="health@example.com",
+            password="pw",
+            is_staff=True,
+        )
+        request = RequestFactory().get(reverse("zeus-admin-dashboard"))
+        request.user = staff
+
+        response = views.dashboard(request)
+        html = response.content.decode()
+
+        assert response.status_code == 200
+        assert "Database" in html
+        assert "Celery Worker" in html
+        assert "Storage" in html
+        assert "Uptime" in html
+        assert "Online" in html

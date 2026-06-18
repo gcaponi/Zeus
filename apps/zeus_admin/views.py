@@ -1,5 +1,7 @@
+import os
 from contextlib import nullcontext
 from dataclasses import dataclass
+from pathlib import Path
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db import connection
@@ -10,6 +12,42 @@ from django_tenants.utils import schema_context
 
 from apps.companies.models import Company, CompanyDNA, LLMCall, PipelineRun, Product
 from apps.core.models import Client, Plan, WorkspaceAccess, WorkspaceSubscription
+
+
+def _check_database():
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+        return True
+    except Exception:
+        return False
+
+
+def _check_celery():
+    try:
+        from config.celery import app as celery_app
+
+        inspect = celery_app.control.inspect(timeout=3.0)
+        response = inspect.ping()
+        return response is not None and len(response) > 0
+    except Exception:
+        return False
+
+
+def _check_storage():
+    try:
+        upload_dir = Path(os.environ.get("MEDIA_ROOT", "uploads"))
+        return upload_dir.exists() and os.access(upload_dir, os.W_OK)
+    except Exception:
+        return False
+
+
+def _system_health():
+    return {
+        "database": _check_database(),
+        "celery": _check_celery(),
+        "storage": _check_storage(),
+    }
 
 
 @dataclass
@@ -187,17 +225,31 @@ def dashboard(request):
         1 for row in rows if row["pipeline_status"] == PipelineRun.STATUS_FAILED
     )
 
+    active_pipelines = sum(
+        1 for row in rows if row["pipeline_status"] == PipelineRun.STATUS_RUNNING
+    )
+
+    llm_cost_str = f"${llm_cost_month:.2f}"
+    kpis = [
+        {"label": "Clienti attivi", "value": active_clients,
+         "tone": "lime", "icon": "👥"},
+        {"label": "DNA completi", "value": complete_dnas,
+         "tone": "cyan", "icon": "🧬"},
+        {"label": "Costo LLM mese", "value": llm_cost_str,
+         "tone": "lime", "icon": "💰"},
+        {"label": "Pipeline attive", "value": active_pipelines,
+         "tone": "cyan", "icon": "🔄"},
+        {"label": "Onboarding aperti", "value": onboarding_clients,
+         "tone": "amber", "icon": "📋"},
+        {"label": "Prodotti totali", "value": products_count,
+         "tone": "violet", "icon": "📦"},
+        {"label": "Pipeline fallite", "value": pipeline_failures,
+         "tone": "red", "icon": "❌"},
+        {"label": "Da controllare", "value": warnings_count,
+         "tone": "amber", "icon": "⚠️"},
+    ]
     context = {
-        "kpis": [
-            {"label": "Clienti totali", "value": len(rows), "tone": "violet"},
-            {"label": "Clienti attivi", "value": active_clients, "tone": "lime"},
-            {"label": "Onboarding aperti", "value": onboarding_clients, "tone": "cyan"},
-            {"label": "DNA completi", "value": complete_dnas, "tone": "cyan"},
-            {"label": "Prodotti", "value": products_count, "tone": "violet"},
-            {"label": "Costo LLM mese", "value": f"${llm_cost_month:.2f}", "tone": "lime"},
-            {"label": "Pipeline fallite", "value": pipeline_failures, "tone": "red"},
-            {"label": "Da controllare", "value": warnings_count, "tone": "amber"},
-        ],
+        "kpis": kpis,
         "clients": rows,
         "attention_clients": [row for row in rows if row["has_warning"]][:6],
         "plans": [
@@ -208,5 +260,6 @@ def dashboard(request):
             }
             for plan in Plan.objects.prefetch_related("subscriptions")
         ],
+        "system_health": _system_health(),
     }
     return render(request, "zeus_admin/dashboard.html", context)
