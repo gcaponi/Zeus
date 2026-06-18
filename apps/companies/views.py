@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 QUESTION_GENERATION_PROFILES = {
     Plan.SLUG_STARTER: {
-        "label": "Starter - domande generiche per DNA base",
+        "label": "Foundation - domande generiche per DNA base",
         "answer_depth": "generica",
         "instruction": (
             "Genera domande semplici e comprensibili. Devono completare un DNA "
@@ -56,7 +56,7 @@ QUESTION_GENERATION_PROFILES = {
         ),
     },
     Plan.SLUG_ENTERPRISE: {
-        "label": "Enterprise - analisi profonda della mentalita aziendale",
+        "label": "Legacy - analisi profonda della mentalita aziendale",
         "answer_depth": "analitica",
         "instruction": (
             "Agisci come un analista aziendale senior. Genera domande profonde, non "
@@ -245,8 +245,8 @@ Regole obbligatorie:
 - Genera esattamente 10 domande originali.
 - Ogni domanda deve partire da una lacuna, ambiguita, affermazione o opportunita
   che noti nel pre-DNA o nei documenti.
-- Non fare domande generiche se il piano e Professional o Enterprise.
-- Per Enterprise comportati da vero analista professionale: devi estrarre
+- Non fare domande generiche se il piano e Professional o Legacy.
+- Per Legacy comportati da vero analista professionale: devi estrarre
   mentalita aziendale, filosofia decisionale e anti-deriva.
 - Usa i principi A1-A10 come assi di analisi, ma scegli tu i 10 piu utili.
 - Rispondi SOLO JSON valido, senza markdown.
@@ -469,7 +469,6 @@ def _generate_company_questions(company, dna):
     )
 
     section_keys = {"chi_siamo", "mission", "settore", "mercato", "pilastri"}
-    used_codes = set(dna.questions.values_list("code", flat=True))
     questions_data = _parse_question_generation(result.text)
     for index, raw_question in enumerate(questions_data):
         section_key = raw_question.get("section_key", "pilastri")
@@ -1403,8 +1402,8 @@ Regole obbligatorie:
 - Genera esattamente 10 domande originali.
 - Ogni domanda deve partire da una lacuna, ambiguita, affermazione o opportunita
   che noti nel pre-DNA prodotto o nei documenti.
-- Non fare domande generiche se il piano e Professional o Enterprise.
-- Per Enterprise comportati da vero analista professionale: devi estrarre
+- Non fare domande generiche se il piano e Professional o Legacy.
+- Per Legacy comportati da vero analista professionale: devi estrarre
   logica applicativa, vincoli tecnici, valore differenziante.
 - Usa i principi D1-D20 come assi di analisi, ma scegli tu i 10 piu utili.
 - Rispondi SOLO JSON valido, senza markdown.

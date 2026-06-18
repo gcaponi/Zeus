@@ -29,9 +29,12 @@ class TestPlans:
         )
 
         assert starter.max_product_dnas == 5
+        assert starter.name == "Foundation"
         assert starter.max_files_per_product == 2
+        assert professional.name == "Professional"
         assert professional.max_product_dnas == 15
         assert professional.max_files_per_product == 5
+        assert enterprise.name == "Legacy"
         assert enterprise.unlimited_product_dnas is True
 
     def test_plan_quota_helpers(self):

@@ -22,6 +22,7 @@ INSTALLED_APPS = [
     "allauth",
     "allauth.account",
     "apps.core",
+    "apps.zeus_admin",
     "apps.companies",
 ]
 

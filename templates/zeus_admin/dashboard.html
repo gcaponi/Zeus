@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ZEUS Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        display: ['Space Grotesk', 'Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                },
+            },
+        }
+    </script>
+    <style>
+        :root {
+            --zeus-bg: #090a12;
+            --zeus-panel: rgba(255, 255, 255, 0.045);
+            --zeus-panel-strong: rgba(255, 255, 255, 0.075);
+            --zeus-border: rgba(255, 255, 255, 0.09);
+            --zeus-cyan: #22d3ee;
+            --zeus-violet: #8b5cf6;
+            --zeus-lime: #a3e635;
+            --zeus-amber: #fbbf24;
+            --zeus-red: #fb7185;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            min-height: 100vh;
+            margin: 0;
+            background:
+                radial-gradient(circle at 18% 8%, rgba(34, 211, 238, 0.16), transparent 28rem),
+                radial-gradient(circle at 78% 10%, rgba(139, 92, 246, 0.18), transparent 30rem),
+                radial-gradient(circle at 52% 92%, rgba(163, 230, 53, 0.08), transparent 24rem),
+                var(--zeus-bg);
+            color: white;
+            font-family: Inter, system-ui, sans-serif;
+        }
+
+        .glass-card {
+            border: 1px solid var(--zeus-border);
+            border-radius: 1.35rem;
+            background: var(--zeus-panel);
+            box-shadow: 0 28px 100px rgba(0, 0, 0, 0.28);
+            backdrop-filter: blur(22px) saturate(150%);
+        }
+
+        .glass-card:hover {
+            border-color: rgba(34, 211, 238, 0.24);
+            background: var(--zeus-panel-strong);
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.38rem;
+            border-radius: 999px;
+            padding: 0.32rem 0.65rem;
+            font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .tone-online { background: rgba(163, 230, 53, 0.12); color: var(--zeus-lime); }
+        .tone-info { background: rgba(34, 211, 238, 0.12); color: var(--zeus-cyan); }
+        .tone-warning { background: rgba(251, 191, 36, 0.13); color: var(--zeus-amber); }
+        .tone-error { background: rgba(251, 113, 133, 0.13); color: var(--zeus-red); }
+        .tone-muted { background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.58); }
+
+        .kpi-cyan { color: var(--zeus-cyan); }
+        .kpi-violet { color: var(--zeus-violet); }
+        .kpi-lime { color: var(--zeus-lime); }
+        .kpi-amber { color: var(--zeus-amber); }
+        .kpi-red { color: var(--zeus-red); }
+    </style>
+</head>
+<body>
+    <aside class="fixed inset-y-0 left-0 hidden w-64 border-r border-white/10 bg-black/30 px-5 py-6 backdrop-blur-2xl lg:block">
+        <a href="{% url 'zeus-admin-dashboard' %}" class="flex items-center gap-3">
+            <span class="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-xl">⚡</span>
+            <span class="font-display text-lg font-bold tracking-[0.28em]">ZEUS</span>
+        </a>
+        <nav class="mt-10 space-y-2 text-sm font-bold text-white/58">
+            <a class="flex items-center justify-between rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-cyan-200" href="{% url 'zeus-admin-dashboard' %}">
+                Dashboard
+                <span class="h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_18px_rgba(34,211,238,0.9)]"></span>
+            </a>
+            <a class="block rounded-2xl px-4 py-3 hover:bg-white/5 hover:text-white" href="#clients">Clienti</a>
+            <a class="block rounded-2xl px-4 py-3 hover:bg-white/5 hover:text-white" href="#plans">Piani</a>
+            <a class="block rounded-2xl px-4 py-3 hover:bg-white/5 hover:text-white" href="/admin/">Django Admin</a>
+        </nav>
+        <div class="absolute bottom-6 left-5 right-5 rounded-3xl border border-white/10 bg-white/[0.04] p-4">
+            <p class="text-xs font-bold uppercase tracking-[0.22em] text-white/35">Sistema</p>
+            <p class="mt-2 text-sm font-bold text-lime-300">Online</p>
+            <p class="mt-1 text-xs text-white/45">Dati reali da ZEUS.</p>
+        </div>
+    </aside>
+
+    <main class="min-h-screen px-4 py-5 sm:px-6 lg:ml-64 lg:px-8">
+        <header class="glass-card flex flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <p class="text-xs font-black uppercase tracking-[0.24em] text-cyan-200">Admin Console</p>
+                <h1 class="mt-2 font-display text-3xl font-bold tracking-tight">Dashboard ZEUS</h1>
+                <p class="mt-1 text-sm text-white/52">Clienti, DNA, piani, costi LLM e stato operativo.</p>
+            </div>
+            <div class="flex flex-wrap gap-3">
+                <a href="/admin/" class="rounded-full border border-white/10 bg-white/8 px-4 py-2 text-sm font-extrabold text-white/75 hover:bg-white/12">Django Admin</a>
+                <a href="/accounts/logout/" class="rounded-full bg-white px-4 py-2 text-sm font-extrabold text-slate-950">Logout</a>
+            </div>
+        </header>
+
+        <section class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {% for kpi in kpis %}
+                <article class="glass-card p-5">
+                    <p class="text-[0.68rem] font-black uppercase tracking-[0.18em] text-white/36">{{ kpi.label }}</p>
+                    <div class="mt-4 flex items-end justify-between">
+                        <p class="font-display text-3xl font-bold kpi-{{ kpi.tone }}">{{ kpi.value }}</p>
+                        <span class="rounded-2xl bg-white/8 px-3 py-2 text-xs font-bold text-white/45">Live</span>
+                    </div>
+                </article>
+            {% endfor %}
+        </section>
+
+        <section class="mt-6 grid gap-6 xl:grid-cols-[1fr_360px]">
+            <div id="clients" class="glass-card overflow-hidden">
+                <div class="flex flex-col gap-2 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h2 class="font-display text-xl font-bold">Clienti</h2>
+                        <p class="text-sm text-white/45">Workspace reali ordinati per creazione.</p>
+                    </div>
+                    <span class="status-pill tone-info">{{ clients|length }} workspace</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full min-w-[980px] text-left text-sm">
+                        <thead class="text-[0.68rem] font-black uppercase tracking-[0.16em] text-white/32">
+                            <tr class="border-b border-white/8">
+                                <th class="px-5 py-4">Cliente</th>
+                                <th class="px-5 py-4">Piano</th>
+                                <th class="px-5 py-4">Subscription</th>
+                                <th class="px-5 py-4">Onboarding</th>
+                                <th class="px-5 py-4">DNA</th>
+                                <th class="px-5 py-4">Prodotti</th>
+                                <th class="px-5 py-4">LLM mese</th>
+                                <th class="px-5 py-4">Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-white/8">
+                            {% for client in clients %}
+                                <tr class="hover:bg-white/[0.035]">
+                                    <td class="px-5 py-4">
+                                        <div class="flex items-center gap-3">
+                                            <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/8 font-black text-white/64">{{ client.name|first }}</div>
+                                            <div>
+                                                <p class="font-bold text-white/88">{{ client.name }}</p>
+                                                <p class="font-mono text-xs text-white/38">{{ client.domain|default:client.schema_name }}</p>
+                                                <p class="text-xs text-white/32">{{ client.owner_email }}</p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="px-5 py-4 font-bold text-white/78">{{ client.plan }}</td>
+                                    <td class="px-5 py-4"><span class="status-pill tone-{{ client.subscription_tone }}">{{ client.subscription_status }}</span></td>
+                                    <td class="px-5 py-4"><span class="status-pill tone-{{ client.onboarding_tone }}">{{ client.onboarding_step }}</span></td>
+                                    <td class="px-5 py-4"><span class="status-pill tone-{{ client.dna_tone }}">{{ client.dna_status }}</span></td>
+                                    <td class="px-5 py-4 font-mono text-white/70">{{ client.products_count }}</td>
+                                    <td class="px-5 py-4 font-mono text-white/70">${{ client.llm_cost_month|floatformat:4 }}</td>
+                                    <td class="px-5 py-4">
+                                        <div class="flex gap-2">
+                                            {% if client.workspace_url %}
+                                                <a href="{{ client.workspace_url }}" class="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-black text-cyan-100" target="_blank" rel="noopener">Workspace</a>
+                                            {% endif %}
+                                            <a href="/admin/core/client/{{ client.id }}/change/" class="rounded-full border border-white/10 bg-white/8 px-3 py-2 text-xs font-black text-white/70">Admin</a>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="8" class="px-5 py-10 text-center text-white/45">Nessun cliente ancora presente.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <aside class="space-y-6">
+                <section class="glass-card p-5">
+                    <div class="flex items-center justify-between">
+                        <h2 class="font-display text-lg font-bold">Serve attenzione</h2>
+                        <span class="status-pill {% if attention_clients %}tone-warning{% else %}tone-online{% endif %}">{{ attention_clients|length }}</span>
+                    </div>
+                    <div class="mt-4 space-y-3">
+                        {% for client in attention_clients %}
+                            <div class="rounded-2xl border border-white/8 bg-white/[0.035] p-4">
+                                <p class="font-bold text-white/84">{{ client.name }}</p>
+                                <p class="mt-1 text-xs text-white/42">{{ client.onboarding_step }} · {{ client.subscription_status }}</p>
+                            </div>
+                        {% empty %}
+                            <p class="rounded-2xl border border-lime-300/15 bg-lime-300/10 p-4 text-sm font-bold text-lime-200">Nessun blocco operativo rilevato.</p>
+                        {% endfor %}
+                    </div>
+                </section>
+
+                <section id="plans" class="glass-card p-5">
+                    <h2 class="font-display text-lg font-bold">Piani</h2>
+                    <div class="mt-4 space-y-3">
+                        {% for plan in plans %}
+                            <div class="flex items-center justify-between rounded-2xl border border-white/8 bg-white/[0.035] p-4">
+                                <div>
+                                    <p class="font-bold text-white/86">{{ plan.name }}</p>
+                                    <p class="font-mono text-xs text-white/35">slug: {{ plan.slug }}</p>
+                                </div>
+                                <span class="status-pill tone-info">{{ plan.subscriptions }} clienti</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </section>
+            </aside>
+        </section>
+    </main>
+</body>
+</html>

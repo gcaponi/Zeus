@@ -18,6 +18,7 @@ SHARED_APPS = [
     "allauth",
     "allauth.account",
     "apps.core",
+    "apps.zeus_admin",
 ]
 
 TENANT_APPS = [

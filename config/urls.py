@@ -15,6 +15,7 @@ from apps.core.views import (
 
 urlpatterns = [
     path("health/", health_check, name="health-check"),
+    path("zeus-admin/", include("apps.zeus_admin.urls")),
     path("admin/", admin.site.urls),
     path("", include(onboarding_urls)),
     path("accounts/signup/", ZEUSSignupView.as_view(), name="account_signup"),

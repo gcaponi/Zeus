@@ -29,7 +29,7 @@ class Plan(models.Model):
     def default_values(cls, slug):
         plans = {
             cls.SLUG_STARTER: {
-                "name": "Starter",
+                "name": "Foundation",
                 "max_company_files": 5,
                 "max_product_dnas": 5,
                 "max_files_per_product": 2,
@@ -41,7 +41,7 @@ class Plan(models.Model):
                 "max_files_per_product": 5,
             },
             cls.SLUG_ENTERPRISE: {
-                "name": "Enterprise",
+                "name": "Legacy",
                 "max_company_files": 0,
                 "max_product_dnas": 0,
                 "max_files_per_product": 0,

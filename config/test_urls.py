@@ -14,6 +14,7 @@ def health_check(_request):
 
 urlpatterns = [
     path("health/", health_check, name="health-check"),
+    path("zeus-admin/", include("apps.zeus_admin.urls")),
     path("admin/", admin.site.urls),
     path("accounts/", include("allauth.urls")),
     path("", include(onboarding_urls)),
