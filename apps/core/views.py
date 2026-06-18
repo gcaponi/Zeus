@@ -58,6 +58,11 @@ class ZEUSSignupView(SignupView):
     form_class = ZEUSSignupForm
     template_name = "account/signup.html"
 
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated:
+            auth_logout(request)
+        return super().dispatch(request, *args, **kwargs)
+
     def form_valid(self, form):
         slug = form.cleaned_data["company_slug"]
         email = form.cleaned_data["email"]
