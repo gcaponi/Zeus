@@ -767,7 +767,7 @@ class TestDNAQuestions:
         assert resp.status_code == 200
         assert CompanyQuestion.objects.filter(company=company).count() == 10
         assert b"A1" in resp.content
-        assert b"A20" in resp.content
+        assert b"A10" in resp.content
         first_question = CompanyQuestion.objects.filter(company=company).first()
         assert first_question.plan_slug == Plan.SLUG_STARTER
         assert first_question.answer_depth == "generica"

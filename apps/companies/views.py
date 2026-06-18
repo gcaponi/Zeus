@@ -218,7 +218,7 @@ Regole obbligatorie:
 - Non fare domande generiche se il piano e Professional o Enterprise.
 - Per Enterprise comportati da vero analista professionale: devi estrarre
   mentalita aziendale, filosofia decisionale e anti-deriva.
-- Usa i principi A1-A20 come assi di analisi, ma scegli tu i 10 piu utili.
+- Usa i principi A1-A10 come assi di analisi, ma scegli tu i 10 piu utili.
 - Rispondi SOLO JSON valido, senza markdown.
 
 Formato JSON:
@@ -436,11 +436,12 @@ def _generate_company_questions(company, dna):
 
     section_keys = {"chi_siamo", "mission", "settore", "mercato", "pilastri"}
     used_codes = set(dna.questions.values_list("code", flat=True))
-    for raw_question in _parse_question_generation(result.text):
+    questions_data = _parse_question_generation(result.text)
+    for index, raw_question in enumerate(questions_data):
         section_key = raw_question.get("section_key", "pilastri")
         if section_key not in section_keys:
             section_key = "pilastri"
-        code = _unique_question_code(raw_question.get("code"), used_codes, "A?")
+        code = f"A{index + 1}"
         CompanyQuestion.objects.update_or_create(
             dna=dna,
             code=code,
@@ -448,7 +449,7 @@ def _generate_company_questions(company, dna):
                 "company": company,
                 "plan_slug": plan_slug,
                 "section_key": section_key,
-                "principle": str(raw_question.get("principle", "A1-A20"))[:120],
+                "principle": str(raw_question.get("principle", "A1-A10"))[:120],
                 "question": str(raw_question.get("question", "")).strip(),
                 "answer_depth": str(
                     raw_question.get("answer_depth") or profile["answer_depth"]
