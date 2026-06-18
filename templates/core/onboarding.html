@@ -69,7 +69,48 @@
                     </li>
                 </ol>
             </div>
+            {% if dna %}
+            <div class="zeus-card p-5 flex flex-col items-center gap-3">
+                <a href="{% url 'dna-download-pdf' %}" class="zeus-btn zeus-btn-secondary w-full">
+                    Scarica PDF
+                </a>
+                <form method="post" action="{% url 'onboarding-dna-reset' %}" class="w-full">
+                    {% csrf_token %}
+                    <button type="submit" class="zeus-btn zeus-btn-danger w-full"
+                            onclick="return confirm('Sei sicuro di voler cancellare il DNA e ricominciare? Questa azione non puo essere annullata.')">
+                        Cancella DNA e ricomincia
+                    </button>
+                </form>
+            </div>
+            {% endif %}
         </aside>
     </main>
 </div>
+
+<!-- Popup glass "Stiamo generando le domande..." -->
+<div id="generating-popup" class="fixed inset-0 z-50 hidden items-center justify-center" style="background: rgba(2,6,23,0.5); backdrop-filter: blur(6px);">
+    <div class="zeus-card p-8 text-center" style="max-width: 360px; background: rgba(255,255,255,0.08); backdrop-filter: blur(40px) saturate(180%); border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 24px 80px rgba(0,0,0,0.4);">
+        <div class="mb-5 flex justify-center">
+            <div class="w-12 h-12 rounded-full border-3 border-brand-cyan-light border-t-transparent animate-spin"></div>
+        </div>
+        <h3 class="text-lg font-bold font-display text-white">Stiamo generando le domande</h3>
+        <p class="mt-2 text-sm text-content-secondary">
+            ZEUS sta analizzando il pre-DNA per creare domande pertinenti<span id="generating-dots"></span>
+        </p>
+    </div>
+</div>
+
+<script>
+function showGeneratingPopup() {
+    var popup = document.getElementById('generating-popup');
+    popup.classList.remove('hidden');
+    popup.classList.add('flex');
+    var dotsEl = document.getElementById('generating-dots');
+    var n = 0;
+    window._generatingInterval = setInterval(function() {
+        n = (n + 1) % 4;
+        dotsEl.textContent = '.'.repeat(n);
+    }, 400);
+}
+</script>
 {% endblock %}
