@@ -738,7 +738,7 @@ def onboarding_dna_reset(request):
     if not company:
         return HttpResponse("No tenant", status=400)
     company.dna_versions.all().delete()
-    company.questions.all().delete()
+    company.company_questions.all().delete()
     company.company_files.all().delete()
     company.pipeline_runs.all().delete()
     company.sources.all().delete()

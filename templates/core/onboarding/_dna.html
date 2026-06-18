@@ -22,7 +22,7 @@
 
     <div class="flex flex-wrap gap-3">
         <a href="{% url 'dna-questions' %}" class="zeus-btn zeus-btn-primary flex-1">
-            Rispondi alle domande A1-A20 →
+            Rispondi alle domande A1-A10 →
         </a>
         <a href="{% url 'dna-download-pdf' %}" class="zeus-btn zeus-btn-secondary">
             Scarica PDF
@@ -30,9 +30,9 @@
     </div>
 
     <div class="border-t border-gray-200 pt-4">
-        <form method="post" action="{% url 'onboarding-dna-reset' %}" class="inline">
+        <form method="post" action="{% url 'onboarding-dna-reset' %}">
             {% csrf_token %}
-            <button type="submit" class="text-sm text-content-muted hover:text-red-500 transition-colors"
+            <button type="submit" class="zeus-btn zeus-btn-danger"
                     onclick="return confirm('Sei sicuro di voler cancellare il DNA e ricominciare? Questa azione non puo essere annullata.')">
                 Cancella DNA e ricomincia
             </button>

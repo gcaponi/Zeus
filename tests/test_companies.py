@@ -710,6 +710,36 @@ class TestOnboardingViews:
         assert b"DNA Aziendale generato" in resp.content
         assert b'"current_step"' not in resp.content
 
+    def test_onboarding_dna_reset_clears_data(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        source = Source.objects.create(
+            company=company,
+            url="https://rossi-metalli.it",
+            status=Source.STATUS_SCRAPED,
+        )
+        PipelineRun.objects.create(company=company, source=source, status=PipelineRun.STATUS_COMPLETED)
+        dna = CompanyDNA.objects.create(company=company, version=1, content={"chi_siamo": "test"})
+        CompanyQuestion.objects.create(
+            company=company,
+            dna=dna,
+            code="A1",
+            section_key="chi_siamo",
+            principle="test",
+            question="test?",
+        )
+        CompanyFile.objects.create(company=company, original_name="doc.txt", content_text="test")
+
+        req = rf_with_tenant("post", reverse("onboarding-dna-reset"), form=True)
+        resp = views.onboarding_dna_reset(req)
+
+        assert resp.status_code == 302
+        assert resp["Location"] == reverse("onboarding-index")
+        assert CompanyDNA.objects.filter(company=company).count() == 0
+        assert CompanyQuestion.objects.filter(company=company).count() == 0
+        assert CompanyFile.objects.filter(company=company).count() == 0
+        assert PipelineRun.objects.filter(company=company).count() == 0
+        assert Source.objects.filter(company=company).count() == 0
+
 
 @pytest.mark.django_db
 class TestDNAQuestions:
