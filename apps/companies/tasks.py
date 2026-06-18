@@ -221,3 +221,69 @@ def run_pipeline(pipeline_run_id: int, tenant_schema: str | None = None):
             _run()
     else:
         _run()
+
+
+@shared_task
+def generate_complete_dna(company_id, pre_dna_id, user_id, tenant_schema=None):
+    def _run():
+        from django.contrib.auth import get_user_model
+        from apps.companies.models import Company
+        from apps.companies.views import _create_complete_dna
+
+        try:
+            company = Company.objects.get(pk=company_id)
+            pre_dna = CompanyDNA.objects.get(pk=pre_dna_id)
+        except (Company.DoesNotExist, CompanyDNA.DoesNotExist):
+            logger.error("generate_complete_dna: company or pre_dna not found")
+            return
+
+        User = get_user_model()
+        user = User.objects.filter(pk=user_id).first() if user_id else None
+
+        try:
+            _create_complete_dna(company, pre_dna, user)
+            logger.info("Complete DNA generated for company %s", company.schema_name)
+        except Exception:
+            logger.exception(
+                "Complete DNA generation failed for company %s", company.schema_name
+            )
+
+    if tenant_schema and hasattr(connection, "tenant"):
+        with schema_context(tenant_schema):
+            _run()
+    else:
+        _run()
+
+
+@shared_task
+def generate_complete_product_dna(product_id, pre_dna_id, user_id, tenant_schema=None):
+    def _run():
+        from django.contrib.auth import get_user_model
+        from apps.companies.models import Product
+        from apps.companies.views import _create_complete_product_dna
+
+        try:
+            product = Product.objects.get(pk=product_id)
+            pre_dna = ProductDNA.objects.get(pk=pre_dna_id)
+        except (Product.DoesNotExist, ProductDNA.DoesNotExist):
+            logger.error(
+                "generate_complete_product_dna: product or pre_dna not found"
+            )
+            return
+
+        User = get_user_model()
+        user = User.objects.filter(pk=user_id).first() if user_id else None
+
+        try:
+            _create_complete_product_dna(product, pre_dna, user)
+            logger.info("Complete product DNA generated for product %s", product.pk)
+        except Exception:
+            logger.exception(
+                "Complete product DNA generation failed for product %s", product.pk
+            )
+
+    if tenant_schema and hasattr(connection, "tenant"):
+        with schema_context(tenant_schema):
+            _run()
+    else:
+        _run()

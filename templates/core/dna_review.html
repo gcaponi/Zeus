@@ -4,6 +4,27 @@
 
 {% block extra_head %}
 <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+<style>
+    #dna-popup-overlay .dna-popup-panel {
+        color: #f8fafc;
+    }
+
+    #dna-popup-overlay .dna-popup-title,
+    #dna-popup-overlay .dna-popup-meta,
+    #dna-popup-overlay .dna-popup-close,
+    #dna-popup-overlay .dna-popup-section-text {
+        color: #f8fafc !important;
+    }
+
+    #dna-popup-overlay .dna-popup-meta {
+        opacity: 0.72;
+    }
+
+    #dna-popup-overlay .dna-popup-section-text {
+        opacity: 0.94;
+        text-shadow: 0 1px 18px rgba(0, 0, 0, 0.35);
+    }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -63,17 +84,17 @@
 
 <!-- Popup DNA completo -->
 <div id="dna-popup-overlay" class="fixed inset-0 z-50 hidden items-center justify-center" style="background: rgba(2,6,23,0.6); backdrop-filter: blur(8px);">
-    <div class="relative w-full max-w-2xl max-h-[85vh] overflow-hidden rounded-3xl"
+    <div class="dna-popup-panel relative w-full max-w-2xl max-h-[85vh] overflow-hidden rounded-3xl"
          style="background: rgba(255,255,255,0.06); backdrop-filter: blur(40px) saturate(180%); border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 32px 100px rgba(0,0,0,0.5);">
         <!-- Header popup -->
         <div class="sticky top-0 px-8 py-5 flex items-center justify-between"
              style="background: rgba(2,6,23,0.4); border-bottom: 1px solid rgba(255,255,255,0.08);">
             <div>
                 <p class="text-xs font-bold uppercase tracking-widest text-brand-cyan-light">ZEUS</p>
-                <h2 class="text-xl font-bold font-display text-white">DNA Aziendale</h2>
-                <p class="text-xs text-content-muted mt-0.5">{{ company_name|default:"" }} · Versione {{ dna.version }}</p>
+                <h2 class="dna-popup-title text-xl font-bold font-display">DNA Aziendale</h2>
+                <p class="dna-popup-meta text-xs mt-0.5">{{ company_name|default:"" }} · Versione {{ dna.version }}</p>
             </div>
-            <button onclick="closeDnaPopup()" class="w-9 h-9 rounded-full flex items-center justify-center text-content-secondary hover:text-white hover:bg-white/10 transition-colors">
+            <button onclick="closeDnaPopup()" class="dna-popup-close w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
         </div>
@@ -84,7 +105,7 @@
                 {% for section in sections %}
                     <div>
                         <h3 class="text-sm font-bold uppercase tracking-wider text-brand-cyan">{{ section.label }}</h3>
-                        <p class="mt-2 text-sm leading-7 text-content-primary whitespace-pre-line">{{ section.value|default:"Non disponibile" }}</p>
+                        <p class="dna-popup-section-text mt-2 text-sm leading-7 whitespace-pre-line">{{ section.value|default:"Non disponibile" }}</p>
                     </div>
                 {% endfor %}
             </div>

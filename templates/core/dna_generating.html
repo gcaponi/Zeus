@@ -1,0 +1,35 @@
+{% extends "core/base.html" %}
+
+{% block title %}Generazione DNA — ZEUS{% endblock %}
+
+{% block extra_head %}
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-2xl">
+    <div class="zeus-card p-8 text-center" style="background: rgba(255,255,255,0.06); backdrop-filter: blur(40px) saturate(180%);">
+        <div class="mb-6 flex justify-center">
+            <div class="w-14 h-14 rounded-full border-4 border-brand-cyan-light border-t-transparent animate-spin"></div>
+        </div>
+        <h2 class="text-xl font-bold font-display text-white">Stiamo generando il DNA</h2>
+        <p class="mt-3 text-sm text-white">
+            ZEUS sta riformulando le sezioni con le tue risposte.<br>
+            Questo puo richiedere fino a 2 minuti<span id="generating-dots"></span>
+        </p>
+        <div class="mt-8"
+              hx-get="{% url 'dna-generating' %}"
+              hx-trigger="every 4s"
+              hx-swap="none">
+        </div>
+    </div>
+</div>
+
+<script>
+var n = 0;
+setInterval(function() {
+    n = (n + 1) % 4;
+    document.getElementById('generating-dots').textContent = '.'.repeat(n);
+}, 400);
+</script>
+{% endblock %}

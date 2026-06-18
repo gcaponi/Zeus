@@ -313,6 +313,10 @@ Il risultato deve essere un testo professionale, narrativo e coerente, come se
 un consulente esperto avesse scritto il profilo dopo aver studiato i materiali
 e intervistato il titolare.
 
+LINGUA: Scrivi SEMPRE in italiano. Anche se il pre-DNA o le risposte cliente
+contengono testo in inglese o altre lingue, traduci e riscrivi tutto in italiano.
+Nessuna parola in inglese nel risultato finale.
+
 ISTRUZIONI:
 - Riscrivi completamente la sezione come un testo fluido e professionale.
 - Usa il pre-DNA come base e le risposte cliente per arricchire, approfondire
@@ -499,7 +503,7 @@ def _create_complete_dna(company, pre_dna, user):
         version=next_version,
         dna_type=CompanyDNA.TYPE_COMPLETE,
         content=content,
-        created_by=user if user.is_authenticated else None,
+        created_by=user if user and user.is_authenticated else None,
     )
 
 
@@ -1066,8 +1070,15 @@ def dna_questions(request):
         if missing:
             error = "Rispondi a tutte le domande prima di generare il DNA completo."
         else:
-            complete_dna = _create_complete_dna(company, pre_dna, request.user)
-            return redirect("dna-review")
+            from apps.companies.tasks import generate_complete_dna
+            tenant_schema = getattr(request, "tenant", None)
+            generate_complete_dna.delay(
+                company.id,
+                pre_dna.id,
+                request.user.id if request.user.is_authenticated else None,
+                tenant_schema=tenant_schema.schema_name if tenant_schema else None,
+            )
+            return redirect("dna-generating")
 
     status_code = 400 if error else 200
     return render(request, "core/dna_questions.html", {
@@ -1081,6 +1092,27 @@ def dna_questions(request):
         ),
         "error": error,
     }, status=status_code)
+
+
+@login_required
+def dna_generating(request):
+    """Pagina di attesa generazione DNA completo con polling HTMX."""
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    complete_dna = company.dna_versions.filter(
+        dna_type=CompanyDNA.TYPE_COMPLETE,
+        is_current=True,
+    ).first()
+    if request.headers.get("HX-Request") == "true":
+        if complete_dna:
+            response = HttpResponse(status=204)
+            response["HX-Redirect"] = reverse("dna-review")
+            return response
+        return HttpResponse(status=204)
+    if complete_dna:
+        return redirect("dna-review")
+    return render(request, "core/dna_generating.html")
 
 
 @login_required
@@ -1475,7 +1507,7 @@ def _create_complete_product_dna(product, pre_dna, user):
         version=next_version,
         dna_type=ProductDNA.TYPE_COMPLETE,
         content=content,
-        created_by=user if user.is_authenticated else None,
+        created_by=user if user and user.is_authenticated else None,
     )
 
 

@@ -839,7 +839,7 @@ class TestDNAQuestions:
         resp = views.dna_questions(post_req)
 
         assert resp.status_code == 302
-        assert resp["Location"] == reverse("dna-review")
+        assert resp["Location"] == reverse("dna-generating")
         complete_dna = CompanyDNA.objects.get(company=company, dna_type=CompanyDNA.TYPE_COMPLETE)
         assert complete_dna.version == 2
         assert complete_dna.is_current is True
@@ -852,6 +852,36 @@ class TestDNAQuestions:
         assert "Risposta A1" not in complete_dna.content["chi_siamo"]
         pre_dna.refresh_from_db()
         assert pre_dna.is_current is False
+
+    def test_dna_generating_waits_then_hx_redirects(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+
+        resp = views.dna_generating(rf_with_tenant("get", reverse("dna-generating")))
+        assert resp.status_code == 200
+        assert b"Stiamo generando il DNA" in resp.content
+
+        hx_req = rf_with_tenant("get", reverse("dna-generating"))
+        hx_req.META["HTTP_HX_REQUEST"] = "true"
+        resp = views.dna_generating(hx_req)
+        assert resp.status_code == 204
+        assert "HX-Redirect" not in resp
+
+        CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            content={"chi_siamo": "Completo"},
+        )
+
+        hx_req = rf_with_tenant("get", reverse("dna-generating"))
+        hx_req.META["HTTP_HX_REQUEST"] = "true"
+        resp = views.dna_generating(hx_req)
+        assert resp.status_code == 204
+        assert resp["HX-Redirect"] == reverse("dna-review")
+
+        resp = views.dna_generating(rf_with_tenant("get", reverse("dna-generating")))
+        assert resp.status_code == 302
+        assert resp["Location"] == reverse("dna-review")
 
     def test_submit_answers_requires_all_answers(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")

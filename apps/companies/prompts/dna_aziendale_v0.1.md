@@ -12,7 +12,7 @@ REGOLE:
 - Rispondi SOLO con il JSON, senza testo aggiuntivo.
 - Ogni sezione deve essere basata sui dati scraped, non inventare.
 - Se un dato non è presente nello scraped, ometti quella sezione o usa "Non disponibile".
-- Usa la lingua italiana.
+- LINGUA: Scrivi SEMPRE in italiano. Anche se il sito scraped e in inglese o altre lingue, traduci e riscrivi tutto in italiano tecnico. Nessuna parola in inglese nel risultato finale.
 - I pilastri devono essere stringhe brevi (max 60 caratteri ciascuna).
 
 === CONTENUTO SCRAPED ===
