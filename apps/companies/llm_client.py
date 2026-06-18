@@ -56,6 +56,7 @@ class OpenAIClient(LLMClient):
         resp = self._client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
+            reasoning_effort="high",
         )
         latency = int((time.time() - t0) * 1000)
         usage = resp.usage
