@@ -838,7 +838,8 @@ class TestDNAQuestions:
         post_req = rf_with_tenant("post", reverse("dna-questions"), data, form=True)
         resp = views.dna_questions(post_req)
 
-        assert resp.status_code == 200
+        assert resp.status_code == 302
+        assert resp["Location"] == reverse("dna-review")
         complete_dna = CompanyDNA.objects.get(company=company, dna_type=CompanyDNA.TYPE_COMPLETE)
         assert complete_dna.version == 2
         assert complete_dna.is_current is True

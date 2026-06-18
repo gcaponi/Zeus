@@ -1067,6 +1067,7 @@ def dna_questions(request):
             error = "Rispondi a tutte le domande prima di generare il DNA completo."
         else:
             complete_dna = _create_complete_dna(company, pre_dna, request.user)
+            return redirect("dna-review")
 
     status_code = 400 if error else 200
     return render(request, "core/dna_questions.html", {
@@ -1098,6 +1099,7 @@ def dna_review(request):
         "missing_keys": dna.missing_sections(),
         "is_fully_approved": dna.is_fully_approved(),
         "is_export_ready": dna.is_export_ready(),
+        "company_name": company.name,
     })
 
 

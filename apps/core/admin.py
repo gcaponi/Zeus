@@ -45,11 +45,42 @@ class ClientAdmin(admin.ModelAdmin):
     search_fields = ["name", "schema_name", "domains__domain"]
     list_filter = ["on_trial", "subscription__status", "subscription__plan"]
     inlines = [DomainInline, WorkspaceSubscriptionInline]
+    actions = ["activate_subscriptions", "suspend_subscriptions"]
 
     def get_queryset(self, request):
         return super().get_queryset(request).prefetch_related("domains").select_related(
             "subscription__plan",
         )
+
+    def delete_model(self, request, obj):
+        domains = list(obj.domains.values_list("domain", flat=True))
+        WorkspaceAccess.objects.filter(tenant_domain__in=domains).delete()
+        super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        domains = list(queryset.values_list("domains__domain", flat=True))
+        WorkspaceAccess.objects.filter(tenant_domain__in=domains).delete()
+        super().delete_queryset(request, queryset)
+
+    @admin.action(description="Attiva subscription (active)")
+    def activate_subscriptions(self, request, queryset):
+        updated = 0
+        for client in queryset:
+            if hasattr(client, "subscription"):
+                client.subscription.status = WorkspaceSubscription.STATUS_ACTIVE
+                client.subscription.save(update_fields=["status"])
+                updated += 1
+        self.message_user(request, f"{updated} subscription attivate.")
+
+    @admin.action(description="Sospendi subscription (suspended)")
+    def suspend_subscriptions(self, request, queryset):
+        updated = 0
+        for client in queryset:
+            if hasattr(client, "subscription"):
+                client.subscription.status = WorkspaceSubscription.STATUS_SUSPENDED
+                client.subscription.save(update_fields=["status"])
+                updated += 1
+        self.message_user(request, f"{updated} subscription sospese.")
 
     @admin.display(description="Domain")
     def primary_domain(self, obj):
