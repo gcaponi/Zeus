@@ -16,6 +16,8 @@ MODEL_PRICING = {
     "gpt-4o-mini": {"input": 0.15 / 1_000_000, "output": 0.60 / 1_000_000},
     "gpt-4o": {"input": 2.50 / 1_000_000, "output": 10.00 / 1_000_000},
     "deepseek-chat": {"input": 0.14 / 1_000_000, "output": 0.28 / 1_000_000},
+    "deepseek-v4-flash": {"input": 0.14 / 1_000_000, "output": 0.28 / 1_000_000},
+    "deepseek-v4-pro": {"input": 2.24 / 1_000_000, "output": 2.24 / 1_000_000},
 }
 
 
@@ -70,38 +72,56 @@ class OpenAIClient(LLMClient):
 
 class MockLLMClient(LLMClient):
     def generate(self, prompt: str, model: str | None = None) -> LLMResult:
-        if "RIFORMULA_DNA_CON_RISPOSTE" in prompt:
-            sections = ["chi_siamo", "mission", "settore", "mercato", "pilastri"]
-            content = {
-                section: (
-                    f"Sezione {section} riformulata integrando le risposte del cliente "
-                    "nel testo finale, senza elenco domanda-risposta."
+        if "RISCRIVI_SEZIONE_" in prompt and "RIFORMULA_DNA_CON_RISPOSTE" in prompt:
+            section_key = self._extract_section_key(prompt, "RISCRIVI_SEZIONE_")
+            if section_key in ("pilastri", "valore"):
+                return LLMResult(
+                    text=json.dumps([
+                        f"Pilastro {section_key} 1 riformulato",
+                        f"Pilastro {section_key} 2 riformulato",
+                        f"Pilastro {section_key} 3 riformulato",
+                    ], ensure_ascii=False),
+                    tokens_in=400,
+                    tokens_out=120,
+                    cost=0.0001,
+                    latency_ms=600,
                 )
-                for section in sections
-            }
             return LLMResult(
-                text=json.dumps(content, ensure_ascii=False),
-                tokens_in=600,
-                tokens_out=260,
-                cost=0.0002,
-                latency_ms=800,
+                text=json.dumps(
+                    f"Sezione {section_key} riformulata integrando le risposte "
+                    "del cliente nel testo finale, senza elenco domanda-risposta.",
+                    ensure_ascii=False,
+                ),
+                tokens_in=400,
+                tokens_out=150,
+                cost=0.0001,
+                latency_ms=600,
             )
 
-        if "RIFORMULA_PRODUCT_DNA_CON_RISPOSTE" in prompt:
-            sections = ["descrizione", "applicazione", "specifiche", "vincoli", "valore"]
-            content = {
-                section: (
-                    f"Sezione prodotto {section} riformulata integrando le risposte "
-                    "del cliente nel testo finale, senza elenco domanda-risposta."
+        if "RISCRIVI_SEZIONE_" in prompt and "RIFORMULA_PRODUCT_DNA_CON_RISPOSTE" in prompt:
+            section_key = self._extract_section_key(prompt, "RISCRIVI_SEZIONE_")
+            if section_key == "valore":
+                return LLMResult(
+                    text=json.dumps([
+                        "Valore prodotto 1 riformulato",
+                        "Valore prodotto 2 riformulato",
+                        "Valore prodotto 3 riformulato",
+                    ], ensure_ascii=False),
+                    tokens_in=400,
+                    tokens_out=120,
+                    cost=0.0001,
+                    latency_ms=600,
                 )
-                for section in sections
-            }
             return LLMResult(
-                text=json.dumps(content, ensure_ascii=False),
-                tokens_in=600,
-                tokens_out=260,
-                cost=0.0002,
-                latency_ms=800,
+                text=json.dumps(
+                    f"Sezione prodotto {section_key} riformulata integrando le risposte "
+                    "del cliente nel testo finale, senza elenco domanda-risposta.",
+                    ensure_ascii=False,
+                ),
+                tokens_in=400,
+                tokens_out=150,
+                cost=0.0001,
+                latency_ms=600,
             )
 
         if "GENERA_DOMANDE_A1_A20" in prompt:
@@ -165,6 +185,19 @@ class MockLLMClient(LLMClient):
             cost=0.0001,
             latency_ms=1200,
         )
+
+    @staticmethod
+    def _extract_section_key(prompt: str, prefix: str) -> str:
+        idx = prompt.find(prefix)
+        if idx < 0:
+            return ""
+        rest = prompt[idx + len(prefix):]
+        end = len(rest)
+        for i, ch in enumerate(rest):
+            if not (ch.isalnum() or ch == "_"):
+                end = i
+                break
+        return rest[:end].lower()
 
 
 def get_llm_client() -> LLMClient:

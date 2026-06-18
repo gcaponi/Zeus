@@ -288,64 +288,129 @@ def _answers_by_section(questions, section_keys, fallback_section):
 
 
 def _rewrite_sections_with_answers(company, content, answers_by_section, section_keys, marker):
-    relevant_answers = {
-        key: answers for key, answers in answers_by_section.items() if answers
-    }
-    if not relevant_answers:
-        return content
+    is_product = "PRODUCT" in marker
+    entity_type = "prodotto" if is_product else "azienda"
+    entity_label = "prodotto" if is_product else "azienda"
 
-    base_sections = {key: _as_text(content.get(key)).strip() for key in section_keys}
-    prompt = f"""
-{marker}
-
-Sei ZEUS. Devi creare il DNA finale riformulando le sezioni esistenti.
-Non devi appendere domande e risposte. Devi integrare il contenuto delle risposte
-nel testo naturale della sezione corrispondente, riscrivendo la sezione come testo
-finale pronto da approvare.
-
-Regole obbligatorie:
-- Mantieni la stessa struttura JSON e le stesse chiavi.
-- Rispondi SOLO JSON valido, senza markdown.
-- Non usare frasi come "Approfondimenti cliente".
-- Non elencare codici domanda (A1, D1, ecc.) nel testo finale.
-- Non copiare la domanda: estrai il significato della risposta e fondilo nel testo.
-- Se una sezione non ha risposte cliente, puoi migliorare leggermente il testo base
-  ma non inventare dettagli nuovi.
-
-SEZIONI_BASE_JSON:
-{json.dumps(base_sections, ensure_ascii=False, indent=2)}
-
-RISPOSTE_CLIENTE_JSON:
-{json.dumps(relevant_answers, ensure_ascii=False, indent=2)}
-""".strip()
     client = get_llm_client()
-    try:
-        result = client.generate(prompt)
-        LLMCall.objects.create(
-            company=company,
-            model_name=LLM_MODEL,
-            prompt_text=prompt,
-            response_text=result.text,
-            tokens_in=result.tokens_in,
-            tokens_out=result.tokens_out,
-            cost_usd=result.cost,
-            latency_ms=result.latency_ms,
-        )
-        rewritten = _parse_json_object(result.text)
-    except Exception:
-        logger.exception("DNA rewrite failed for company %s", company.schema_name)
-        updated = dict(content)
-        updated["rewrite_warning"] = "Riformulazione LLM fallita; testo base preservato."
-        return updated
-
     updated = dict(content)
-    for key in section_keys:
-        value = rewritten.get(key)
-        if isinstance(value, list):
-            value = "\n".join(str(item) for item in value)
-        if isinstance(value, str) and value.strip():
-            updated[key] = value.strip()
+    any_rewrite_done = False
+
+    for section_key in section_keys:
+        base_text = _as_text(content.get(section_key)).strip()
+        section_answers = answers_by_section.get(section_key, [])
+
+        prompt = f"""
+RISCRIVI_SEZIONE_{section_key.upper()}_{marker}
+
+Sei ZEUS, un analista aziendale esperto nel settore manifatturiero.
+Stai costruendo il DNA completo di un'{entity_label}. Devi riscrivere la sezione
+"{section_key}" combinando due fonti:
+1. Il pre-DNA generato dallo scraping del sito web e dei documenti
+2. Le risposte del cliente a domande di approfondimento (conoscenza tacita)
+
+Il risultato deve essere un testo professionale, narrativo e coerente, come se
+un consulente esperto avesse scritto il profilo dopo aver studiato i materiali
+e intervistato il titolare.
+
+ISTRUZIONI:
+- Riscrivi completamente la sezione come un testo fluido e professionale.
+- Usa il pre-DNA come base e le risposte cliente per arricchire, approfondire
+  e dare contesto reale all'{entity_type}.
+- Se una risposta corregge o contraddice il pre-DNA, dai priorita alla risposta
+  del cliente (e la verita di chi conosce l'{entity_type}).
+- Combina piu risposte in un unico discorso coerente.
+- Puoi fare inferenze ragionevoli e collegamenti logici tra le informazioni
+  (livello creativita 2/5: puoi aggiungere dettagli plausibili ma non inventare
+  fatti non supportati dalle fonti).
+- Non nominare mai le domande, i codici domanda (A1, D1, ecc.) ne usare frasi
+  come "il cliente ha risposto", "secondo le risposte", "Approfondimenti cliente".
+- Scrivi in terza persona, presente indicativo, tono tecnico ma accessibile.
+- La sezione deve essere un paragrafo di 4-10 frasi che restituisca un'immagine
+  ricca e professionale dell'{entity_type}.
+
+{'- Restituisci un array JSON di 3-5 stringhe brevi (max 80 caratteri).'
+  if section_key in ('pilastri', 'valore')
+  else '- Restituisci una singola stringa JSON.'}
+
+Rispondi SOLO con il valore JSON (stringa o array), senza markdown,
+senza chiavi, senza testo fuori dal JSON.
+
+PRE_DNA_SEZIONE:
+{base_text or 'Non disponibile'}
+
+RISPOSTE_CLIENTE:
+{json.dumps(
+    section_answers, ensure_ascii=False, indent=2
+) if section_answers else 'Nessuna risposta per questa sezione'}
+""".strip()
+
+        try:
+            result = client.generate(prompt)
+            LLMCall.objects.create(
+                company=company,
+                model_name=LLM_MODEL,
+                prompt_text=prompt,
+                response_text=result.text,
+                tokens_in=result.tokens_in,
+                tokens_out=result.tokens_out,
+                cost_usd=result.cost,
+                latency_ms=result.latency_ms,
+            )
+            rewritten_value = _parse_rewrite_response(result.text, section_key)
+            if rewritten_value:
+                updated[section_key] = rewritten_value
+                any_rewrite_done = True
+        except Exception:
+            logger.exception(
+                "DNA rewrite failed for company %s, section %s",
+                company.schema_name, section_key,
+            )
+
+    if not any_rewrite_done:
+        updated["rewrite_warning"] = (
+            "Riformulazione LLM fallita; testo base preservato."
+        )
     return updated
+
+
+def _parse_rewrite_response(text, section_key):
+    text = text.strip()
+    if section_key in ("pilastri", "valore"):
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
+            if not match:
+                return None
+            try:
+                payload = json.loads(match.group(1))
+            except json.JSONDecodeError:
+                return None
+        if isinstance(payload, list):
+            return [str(item).strip() for item in payload if str(item).strip()]
+        if isinstance(payload, str):
+            return [s.strip() for s in payload.split(",") if s.strip()]
+        return None
+    else:
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
+            if not match:
+                cleaned = text.strip().strip('"').strip()
+                return cleaned if cleaned else None
+            try:
+                payload = json.loads(match.group(1))
+            except json.JSONDecodeError:
+                return None
+        if isinstance(payload, str):
+            return payload.strip()
+        if isinstance(payload, dict):
+            for v in payload.values():
+                if isinstance(v, str) and v.strip():
+                    return v.strip()
+        return None
 
 
 def _generate_company_questions(company, dna):
@@ -663,6 +728,25 @@ def onboarding_dna(request, pk):
         "dna": dna,
         "sections": _dna_sections(dna.content),
     })
+
+
+@login_required
+@require_http_methods(["POST"])
+def onboarding_dna_reset(request):
+    """Cancella DNA, domande, file e source per ricominciare l'onboarding."""
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    company.dna_versions.all().delete()
+    company.questions.all().delete()
+    company.company_files.all().delete()
+    company.pipeline_runs.all().delete()
+    company.sources.all().delete()
+    subscription = _subscription_for_company(company)
+    if subscription:
+        subscription.company_files_used = 0
+        subscription.save(update_fields=["company_files_used"])
+    return redirect("onboarding-index")
 
 
 @login_required
@@ -1142,15 +1226,13 @@ def dna_section_edit(request, pk, section_key):
 
 @login_required
 def dna_download_pdf(request):
-    """Download PDF for the current approved DNA."""
+    """Download PDF for the current DNA (pre-DNA or complete)."""
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
     dna = company.dna_versions.filter(is_current=True).first()
     if not dna:
         return HttpResponse("DNA not found", status=404)
-    if not dna.is_export_ready():
-        return HttpResponse("DNA completo non ancora approvato", status=403)
 
     pdf_bytes = _render_dna_pdf(company, dna, _dna_sections(dna.content))
     response = HttpResponse(pdf_bytes, content_type="application/pdf")
