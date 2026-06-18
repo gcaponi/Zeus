@@ -883,6 +883,24 @@ class TestDNAQuestions:
         assert resp.status_code == 302
         assert resp["Location"] == reverse("dna-review")
 
+    def test_dna_sections_hide_nested_description_keys(self):
+        sections = views._dna_sections({
+            "chi_siamo": {"descrizione": "Testo chi siamo pulito."},
+            "mission": {"description": "Testo mission pulito."},
+            "settore": {"testo": "Testo settore pulito."},
+            "mercato": {"value": "Testo mercato pulito."},
+            "pilastri": [{"descrizione": "Qualita"}, {"descrizione": "Rapidita"}],
+        })
+
+        values = {section["key"]: section["value"] for section in sections}
+        assert values["chi_siamo"] == "Testo chi siamo pulito."
+        assert values["mission"] == "Testo mission pulito."
+        assert values["settore"] == "Testo settore pulito."
+        assert values["mercato"] == "Testo mercato pulito."
+        assert values["pilastri"] == "Qualita, Rapidita"
+        assert "descrizione" not in values["chi_siamo"]
+        assert "{" not in values["chi_siamo"]
+
     def test_submit_answers_requires_all_answers(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
         pre_dna = CompanyDNA.objects.create(

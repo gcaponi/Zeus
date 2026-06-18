@@ -154,14 +154,10 @@ def _dna_sections(content, old_content=None):
     }
     sections = []
     for key, label in labels.items():
-        value = content.get(key) if isinstance(content, dict) else None
-        if isinstance(value, list):
-            value = ", ".join(map(str, value))
+        value = _as_text(content.get(key) if isinstance(content, dict) else None)
         old_value = None
         if old_content and isinstance(old_content, dict):
-            old_value = old_content.get(key)
-            if isinstance(old_value, list):
-                old_value = ", ".join(map(str, old_value))
+            old_value = _as_text(old_content.get(key))
         sections.append({
             "key": key,
             "label": label,
@@ -174,7 +170,25 @@ def _dna_sections(content, old_content=None):
 
 def _as_text(value):
     if isinstance(value, list):
-        return ", ".join(map(str, value))
+        parts = [_as_text(item).strip() for item in value]
+        return ", ".join(part for part in parts if part)
+    if isinstance(value, dict):
+        preferred_keys = (
+            "descrizione",
+            "description",
+            "testo",
+            "text",
+            "contenuto",
+            "content",
+            "value",
+        )
+        for key in preferred_keys:
+            if key in value:
+                return _as_text(value.get(key))
+        if len(value) == 1:
+            return _as_text(next(iter(value.values())))
+        parts = [_as_text(item).strip() for item in value.values()]
+        return "\n".join(part for part in parts if part)
     return str(value or "")
 
 
@@ -1324,14 +1338,10 @@ def _product_dna_sections(content, old_content=None):
     }
     sections = []
     for key, label in labels.items():
-        value = content.get(key) if isinstance(content, dict) else None
-        if isinstance(value, list):
-            value = ", ".join(map(str, value))
+        value = _as_text(content.get(key) if isinstance(content, dict) else None)
         old_value = None
         if old_content and isinstance(old_content, dict):
-            old_value = old_content.get(key)
-            if isinstance(old_value, list):
-                old_value = ", ".join(map(str, old_value))
+            old_value = _as_text(old_content.get(key))
         sections.append({
             "key": key,
             "label": label,
