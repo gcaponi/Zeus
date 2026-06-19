@@ -297,6 +297,8 @@ class TestZeusAdminDashboard:
         assert "Prodotto Alpha" in html
         assert "Manuale prodotto.pdf" in html
         assert "Cambia Password" in html
+        assert "Apri" in html
+        assert "Elimina" in html
 
     def test_client_detail_updates_subscription_configuration(self, monkeypatch):
         monkeypatch.setattr(TenantClient, "auto_create_schema", False)
@@ -346,3 +348,160 @@ class TestZeusAdminDashboard:
         assert tenant.subscription.plan == professional
         assert tenant.subscription.status == WorkspaceSubscription.STATUS_SUSPENDED
         assert tenant.subscription.notes == "Upgrade sospeso in attesa pagamento"
+
+    def test_app_domain_is_excluded_from_admin_clients(self, monkeypatch):
+        monkeypatch.setattr(TenantClient, "auto_create_schema", False)
+        staff = User.objects.create_user(
+            username="exclude-staff",
+            email="exclude@example.com",
+            password="pw",
+            is_staff=True,
+        )
+        app_tenant = TenantClient.objects.create(
+            schema_name="zeus",
+            name="Internal App Tenant",
+        )
+        Domain.objects.create(
+            tenant=app_tenant,
+            domain="zeus.cais.uno",
+            is_primary=True,
+        )
+        client_tenant = TenantClient.objects.create(
+            schema_name="cais",
+            name="Cais",
+        )
+        Domain.objects.create(
+            tenant=client_tenant,
+            domain="cais.zeus.cais.uno",
+            is_primary=True,
+        )
+        plan, _ = Plan.objects.update_or_create(
+            slug=Plan.SLUG_STARTER,
+            defaults=Plan.default_values(Plan.SLUG_STARTER),
+        )
+        WorkspaceSubscription.objects.create(
+            client=app_tenant,
+            plan=plan,
+            status=WorkspaceSubscription.STATUS_ACTIVE,
+        )
+        WorkspaceSubscription.objects.create(
+            client=client_tenant,
+            plan=plan,
+            status=WorkspaceSubscription.STATUS_ACTIVE,
+        )
+        Company.objects.create(schema_name="cais", name="Cais")
+        dashboard_request = RequestFactory().get(reverse("zeus-admin-dashboard"))
+        dashboard_request.user = staff
+        clients_request = RequestFactory().get(reverse("zeus-admin-clients"))
+        clients_request.user = staff
+
+        dashboard_response = views.dashboard(dashboard_request)
+        clients_response = views.clients(clients_request)
+
+        assert dashboard_response.status_code == 200
+        assert clients_response.status_code == 200
+        dashboard_html = dashboard_response.content.decode()
+        clients_html = clients_response.content.decode()
+        assert ">zeus.cais.uno<" not in dashboard_html
+        assert ">zeus.cais.uno<" not in clients_html
+        assert "Internal App Tenant" not in dashboard_html
+        assert "Internal App Tenant" not in clients_html
+        assert "Tenant non leggibile" not in clients_html
+        assert "1 workspace totali" in clients_html
+
+    def test_admin_can_open_and_delete_uploaded_files(self, monkeypatch):
+        monkeypatch.setattr(TenantClient, "auto_create_schema", False)
+        staff = User.objects.create_user(
+            username="file-staff",
+            email="file@example.com",
+            password="pw",
+            is_staff=True,
+        )
+        tenant = TenantClient.objects.create(
+            schema_name="file-client",
+            name="File Client",
+        )
+        plan, _ = Plan.objects.update_or_create(
+            slug=Plan.SLUG_STARTER,
+            defaults=Plan.default_values(Plan.SLUG_STARTER),
+        )
+        subscription = WorkspaceSubscription.objects.create(
+            client=tenant,
+            plan=plan,
+            status=WorkspaceSubscription.STATUS_ACTIVE,
+            company_files_used=1,
+        )
+        company = Company.objects.create(
+            schema_name="file-client",
+            name="File Client SRL",
+        )
+        company_file = CompanyFile.objects.create(
+            company=company,
+            original_name="Company notes.txt",
+            content_text="Contenuto aziendale completo",
+            file_size=100,
+            uploaded_by=staff,
+        )
+        product = Product.objects.create(
+            company=company,
+            name="Prodotto File",
+            slug="prodotto-file",
+        )
+        product_file = ProductFile.objects.create(
+            product=product,
+            original_name="Product notes.txt",
+            content_text="Contenuto prodotto completo",
+            file_size=200,
+            uploaded_by=staff,
+        )
+        open_company_request = RequestFactory().get(
+            reverse("zeus-admin-company-file-open", args=[tenant.pk, company_file.pk]),
+        )
+        open_company_request.user = staff
+        open_product_request = RequestFactory().get(
+            reverse("zeus-admin-product-file-open", args=[tenant.pk, product_file.pk]),
+        )
+        open_product_request.user = staff
+
+        company_response = views.open_company_file(
+            open_company_request,
+            tenant.pk,
+            company_file.pk,
+        )
+        product_response = views.open_product_file(
+            open_product_request,
+            tenant.pk,
+            product_file.pk,
+        )
+
+        assert company_response.status_code == 200
+        assert company_response.content.decode() == "Contenuto aziendale completo"
+        assert product_response.status_code == 200
+        assert product_response.content.decode() == "Contenuto prodotto completo"
+
+        delete_company_request = RequestFactory().post(
+            reverse("zeus-admin-company-file-delete", args=[tenant.pk, company_file.pk]),
+        )
+        delete_company_request.user = staff
+        delete_product_request = RequestFactory().post(
+            reverse("zeus-admin-product-file-delete", args=[tenant.pk, product_file.pk]),
+        )
+        delete_product_request.user = staff
+
+        company_delete_response = views.delete_company_file(
+            delete_company_request,
+            tenant.pk,
+            company_file.pk,
+        )
+        product_delete_response = views.delete_product_file(
+            delete_product_request,
+            tenant.pk,
+            product_file.pk,
+        )
+
+        subscription.refresh_from_db()
+        assert company_delete_response.status_code == 302
+        assert product_delete_response.status_code == 302
+        assert not CompanyFile.objects.filter(pk=company_file.pk).exists()
+        assert not ProductFile.objects.filter(pk=product_file.pk).exists()
+        assert subscription.company_files_used == 0

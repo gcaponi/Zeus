@@ -4,13 +4,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlencode
 
+from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db import connection
 from django.db.models import Sum
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
+from django.utils.text import get_valid_filename
 from django_tenants.utils import schema_context
 
 from apps.companies.models import (
@@ -23,6 +26,8 @@ from apps.companies.models import (
     ProductFile,
 )
 from apps.core.models import Client, Plan, WorkspaceAccess, WorkspaceSubscription
+
+DEFAULT_EXCLUDED_DOMAINS = {"zeus.cais.uno"}
 
 
 def _check_database():
@@ -59,6 +64,17 @@ def _system_health():
         "celery": _check_celery(),
         "storage": _check_storage(),
     }
+
+
+def _excluded_domains():
+    return set(getattr(settings, "ZEUS_ADMIN_EXCLUDED_DOMAINS", DEFAULT_EXCLUDED_DOMAINS))
+
+
+def _text_file_response(name, content):
+    filename = get_valid_filename(name) or "zeus-file.txt"
+    response = HttpResponse(content or "", content_type="text/plain; charset=utf-8")
+    response["Content-Disposition"] = f'inline; filename="{filename}"'
+    return response
 
 
 @dataclass
@@ -225,13 +241,13 @@ def _client_rows(clients):
 
 
 def _clients_queryset():
-    return (
-        Client.objects.prefetch_related("domains")
-        .select_related(
-            "subscription__plan",
-        )
-        .order_by("-created_on", "name")
+    queryset = Client.objects.prefetch_related("domains").select_related(
+        "subscription__plan",
     )
+    excluded = _excluded_domains()
+    if excluded:
+        queryset = queryset.exclude(domains__domain__in=excluded).distinct()
+    return queryset.order_by("-created_on", "name")
 
 
 def _admin_url(name, **params):
@@ -390,6 +406,15 @@ def _tenant_detail_data(client):
 
             data["company"] = company
             data["company_files"] = list(company.company_files.select_related("uploaded_by")[:20])
+            for company_file in data["company_files"]:
+                company_file.open_url = reverse(
+                    "zeus-admin-company-file-open",
+                    args=[client.pk, company_file.pk],
+                )
+                company_file.delete_url = reverse(
+                    "zeus-admin-company-file-delete",
+                    args=[client.pk, company_file.pk],
+                )
             data["company_files_count"] = CompanyFile.objects.filter(
                 company=company,
             ).count()
@@ -418,6 +443,15 @@ def _tenant_detail_data(client):
                 "dna_versions",
             ):
                 files = list(product.product_files.select_related("uploaded_by")[:10])
+                for product_file in files:
+                    product_file.open_url = reverse(
+                        "zeus-admin-product-file-open",
+                        args=[client.pk, product_file.pk],
+                    )
+                    product_file.delete_url = reverse(
+                        "zeus-admin-product-file-delete",
+                        args=[client.pk, product_file.pk],
+                    )
                 current_dna = product.dna_versions.filter(is_current=True).first()
                 products.append(
                     {
@@ -485,6 +519,8 @@ def _client_detail_context(request, client):
         "current_plan_id": plan.pk,
         "tenant": tenant_data,
         "saved": request.GET.get("saved") == "1",
+        "deleted": request.GET.get("deleted") == "1",
+        "not_deleted": request.GET.get("not_deleted") == "1",
         "limits": {
             "company_files": {
                 "used": company_files_used,
@@ -509,6 +545,17 @@ def _client_detail_context(request, client):
             ),
         },
     }
+
+
+def _tenant_company_or_404(client):
+    company = Company.objects.filter(schema_name=client.schema_name).first()
+    if not company:
+        raise Http404("Company not found")
+    return company
+
+
+def _client_detail_redirect(client, flag):
+    return redirect(f"{reverse('zeus-admin-client-detail', args=[client.pk])}?{flag}=1")
 
 
 @staff_member_required
@@ -625,3 +672,59 @@ def client_detail(request, client_id):
         return redirect(f"{reverse('zeus-admin-client-detail', args=[client.pk])}?saved=1")
     context = _client_detail_context(request, client)
     return render(request, "zeus_admin/client_detail.html", context)
+
+
+@staff_member_required
+def open_company_file(request, client_id, file_id):
+    client = get_object_or_404(_clients_queryset(), pk=client_id)
+    with _tenant_context(client.schema_name):
+        company = _tenant_company_or_404(client)
+        company_file = get_object_or_404(CompanyFile, pk=file_id, company=company)
+        return _text_file_response(company_file.original_name, company_file.content_text)
+
+
+@staff_member_required
+def delete_company_file(request, client_id, file_id):
+    client = get_object_or_404(_clients_queryset(), pk=client_id)
+    if request.method != "POST":
+        return _client_detail_redirect(client, "not_deleted")
+    current_count = 0
+    with _tenant_context(client.schema_name):
+        company = _tenant_company_or_404(client)
+        company_file = get_object_or_404(CompanyFile, pk=file_id, company=company)
+        company_file.delete()
+        current_count = company.company_files.count()
+    subscription = getattr(client, "subscription", None)
+    if subscription:
+        subscription.company_files_used = current_count
+        subscription.save(update_fields=["company_files_used"])
+    return _client_detail_redirect(client, "deleted")
+
+
+@staff_member_required
+def open_product_file(request, client_id, file_id):
+    client = get_object_or_404(_clients_queryset(), pk=client_id)
+    with _tenant_context(client.schema_name):
+        company = _tenant_company_or_404(client)
+        product_file = get_object_or_404(
+            ProductFile,
+            pk=file_id,
+            product__company=company,
+        )
+        return _text_file_response(product_file.original_name, product_file.content_text)
+
+
+@staff_member_required
+def delete_product_file(request, client_id, file_id):
+    client = get_object_or_404(_clients_queryset(), pk=client_id)
+    if request.method != "POST":
+        return _client_detail_redirect(client, "not_deleted")
+    with _tenant_context(client.schema_name):
+        company = _tenant_company_or_404(client)
+        product_file = get_object_or_404(
+            ProductFile,
+            pk=file_id,
+            product__company=company,
+        )
+        product_file.delete()
+    return _client_detail_redirect(client, "deleted")
