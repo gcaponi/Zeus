@@ -306,7 +306,7 @@ class TestZeusAdminDashboard:
         assert "Elimina" in html
         assert "zeus-content-modal" in html
         assert "data-open-content" in html
-        assert "Record tecnico" in html
+        assert "Cambia Password" in html
         assert reverse("zeus-admin-company-dna-open", args=[tenant.pk, company_dna.pk]) in html
         assert reverse("zeus-admin-product-dna-open", args=[tenant.pk, product_dna.pk]) in html
         main_html = html.split("<main", 1)[1]
@@ -595,10 +595,11 @@ class TestZeusAdminDashboard:
 
         assert company_response.status_code == 200
         assert company_payload["title"] == "DNA completo v2"
-        assert '"chi_siamo": "Versione corrente"' in company_payload["content"]
+        assert company_payload["sections"][0]["label"] == "Chi Siamo"
+        assert company_payload["sections"][0]["text"] == "Versione corrente"
         assert product_response.status_code == 200
         assert product_payload["title"] == "Prodotto DNA · DNA completo v2"
-        assert '"descrizione": "Corrente"' in product_payload["content"]
+        assert product_payload["sections"][0]["text"] == "Corrente"
 
         delete_company_request = RequestFactory().post(
             reverse("zeus-admin-company-dna-delete", args=[tenant.pk, current_company_dna.pk]),

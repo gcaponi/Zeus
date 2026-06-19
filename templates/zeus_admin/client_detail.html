@@ -202,7 +202,6 @@
                     {% if workspace_url %}
                         <a href="{{ workspace_url }}" target="_blank" rel="noopener" class="rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-xs font-bold text-cyan-100 hover:bg-cyan-300/15">Apri Workspace</a>
                     {% endif %}
-                    <a href="{{ admin_links.client }}" class="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-xs font-bold text-white/60 hover:text-white/85">Record tecnico</a>
                     <a href="{{ admin_links.password }}" class="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-xs font-bold text-white/60 hover:text-white/85">Cambia Password</a>
                 </div>
             </div>
@@ -485,24 +484,27 @@
         <section class="relative flex max-h-[86vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#07111f]/95 shadow-[0_30px_120px_rgba(0,0,0,0.55)] backdrop-blur-2xl">
             <div class="flex items-start justify-between gap-4 border-b border-white/[0.08] px-6 py-5">
                 <div>
-                    <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#22d3ee]">Anteprima</p>
+                    <p id="zeus-content-badge" class="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#22d3ee]">Anteprima</p>
                     <h2 id="zeus-content-title" class="mt-2 font-display text-xl font-bold text-white">Contenuto</h2>
                     <p id="zeus-content-meta" class="mt-1 text-xs text-white/40"></p>
                 </div>
                 <button type="button" data-close-content class="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-white/60 hover:text-white">Chiudi</button>
             </div>
-            <div class="overflow-auto px-6 py-5">
-                <pre id="zeus-content-body" class="min-h-[260px] whitespace-pre-wrap break-words rounded-2xl border border-white/8 bg-black/20 p-5 font-mono text-xs leading-6 text-white/78"></pre>
+            <div id="zeus-content-scroll" class="overflow-auto px-6 py-5">
+                <div id="zeus-content-sections" class="hidden space-y-6"></div>
+                <pre id="zeus-content-body" class="hidden min-h-[260px] whitespace-pre-wrap break-words rounded-2xl border border-white/8 bg-black/20 p-5 font-mono text-xs leading-6 text-white/78"></pre>
             </div>
         </section>
     </div>
 
     <script>
         (function () {
-            const modal = document.getElementById('zeus-content-modal');
-            const title = document.getElementById('zeus-content-title');
-            const meta = document.getElementById('zeus-content-meta');
-            const body = document.getElementById('zeus-content-body');
+            var modal = document.getElementById('zeus-content-modal');
+            var badge = document.getElementById('zeus-content-badge');
+            var title = document.getElementById('zeus-content-title');
+            var meta = document.getElementById('zeus-content-meta');
+            var sectionsContainer = document.getElementById('zeus-content-sections');
+            var body = document.getElementById('zeus-content-body');
 
             function showModal() {
                 modal.classList.remove('hidden');
@@ -516,26 +518,105 @@
                 modal.setAttribute('aria-hidden', 'true');
             }
 
-            async function openContent(url) {
+            function escapeHtml(text) {
+                var div = document.createElement('div');
+                div.appendChild(document.createTextNode(text));
+                return div.innerHTML;
+            }
+
+            function renderDnaSections(sections) {
+                sectionsContainer.innerHTML = '';
+                sections.forEach(function (section) {
+                    var card = document.createElement('div');
+                    card.className = 'rounded-2xl border border-white/8 bg-white/[0.02] overflow-hidden';
+
+                    var header = document.createElement('div');
+                    header.className = 'flex items-center gap-3 border-b border-white/[0.06] px-5 py-3';
+                    var dot = document.createElement('span');
+                    dot.className = 'w-2 h-2 rounded-full bg-[#22d3ee] flex-shrink-0';
+                    var label = document.createElement('h3');
+                    label.className = 'text-sm font-bold tracking-wide text-white/90';
+                    label.textContent = section.label;
+                    header.appendChild(dot);
+                    header.appendChild(label);
+                    card.appendChild(header);
+
+                    var content = document.createElement('div');
+                    content.className = 'px-5 py-4';
+
+                    if (section.items && section.items.length > 0) {
+                        var list = document.createElement('div');
+                        list.className = 'space-y-2';
+                        section.items.forEach(function (item, idx) {
+                            var row = document.createElement('div');
+                            row.className = 'flex gap-3';
+                            var num = document.createElement('span');
+                            num.className = 'flex-shrink-0 w-6 h-6 rounded-full bg-[#22d3ee]/10 text-[#22d3ee] text-[10px] font-bold flex items-center justify-center';
+                            num.textContent = idx + 1;
+                            var text = document.createElement('p');
+                            text.className = 'text-sm leading-relaxed text-white/70 pt-0.5';
+                            text.textContent = item;
+                            row.appendChild(num);
+                            row.appendChild(text);
+                            list.appendChild(row);
+                        });
+                        content.appendChild(list);
+                    } else if (section.text) {
+                        var paragraphs = section.text.split('\n');
+                        paragraphs.forEach(function (p) {
+                            if (p.trim()) {
+                                var para = document.createElement('p');
+                                para.className = 'text-sm leading-relaxed text-white/70';
+                                para.textContent = p.trim();
+                                content.appendChild(para);
+                            }
+                        });
+                    }
+
+                    card.appendChild(content);
+                    sectionsContainer.appendChild(card);
+                });
+            }
+
+            function openContent(url) {
+                badge.textContent = 'Anteprima';
                 title.textContent = 'Caricamento...';
                 meta.textContent = '';
+                sectionsContainer.innerHTML = '';
+                sectionsContainer.classList.add('hidden');
+                body.classList.add('hidden');
                 body.textContent = '';
                 showModal();
 
-                try {
-                    const response = await fetch(url, { headers: { Accept: 'application/json' } });
-                    if (!response.ok) {
-                        throw new Error('Contenuto non disponibile');
-                    }
-                    const data = await response.json();
-                    title.textContent = data.title || 'Contenuto';
-                    meta.textContent = data.meta || '';
-                    body.textContent = data.content || 'Nessun contenuto disponibile.';
-                } catch (error) {
-                    title.textContent = 'Errore apertura';
-                    meta.textContent = '';
-                    body.textContent = error.message || 'Impossibile aprire questo contenuto.';
-                }
+                fetch(url, { headers: { Accept: 'application/json' } })
+                    .then(function (response) {
+                        if (!response.ok) throw new Error('Contenuto non disponibile');
+                        return response.json();
+                    })
+                    .then(function (data) {
+                        title.textContent = data.title || 'Contenuto';
+                        meta.textContent = data.meta || '';
+
+                        if (data.sections && data.sections.length > 0) {
+                            badge.textContent = 'DNA';
+                            badge.className = 'text-[11px] font-semibold uppercase tracking-[0.12em] text-[#a3e635]';
+                            renderDnaSections(data.sections);
+                            sectionsContainer.classList.remove('hidden');
+                        } else {
+                            badge.textContent = 'Allegato';
+                            badge.className = 'text-[11px] font-semibold uppercase tracking-[0.12em] text-[#22d3ee]';
+                            body.textContent = data.content || 'Nessun contenuto disponibile.';
+                            body.classList.remove('hidden');
+                        }
+                    })
+                    .catch(function (error) {
+                        badge.textContent = 'Errore';
+                        badge.className = 'text-[11px] font-semibold uppercase tracking-[0.12em] text-[#fb7185]';
+                        title.textContent = 'Errore apertura';
+                        meta.textContent = '';
+                        body.textContent = error.message || 'Impossibile aprire questo contenuto.';
+                        body.classList.remove('hidden');
+                    });
             }
 
             document.querySelectorAll('[data-open-content]').forEach(function (button) {

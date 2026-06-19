@@ -71,10 +71,32 @@ def _excluded_domains():
     return set(getattr(settings, "ZEUS_ADMIN_EXCLUDED_DOMAINS", DEFAULT_EXCLUDED_DOMAINS))
 
 
+DNA_SECTION_LABELS = {
+    "chi_siamo": "Chi Siamo",
+    "mission": "Mission",
+    "settore": "Settore",
+    "mercato": "Mercato",
+    "pilastri": "Pilastri",
+}
+
+
 def _dna_content_text(dna):
     if isinstance(dna.content, str):
         return dna.content
     return json.dumps(dna.content or {}, ensure_ascii=False, indent=2)
+
+
+def _dna_content_dict(dna):
+    if isinstance(dna.content, dict):
+        return dna.content
+    if isinstance(dna.content, str):
+        try:
+            parsed = json.loads(dna.content)
+            if isinstance(parsed, dict):
+                return parsed
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return {}
 
 
 def _admin_datetime(value):
@@ -89,6 +111,39 @@ def _content_response(title, meta, content):
             "title": title,
             "meta": meta,
             "content": content or "Nessun contenuto testuale disponibile.",
+        },
+    )
+
+
+def _dna_response(title, meta, dna):
+    sections = []
+    content = _dna_content_dict(dna)
+    ordered_keys = ["chi_siamo", "mission", "settore", "mercato", "pilastri"]
+    for key in ordered_keys:
+        value = content.get(key)
+        if not value:
+            continue
+        label = DNA_SECTION_LABELS.get(key, key)
+        if isinstance(value, list):
+            items = [str(item) for item in value if item]
+            sections.append({"label": label, "items": items})
+        else:
+            sections.append({"label": label, "text": str(value)})
+    for key, value in content.items():
+        if key in ordered_keys or not value:
+            continue
+        label = DNA_SECTION_LABELS.get(key, key.replace("_", " ").title())
+        if isinstance(value, list):
+            items = [str(item) for item in value if item]
+            sections.append({"label": label, "items": items})
+        else:
+            sections.append({"label": label, "text": str(value)})
+    return JsonResponse(
+        {
+            "title": title,
+            "meta": meta,
+            "content": "",
+            "sections": sections,
         },
     )
 
@@ -783,10 +838,10 @@ def open_company_dna(request, client_id, dna_id):
         company = _tenant_company_or_404(client)
         dna = get_object_or_404(CompanyDNA, pk=dna_id, company=company)
         status = "Approvato" if dna.is_fully_approved() else "Review"
-        return _content_response(
+        return _dna_response(
             f"{dna.get_dna_type_display()} v{dna.version}",
             f"DNA aziendale · {status} · creato {_admin_datetime(dna.created_at)}",
-            _dna_content_text(dna),
+            dna,
         )
 
 
@@ -815,10 +870,10 @@ def open_product_dna(request, client_id, dna_id):
         company = _tenant_company_or_404(client)
         dna = get_object_or_404(ProductDNA, pk=dna_id, product__company=company)
         status = "Approvato" if dna.is_fully_approved() else "Review"
-        return _content_response(
+        return _dna_response(
             f"{dna.product.name} · {dna.get_dna_type_display()} v{dna.version}",
             f"ProductDNA · {status} · creato {_admin_datetime(dna.created_at)}",
-            _dna_content_text(dna),
+            dna,
         )
 
 
