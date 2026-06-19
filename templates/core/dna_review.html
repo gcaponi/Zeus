@@ -7,6 +7,7 @@
 <style>
     #dna-popup-overlay .dna-popup-panel {
         color: #f8fafc;
+        margin: 1rem;
     }
 
     #dna-popup-overlay .dna-popup-title,
@@ -14,6 +15,13 @@
     #dna-popup-overlay .dna-popup-close,
     #dna-popup-overlay .dna-popup-section-text {
         color: #f8fafc !important;
+    }
+
+    @media (max-width: 480px) {
+        #dna-popup-overlay .dna-popup-panel { max-height: 92vh; }
+        #dna-popup-overlay .sticky.top-0,
+        #dna-popup-overlay .sticky.bottom-0 { padding-left: 1.25rem; padding-right: 1.25rem; }
+        #dna-popup-overlay .overflow-y-auto { padding-left: 1.25rem; padding-right: 1.25rem; }
     }
 
     #dna-popup-overlay .dna-popup-meta {

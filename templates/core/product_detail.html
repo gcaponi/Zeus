@@ -17,7 +17,7 @@
     {% endif %}
 
     <div class="mb-6 zeus-card p-6">
-        <div class="flex items-center justify-between gap-4">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
                 <h2 class="text-lg font-bold font-display">File prodotto caricati</h2>
                 <p class="mt-1 text-sm text-content-secondary">
@@ -30,7 +30,7 @@
             <ul class="mt-4 space-y-2">
                 {% for file in product_files %}
                     <li class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-content-secondary">
-                        <span class="font-semibold text-content-primary">{{ file.original_name }}</span>
+                        <span class="font-semibold text-content-primary break-all">{{ file.original_name }}</span>
                         <span class="ml-2 text-content-muted">{{ file.created_at|date:"d/m/Y H:i" }}</span>
                     </li>
                 {% endfor %}
@@ -66,7 +66,7 @@
     {% else %}
         <div class="space-y-6">
             <div class="zeus-card p-6">
-                <div class="flex items-center justify-between">
+                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                     <div>
                         <h2 class="text-lg font-bold font-display">DNA v{{ dna.version }}</h2>
                         <p class="mt-1 text-sm text-content-muted">{{ dna.dna_type }} · {{ dna.created_at|date:"d/m/Y H:i" }}</p>

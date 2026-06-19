@@ -19,7 +19,7 @@
     <form method="post" class="mb-8 zeus-card p-6">
         {% csrf_token %}
         <label class="zeus-label" for="name">Nuovo prodotto</label>
-        <div class="mt-2 flex gap-3">
+        <div class="mt-2 flex flex-col sm:flex-row gap-3">
             <input type="text" name="name" id="name" placeholder="Nome prodotto (es. Vasca BVCI 60x40)" class="zeus-input flex-1" required>
             <button type="submit" class="zeus-btn zeus-btn-primary">Crea</button>
         </div>

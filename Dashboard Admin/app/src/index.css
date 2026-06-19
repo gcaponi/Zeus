@@ -1,0 +1,192 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+@layer base {
+  :root {
+    /* ZEUS Dark Theme */
+    --background: 240 33% 4%;
+    --foreground: 0 0% 100%;
+    --card: 240 25% 8%;
+    --card-foreground: 0 0% 100%;
+    --popover: 240 25% 8%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 232 89% 65%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 20% 12%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 240 20% 15%;
+    --muted-foreground: 240 5% 55%;
+    --accent: 240 20% 15%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 10% 18%;
+    --input: 240 10% 18%;
+    --ring: 232 89% 65%;
+    --radius: 0.625rem;
+
+    --sidebar-background: 240 30% 8%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 232 89% 65%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 25% 12%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 240 15% 15%;
+    --sidebar-ring: 232 89% 65%;
+
+    /* ZEUS Brand Colors */
+    --brand-primary: #5b6ef5;
+    --brand-primary-glow: rgba(91, 110, 245, 0.4);
+    --brand-secondary: #ff4ecd;
+    --brand-secondary-glow: rgba(255, 78, 205, 0.4);
+    --brand-accent: #00e1b7;
+    --brand-accent-glow: rgba(0, 225, 183, 0.4);
+    --bg-primary: #0a0a0f;
+    --bg-secondary: #12121f;
+    --bg-tertiary: #1a1a2e;
+    --bg-card: rgba(255, 255, 255, 0.03);
+    --bg-card-hover: rgba(255, 255, 255, 0.05);
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-active: rgba(91, 110, 245, 0.3);
+
+    --status-online: #00e1b7;
+    --status-warning: #ffc107;
+    --status-error: #ff4757;
+    --status-offline: rgba(255, 255, 255, 0.3);
+  }
+
+  * {
+    @apply border-border;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  body {
+    background-color: var(--bg-primary);
+    color: #ffffff;
+    overflow: hidden;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+}
+
+@layer components {
+  .glass-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    transition: all 0.2s ease;
+  }
+
+  .glass-card:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(91, 110, 245, 0.2);
+  }
+
+  .gradient-brand {
+    background: linear-gradient(135deg, #5b6ef5, #ff4ecd);
+  }
+
+  .gradient-accent {
+    background: linear-gradient(135deg, #5b6ef5, #00e1b7);
+  }
+
+  .gradient-text {
+    background: linear-gradient(135deg, #5b6ef5, #ff4ecd);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .nav-active {
+    position: relative;
+    background: rgba(91, 110, 245, 0.08);
+    color: #5b6ef5;
+  }
+
+  .nav-active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 20px;
+    background: #5b6ef5;
+    border-radius: 0 2px 2px 0;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  .status-online {
+    background: rgba(0, 225, 183, 0.12);
+    color: #00e1b7;
+  }
+
+  .status-warning {
+    background: rgba(255, 193, 7, 0.12);
+    color: #ffc107;
+  }
+
+  .status-error {
+    background: rgba(255, 71, 87, 0.12);
+    color: #ff4757;
+  }
+
+  .status-info {
+    background: rgba(91, 110, 245, 0.12);
+    color: #5b6ef5;
+  }
+
+  .pulse-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+
+  .shimmer-bar {
+    background: linear-gradient(90deg, transparent, rgba(91, 110, 245, 0.3), transparent);
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+  }
+}
