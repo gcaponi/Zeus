@@ -481,160 +481,198 @@
 
     <div id="zeus-content-modal" class="fixed inset-0 z-[80] hidden items-center justify-center px-4 py-6" aria-hidden="true">
         <button type="button" data-close-content class="absolute inset-0 bg-slate-950/70 backdrop-blur-md" aria-label="Chiudi contenuto"></button>
-        <section class="relative flex max-h-[86vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#07111f]/95 shadow-[0_30px_120px_rgba(0,0,0,0.55)] backdrop-blur-2xl">
-            <div class="flex items-start justify-between gap-4 border-b border-white/[0.08] px-6 py-5">
+        <section class="relative flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#07111f]/95 shadow-[0_30px_120px_rgba(0,0,0,0.55)] backdrop-blur-2xl">
+            <div class="flex items-start justify-between gap-4 border-b border-white/[0.08] px-8 py-6">
                 <div>
                     <p id="zeus-content-badge" class="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#22d3ee]">Anteprima</p>
-                    <h2 id="zeus-content-title" class="mt-2 font-display text-xl font-bold text-white">Contenuto</h2>
+                    <h2 id="zeus-content-title" class="mt-2 font-display text-2xl font-bold text-white">Contenuto</h2>
                     <p id="zeus-content-meta" class="mt-1 text-xs text-white/40"></p>
                 </div>
-                <button type="button" data-close-content class="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-white/60 hover:text-white">Chiudi</button>
+                <button type="button" data-close-content class="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-bold text-white/60 hover:text-white">Chiudi</button>
             </div>
-            <div id="zeus-content-scroll" class="overflow-auto px-6 py-5">
-                <div id="zeus-content-sections" class="hidden space-y-6"></div>
+            <div id="zeus-content-scroll" class="overflow-auto px-8 py-6">
+                <div id="zeus-dna-view" class="hidden space-y-5"></div>
                 <pre id="zeus-content-body" class="hidden min-h-[260px] whitespace-pre-wrap break-words rounded-2xl border border-white/8 bg-black/20 p-5 font-mono text-xs leading-6 text-white/78"></pre>
             </div>
         </section>
     </div>
 
     <script>
-        (function () {
-            var modal = document.getElementById('zeus-content-modal');
-            var badge = document.getElementById('zeus-content-badge');
-            var title = document.getElementById('zeus-content-title');
-            var meta = document.getElementById('zeus-content-meta');
-            var sectionsContainer = document.getElementById('zeus-content-sections');
-            var body = document.getElementById('zeus-content-body');
+    (function () {
+        var modal = document.getElementById('zeus-content-modal');
+        var badge = document.getElementById('zeus-content-badge');
+        var title = document.getElementById('zeus-content-title');
+        var meta = document.getElementById('zeus-content-meta');
+        var dnaView = document.getElementById('zeus-dna-view');
+        var body = document.getElementById('zeus-content-body');
 
-            function showModal() {
-                modal.classList.remove('hidden');
-                modal.classList.add('flex');
-                modal.setAttribute('aria-hidden', 'false');
-            }
+        var SECTION_ICONS = {
+            'Chi Siamo': '\u{1F3E2}',
+            'Mission': '\u{1F3AF}',
+            'Settore': '\u{1F4CB}',
+            'Mercato': '\u{1F4CA}',
+            'Pilastri': '\u{1F3D7}',
+        };
 
-            function hideModal() {
-                modal.classList.add('hidden');
-                modal.classList.remove('flex');
-                modal.setAttribute('aria-hidden', 'true');
-            }
+        function showModal() {
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            modal.setAttribute('aria-hidden', 'false');
+        }
 
-            function escapeHtml(text) {
-                var div = document.createElement('div');
-                div.appendChild(document.createTextNode(text));
-                return div.innerHTML;
-            }
+        function hideModal() {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            modal.setAttribute('aria-hidden', 'true');
+        }
 
-            function renderDnaSections(sections) {
-                sectionsContainer.innerHTML = '';
-                sections.forEach(function (section) {
-                    var card = document.createElement('div');
-                    card.className = 'rounded-2xl border border-white/8 bg-white/[0.02] overflow-hidden';
+        function el(tag, cls, text) {
+            var e = document.createElement(tag);
+            if (cls) e.className = cls;
+            if (text) e.textContent = text;
+            return e;
+        }
 
-                    var header = document.createElement('div');
-                    header.className = 'flex items-center gap-3 border-b border-white/[0.06] px-5 py-3';
-                    var dot = document.createElement('span');
-                    dot.className = 'w-2 h-2 rounded-full bg-[#22d3ee] flex-shrink-0';
-                    var label = document.createElement('h3');
-                    label.className = 'text-sm font-bold tracking-wide text-white/90';
-                    label.textContent = section.label;
-                    header.appendChild(dot);
-                    header.appendChild(label);
-                    card.appendChild(header);
-
-                    var content = document.createElement('div');
-                    content.className = 'px-5 py-4';
-
-                    if (section.items && section.items.length > 0) {
-                        var list = document.createElement('div');
-                        list.className = 'space-y-2';
-                        section.items.forEach(function (item, idx) {
-                            var row = document.createElement('div');
-                            row.className = 'flex gap-3';
-                            var num = document.createElement('span');
-                            num.className = 'flex-shrink-0 w-6 h-6 rounded-full bg-[#22d3ee]/10 text-[#22d3ee] text-[10px] font-bold flex items-center justify-center';
-                            num.textContent = idx + 1;
-                            var text = document.createElement('p');
-                            text.className = 'text-sm leading-relaxed text-white/70 pt-0.5';
-                            text.textContent = item;
-                            row.appendChild(num);
-                            row.appendChild(text);
-                            list.appendChild(row);
-                        });
-                        content.appendChild(list);
-                    } else if (section.text) {
-                        var paragraphs = section.text.split('\n');
-                        paragraphs.forEach(function (p) {
-                            if (p.trim()) {
-                                var para = document.createElement('p');
-                                para.className = 'text-sm leading-relaxed text-white/70';
-                                para.textContent = p.trim();
-                                content.appendChild(para);
-                            }
-                        });
-                    }
-
-                    card.appendChild(content);
-                    sectionsContainer.appendChild(card);
-                });
-            }
-
-            function openContent(url) {
-                badge.textContent = 'Anteprima';
-                title.textContent = 'Caricamento...';
-                meta.textContent = '';
-                sectionsContainer.innerHTML = '';
-                sectionsContainer.classList.add('hidden');
-                body.classList.add('hidden');
-                body.textContent = '';
-                showModal();
-
-                fetch(url, { headers: { Accept: 'application/json' } })
-                    .then(function (response) {
-                        if (!response.ok) throw new Error('Contenuto non disponibile');
-                        return response.json();
-                    })
-                    .then(function (data) {
-                        title.textContent = data.title || 'Contenuto';
-                        meta.textContent = data.meta || '';
-
-                        if (data.sections && data.sections.length > 0) {
-                            badge.textContent = 'DNA';
-                            badge.className = 'text-[11px] font-semibold uppercase tracking-[0.12em] text-[#a3e635]';
-                            renderDnaSections(data.sections);
-                            sectionsContainer.classList.remove('hidden');
-                        } else {
-                            badge.textContent = 'Allegato';
-                            badge.className = 'text-[11px] font-semibold uppercase tracking-[0.12em] text-[#22d3ee]';
-                            body.textContent = data.content || 'Nessun contenuto disponibile.';
-                            body.classList.remove('hidden');
-                        }
-                    })
-                    .catch(function (error) {
-                        badge.textContent = 'Errore';
-                        badge.className = 'text-[11px] font-semibold uppercase tracking-[0.12em] text-[#fb7185]';
-                        title.textContent = 'Errore apertura';
-                        meta.textContent = '';
-                        body.textContent = error.message || 'Impossibile aprire questo contenuto.';
-                        body.classList.remove('hidden');
-                    });
-            }
-
-            document.querySelectorAll('[data-open-content]').forEach(function (button) {
-                button.addEventListener('click', function () {
-                    openContent(button.dataset.contentUrl);
-                });
-            });
-
-            document.querySelectorAll('[data-close-content]').forEach(function (button) {
-                button.addEventListener('click', hideModal);
-            });
-
-            document.addEventListener('keydown', function (event) {
-                if (event.key === 'Escape') {
-                    hideModal();
+        function renderTextSection(field) {
+            var card = el('div', 'rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden');
+            var hdr = el('div', 'flex items-center gap-3 border-b border-white/[0.05] px-5 py-3');
+            var icon = SECTION_ICONS[field.label] || '\u{25C6}';
+            hdr.appendChild(el('span', 'text-sm', icon));
+            var lbl = el('span', 'text-sm font-bold tracking-wide text-white/90', field.label);
+            hdr.appendChild(lbl);
+            card.appendChild(hdr);
+            var body = el('div', 'px-5 py-4');
+            var paras = field.text.split('\n');
+            paras.forEach(function (p) {
+                if (p.trim()) {
+                    body.appendChild(el('p', 'text-sm leading-relaxed text-white/65', p.trim()));
                 }
             });
-        })();
+            card.appendChild(body);
+            return card;
+        }
+
+        function renderListSection(section) {
+            var card = el('div', 'rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden');
+            var hdr = el('div', 'flex items-center gap-3 border-b border-white/[0.05] px-5 py-3');
+            var icon = SECTION_ICONS[section.label] || '\u{25C6}';
+            hdr.appendChild(el('span', 'text-sm', icon));
+            hdr.appendChild(el('span', 'text-sm font-bold tracking-wide text-white/90', section.label));
+            card.appendChild(hdr);
+            var body = el('div', 'px-5 py-4 space-y-2');
+            section.items.forEach(function (item, idx) {
+                var row = el('div', 'flex gap-3 items-start');
+                var num = el('span', 'flex-shrink-0 w-6 h-6 rounded-full bg-[#22d3ee]/10 text-[#22d3ee] text-[10px] font-bold flex items-center justify-center', String(idx + 1));
+                row.appendChild(num);
+                row.appendChild(el('p', 'text-sm leading-relaxed text-white/65 pt-0.5', item));
+                body.appendChild(row);
+            });
+            card.appendChild(body);
+            return card;
+        }
+
+        function renderQuestionnaire(q) {
+            var card = el('div', 'rounded-2xl border border-[#7c3aed]/20 bg-[#7c3aed]/[0.04] overflow-hidden');
+            var hdr = el('div', 'flex items-center gap-3 border-b border-[#7c3aed]/15 px-5 py-3');
+            hdr.appendChild(el('span', 'text-sm', '\u{1F4DD}'));
+            hdr.appendChild(el('span', 'text-sm font-bold tracking-wide text-white/90', q.label));
+            card.appendChild(hdr);
+            var wrap = el('div', 'px-5 py-4 space-y-4');
+            q.items.forEach(function (item) {
+                var qa = el('div', 'rounded-xl border border-white/[0.06] bg-black/10 overflow-hidden');
+                var qHdr = el('div', 'flex items-start gap-3 px-4 py-3 border-b border-white/[0.05]');
+                var codeTag = el('span', 'flex-shrink-0 px-2 py-0.5 rounded-md bg-[#7c3aed]/15 text-[10px] font-bold text-[#7c3aed] tracking-wide', item.code);
+                qHdr.appendChild(codeTag);
+                if (item.principle) {
+                    var princTag = el('span', 'px-2 py-0.5 rounded-md bg-white/[0.05] text-[10px] font-medium text-white/40', item.principle);
+                    qHdr.appendChild(princTag);
+                }
+                qa.appendChild(qHdr);
+                var qBody = el('div', 'px-4 py-3');
+                qBody.appendChild(el('p', 'text-xs font-semibold text-white/50 uppercase tracking-wide mb-1.5', 'Domanda'));
+                qBody.appendChild(el('p', 'text-sm leading-relaxed text-white/80 mb-3', item.question));
+                qBody.appendChild(el('p', 'text-xs font-semibold text-white/50 uppercase tracking-wide mb-1.5', 'Risposta'));
+                qBody.appendChild(el('p', 'text-sm leading-relaxed text-white/65', item.answer));
+                qa.appendChild(qBody);
+                wrap.appendChild(qa);
+            });
+            card.appendChild(wrap);
+            return card;
+        }
+
+        function renderProfile(profile) {
+            var card = el('div', 'rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden');
+            var hdr = el('div', 'flex items-center gap-3 border-b border-white/[0.05] px-5 py-3');
+            hdr.appendChild(el('span', 'text-sm', '\u{2699}'));
+            hdr.appendChild(el('span', 'text-sm font-bold tracking-wide text-white/90', 'Profilo Questionario'));
+            card.appendChild(hdr);
+            var body = el('div', 'px-5 py-4 flex flex-wrap gap-3');
+            if (profile.plan_label) {
+                var pill = el('span', 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#22d3ee]/20 bg-[#22d3ee]/10 text-[11px] font-semibold text-[#22d3ee]', profile.plan_label);
+                body.appendChild(pill);
+            }
+            if (profile.answer_depth) {
+                var pill2 = el('span', 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/10 bg-white/[0.04] text-[11px] font-medium text-white/50', 'Profondit\u00e0: ' + profile.answer_depth);
+                body.appendChild(pill2);
+            }
+            card.appendChild(body);
+            return card;
+        }
+
+        function renderDna(data) {
+            dnaView.innerHTML = '';
+            data.text_fields.forEach(function (f) { dnaView.appendChild(renderTextSection(f)); });
+            data.sections.forEach(function (s) { dnaView.appendChild(renderListSection(s)); });
+            if (data.questionnaire) { dnaView.appendChild(renderQuestionnaire(data.questionnaire)); }
+            if (data.profile) { dnaView.appendChild(renderProfile(data.profile)); }
+        }
+
+        function openContent(url) {
+            badge.textContent = 'Anteprima';
+            badge.className = 'text-[11px] font-semibold uppercase tracking-[0.12em] text-[#22d3ee]';
+            title.textContent = 'Caricamento...';
+            meta.textContent = '';
+            dnaView.innerHTML = '';
+            dnaView.classList.add('hidden');
+            body.classList.add('hidden');
+            body.textContent = '';
+            showModal();
+
+            fetch(url, { headers: { Accept: 'application/json' } })
+                .then(function (r) { if (!r.ok) throw new Error('Contenuto non disponibile'); return r.json(); })
+                .then(function (data) {
+                    title.textContent = data.title || 'Contenuto';
+                    meta.textContent = data.meta || '';
+                    if (data.type === 'dna') {
+                        badge.textContent = 'DNA';
+                        badge.className = 'text-[11px] font-semibold uppercase tracking-[0.12em] text-[#a3e635]';
+                        renderDna(data);
+                        dnaView.classList.remove('hidden');
+                    } else {
+                        badge.textContent = 'Allegato';
+                        badge.className = 'text-[11px] font-semibold uppercase tracking-[0.12em] text-[#22d3ee]';
+                        body.textContent = data.content || 'Nessun contenuto disponibile.';
+                        body.classList.remove('hidden');
+                    }
+                })
+                .catch(function (err) {
+                    badge.textContent = 'Errore';
+                    badge.className = 'text-[11px] font-semibold uppercase tracking-[0.12em] text-[#fb7185]';
+                    title.textContent = 'Errore apertura';
+                    meta.textContent = '';
+                    body.textContent = err.message || 'Impossibile aprire questo contenuto.';
+                    body.classList.remove('hidden');
+                });
+        }
+
+        document.querySelectorAll('[data-open-content]').forEach(function (btn) {
+            btn.addEventListener('click', function () { openContent(btn.dataset.contentUrl); });
+        });
+        document.querySelectorAll('[data-close-content]').forEach(function (btn) {
+            btn.addEventListener('click', hideModal);
+        });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hideModal(); });
+    })();
     </script>
 </body>
 </html>

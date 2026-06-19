@@ -595,11 +595,13 @@ class TestZeusAdminDashboard:
 
         assert company_response.status_code == 200
         assert company_payload["title"] == "DNA completo v2"
-        assert company_payload["sections"][0]["label"] == "Chi Siamo"
-        assert company_payload["sections"][0]["text"] == "Versione corrente"
+        assert company_payload["type"] == "dna"
+        assert company_payload["text_fields"][0]["label"] == "Chi Siamo"
+        assert company_payload["text_fields"][0]["text"] == "Versione corrente"
         assert product_response.status_code == 200
         assert product_payload["title"] == "Prodotto DNA · DNA completo v2"
-        assert product_payload["sections"][0]["text"] == "Corrente"
+        assert product_payload["type"] == "dna"
+        assert product_payload["text_fields"][0]["text"] == "Corrente"
 
         delete_company_request = RequestFactory().post(
             reverse("zeus-admin-company-dna-delete", args=[tenant.pk, current_company_dna.pk]),

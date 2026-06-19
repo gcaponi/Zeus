@@ -79,6 +79,8 @@ DNA_SECTION_LABELS = {
     "pilastri": "Pilastri",
 }
 
+SECTION_ORDER = ["chi_siamo", "mission", "settore", "mercato", "pilastri"]
+
 
 def _dna_content_text(dna):
     if isinstance(dna.content, str):
@@ -116,36 +118,69 @@ def _content_response(title, meta, content):
 
 
 def _dna_response(title, meta, dna):
-    sections = []
     content = _dna_content_dict(dna)
-    ordered_keys = ["chi_siamo", "mission", "settore", "mercato", "pilastri"]
-    for key in ordered_keys:
+    sections = []
+    text_fields = []
+
+    for key in SECTION_ORDER:
         value = content.get(key)
         if not value:
             continue
         label = DNA_SECTION_LABELS.get(key, key)
         if isinstance(value, list):
             items = [str(item) for item in value if item]
-            sections.append({"label": label, "items": items})
+            sections.append({"type": "list", "label": label, "items": items})
         else:
-            sections.append({"label": label, "text": str(value)})
+            text_fields.append({"label": label, "text": str(value)})
+
     for key, value in content.items():
-        if key in ordered_keys or not value:
+        if key in SECTION_ORDER or not value:
+            continue
+        if key.startswith("questionario_") or key == "profilo_questionario":
             continue
         label = DNA_SECTION_LABELS.get(key, key.replace("_", " ").title())
         if isinstance(value, list):
             items = [str(item) for item in value if item]
-            sections.append({"label": label, "items": items})
-        else:
-            sections.append({"label": label, "text": str(value)})
-    return JsonResponse(
-        {
-            "title": title,
-            "meta": meta,
-            "content": "",
-            "sections": sections,
-        },
-    )
+            sections.append({"type": "list", "label": label, "items": items})
+        elif isinstance(value, str):
+            text_fields.append({"label": label, "text": value})
+
+    questionnaire = None
+    qkey = next((k for k in content if k.startswith("questionario_")), None)
+    if qkey and isinstance(content[qkey], list):
+        raw_qa = content[qkey]
+        qa_items = []
+        for item in raw_qa:
+            if isinstance(item, dict) and item.get("answer"):
+                qa_items.append({
+                    "code": item.get("code", ""),
+                    "question": item.get("question", ""),
+                    "answer": item.get("answer", ""),
+                    "principle": item.get("principle", ""),
+                    "section_key": item.get("section_key", ""),
+                })
+        if qa_items:
+            q_label = "Questionario A1-A20" if qkey.endswith("a1_a20") else "Questionario D1-D20"
+            questionnaire = {"label": q_label, "items": qa_items}
+
+    profile = None
+    raw_profile = content.get("profilo_questionario")
+    if isinstance(raw_profile, dict):
+        profile = {
+            "plan_label": raw_profile.get("plan_label", ""),
+            "answer_depth": raw_profile.get("answer_depth", ""),
+        }
+
+    return JsonResponse({
+        "title": title,
+        "meta": meta,
+        "content": "",
+        "type": "dna",
+        "text_fields": text_fields,
+        "sections": sections,
+        "questionnaire": questionnaire,
+        "profile": profile,
+    })
 
 
 @dataclass
