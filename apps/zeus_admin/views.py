@@ -1,3 +1,4 @@
+import json
 import os
 from contextlib import nullcontext
 from dataclasses import dataclass
@@ -8,12 +9,11 @@ from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db import connection
 from django.db.models import Sum
-from django.http import Http404, HttpResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
-from django.utils.text import get_valid_filename
 from django_tenants.utils import schema_context
 
 from apps.companies.models import (
@@ -23,6 +23,7 @@ from apps.companies.models import (
     LLMCall,
     PipelineRun,
     Product,
+    ProductDNA,
     ProductFile,
 )
 from apps.core.models import Client, Plan, WorkspaceAccess, WorkspaceSubscription
@@ -70,11 +71,26 @@ def _excluded_domains():
     return set(getattr(settings, "ZEUS_ADMIN_EXCLUDED_DOMAINS", DEFAULT_EXCLUDED_DOMAINS))
 
 
-def _text_file_response(name, content):
-    filename = get_valid_filename(name) or "zeus-file.txt"
-    response = HttpResponse(content or "", content_type="text/plain; charset=utf-8")
-    response["Content-Disposition"] = f'inline; filename="{filename}"'
-    return response
+def _dna_content_text(dna):
+    if isinstance(dna.content, str):
+        return dna.content
+    return json.dumps(dna.content or {}, ensure_ascii=False, indent=2)
+
+
+def _admin_datetime(value):
+    if not value:
+        return "-"
+    return timezone.localtime(value).strftime("%d/%m/%Y %H:%M")
+
+
+def _content_response(title, meta, content):
+    return JsonResponse(
+        {
+            "title": title,
+            "meta": meta,
+            "content": content or "Nessun contenuto testuale disponibile.",
+        },
+    )
 
 
 @dataclass
@@ -424,6 +440,15 @@ def _tenant_detail_data(client):
                 is_current=True,
             ).first()
             data["dna_versions"] = list(company.dna_versions.all()[:8])
+            for dna in data["dna_versions"]:
+                dna.open_url = reverse(
+                    "zeus-admin-company-dna-open",
+                    args=[client.pk, dna.pk],
+                )
+                dna.delete_url = reverse(
+                    "zeus-admin-company-dna-delete",
+                    args=[client.pk, dna.pk],
+                )
             data["sources"] = list(company.sources.all()[:6])
             pipeline_runs = list(company.pipeline_runs.select_related("source")[:8])
             for run in pipeline_runs:
@@ -453,12 +478,23 @@ def _tenant_detail_data(client):
                         args=[client.pk, product_file.pk],
                     )
                 current_dna = product.dna_versions.filter(is_current=True).first()
+                dna_versions = list(product.dna_versions.all()[:8])
+                for product_dna in dna_versions:
+                    product_dna.open_url = reverse(
+                        "zeus-admin-product-dna-open",
+                        args=[client.pk, product_dna.pk],
+                    )
+                    product_dna.delete_url = reverse(
+                        "zeus-admin-product-dna-delete",
+                        args=[client.pk, product_dna.pk],
+                    )
                 products.append(
                     {
                         "product": product,
                         "files": files,
                         "files_count": len(files),
                         "current_dna": current_dna,
+                        "dna_versions": dna_versions,
                     }
                 )
             data["products"] = products
@@ -680,7 +716,12 @@ def open_company_file(request, client_id, file_id):
     with _tenant_context(client.schema_name):
         company = _tenant_company_or_404(client)
         company_file = get_object_or_404(CompanyFile, pk=file_id, company=company)
-        return _text_file_response(company_file.original_name, company_file.content_text)
+        return _content_response(
+            company_file.original_name,
+            f"Allegato aziendale · {company_file.file_size} byte · "
+            f"caricato {_admin_datetime(company_file.created_at)}",
+            company_file.content_text,
+        )
 
 
 @staff_member_required
@@ -711,7 +752,12 @@ def open_product_file(request, client_id, file_id):
             pk=file_id,
             product__company=company,
         )
-        return _text_file_response(product_file.original_name, product_file.content_text)
+        return _content_response(
+            product_file.original_name,
+            f"Allegato prodotto · {product_file.product.name} · "
+            f"{product_file.file_size} byte · caricato {_admin_datetime(product_file.created_at)}",
+            product_file.content_text,
+        )
 
 
 @staff_member_required
@@ -727,4 +773,69 @@ def delete_product_file(request, client_id, file_id):
             product__company=company,
         )
         product_file.delete()
+    return _client_detail_redirect(client, "deleted")
+
+
+@staff_member_required
+def open_company_dna(request, client_id, dna_id):
+    client = get_object_or_404(_clients_queryset(), pk=client_id)
+    with _tenant_context(client.schema_name):
+        company = _tenant_company_or_404(client)
+        dna = get_object_or_404(CompanyDNA, pk=dna_id, company=company)
+        status = "Approvato" if dna.is_fully_approved() else "Review"
+        return _content_response(
+            f"{dna.get_dna_type_display()} v{dna.version}",
+            f"DNA aziendale · {status} · creato {_admin_datetime(dna.created_at)}",
+            _dna_content_text(dna),
+        )
+
+
+@staff_member_required
+def delete_company_dna(request, client_id, dna_id):
+    client = get_object_or_404(_clients_queryset(), pk=client_id)
+    if request.method != "POST":
+        return _client_detail_redirect(client, "not_deleted")
+    with _tenant_context(client.schema_name):
+        company = _tenant_company_or_404(client)
+        dna = get_object_or_404(CompanyDNA, pk=dna_id, company=company)
+        was_current = dna.is_current
+        dna.delete()
+        if was_current and not company.dna_versions.filter(is_current=True).exists():
+            replacement = company.dna_versions.order_by("-version").first()
+            if replacement:
+                replacement.is_current = True
+                replacement.save(update_fields=["is_current"])
+    return _client_detail_redirect(client, "deleted")
+
+
+@staff_member_required
+def open_product_dna(request, client_id, dna_id):
+    client = get_object_or_404(_clients_queryset(), pk=client_id)
+    with _tenant_context(client.schema_name):
+        company = _tenant_company_or_404(client)
+        dna = get_object_or_404(ProductDNA, pk=dna_id, product__company=company)
+        status = "Approvato" if dna.is_fully_approved() else "Review"
+        return _content_response(
+            f"{dna.product.name} · {dna.get_dna_type_display()} v{dna.version}",
+            f"ProductDNA · {status} · creato {_admin_datetime(dna.created_at)}",
+            _dna_content_text(dna),
+        )
+
+
+@staff_member_required
+def delete_product_dna(request, client_id, dna_id):
+    client = get_object_or_404(_clients_queryset(), pk=client_id)
+    if request.method != "POST":
+        return _client_detail_redirect(client, "not_deleted")
+    with _tenant_context(client.schema_name):
+        company = _tenant_company_or_404(client)
+        dna = get_object_or_404(ProductDNA, pk=dna_id, product__company=company)
+        product = dna.product
+        was_current = dna.is_current
+        dna.delete()
+        if was_current and not product.dna_versions.filter(is_current=True).exists():
+            replacement = product.dna_versions.order_by("-version").first()
+            if replacement:
+                replacement.is_current = True
+                replacement.save(update_fields=["is_current"])
     return _client_detail_redirect(client, "deleted")

@@ -1,3 +1,4 @@
+import json
 from datetime import date
 
 import pytest
@@ -116,6 +117,8 @@ class TestZeusAdminDashboard:
         assert b"Storage" in response.content
         assert b"/zeus-admin/clients/?segment=active" in response.content
         assert b"/zeus-admin/clients/?segment=complete_dna" in response.content
+        main_html = response.content.decode().split("<main", 1)[1]
+        assert "Django Admin" not in main_html
 
     def test_system_health_in_context(self, monkeypatch):
         monkeypatch.setattr(TenantClient, "auto_create_schema", False)
@@ -197,6 +200,8 @@ class TestZeusAdminDashboard:
         assert "Rossi Metalli" in html
         assert "Bianchi Infissi" not in html
         assert "1 di 2 workspace" in html
+        main_html = html.split("<main", 1)[1]
+        assert "Django Admin" not in main_html
 
     def test_clients_htmx_returns_results_partial(self, monkeypatch):
         monkeypatch.setattr(TenantClient, "auto_create_schema", False)
@@ -250,7 +255,7 @@ class TestZeusAdminDashboard:
             schema_name="rossi-metalli",
             name="Rossi Metalli SRL",
         )
-        CompanyDNA.objects.create(
+        company_dna = CompanyDNA.objects.create(
             company=company,
             version=1,
             dna_type=CompanyDNA.TYPE_COMPLETE,
@@ -268,7 +273,7 @@ class TestZeusAdminDashboard:
             name="Prodotto Alpha",
             slug="prodotto-alpha",
         )
-        ProductDNA.objects.create(
+        product_dna = ProductDNA.objects.create(
             product=product,
             version=1,
             dna_type=ProductDNA.TYPE_COMPLETE,
@@ -299,6 +304,13 @@ class TestZeusAdminDashboard:
         assert "Cambia Password" in html
         assert "Apri" in html
         assert "Elimina" in html
+        assert "zeus-content-modal" in html
+        assert "data-open-content" in html
+        assert "Record tecnico" in html
+        assert reverse("zeus-admin-company-dna-open", args=[tenant.pk, company_dna.pk]) in html
+        assert reverse("zeus-admin-product-dna-open", args=[tenant.pk, product_dna.pk]) in html
+        main_html = html.split("<main", 1)[1]
+        assert "Django Admin" not in main_html
 
     def test_client_detail_updates_subscription_configuration(self, monkeypatch):
         monkeypatch.setattr(TenantClient, "auto_create_schema", False)
@@ -473,11 +485,17 @@ class TestZeusAdminDashboard:
             tenant.pk,
             product_file.pk,
         )
+        company_payload = json.loads(company_response.content)
+        product_payload = json.loads(product_response.content)
 
         assert company_response.status_code == 200
-        assert company_response.content.decode() == "Contenuto aziendale completo"
+        assert company_payload["title"] == "Company notes.txt"
+        assert company_payload["content"] == "Contenuto aziendale completo"
+        assert company_payload["meta"].startswith("Allegato aziendale")
         assert product_response.status_code == 200
-        assert product_response.content.decode() == "Contenuto prodotto completo"
+        assert product_payload["title"] == "Product notes.txt"
+        assert product_payload["content"] == "Contenuto prodotto completo"
+        assert product_payload["meta"].startswith("Allegato prodotto")
 
         delete_company_request = RequestFactory().post(
             reverse("zeus-admin-company-file-delete", args=[tenant.pk, company_file.pk]),
@@ -505,3 +523,108 @@ class TestZeusAdminDashboard:
         assert not CompanyFile.objects.filter(pk=company_file.pk).exists()
         assert not ProductFile.objects.filter(pk=product_file.pk).exists()
         assert subscription.company_files_used == 0
+
+    def test_admin_can_open_and_delete_dna_versions(self, monkeypatch):
+        monkeypatch.setattr(TenantClient, "auto_create_schema", False)
+        staff = User.objects.create_user(
+            username="dna-staff",
+            email="dna@example.com",
+            password="pw",
+            is_staff=True,
+        )
+        tenant = TenantClient.objects.create(
+            schema_name="dna-client",
+            name="DNA Client",
+        )
+        company = Company.objects.create(
+            schema_name="dna-client",
+            name="DNA Client SRL",
+        )
+        older_company_dna = CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_PRE,
+            content={"chi_siamo": "Versione precedente"},
+            is_current=False,
+        )
+        current_company_dna = CompanyDNA.objects.create(
+            company=company,
+            version=2,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            content={"chi_siamo": "Versione corrente"},
+        )
+        product = Product.objects.create(
+            company=company,
+            name="Prodotto DNA",
+            slug="prodotto-dna",
+        )
+        older_product_dna = ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_PRE,
+            content={"descrizione": "Bozza"},
+            is_current=False,
+        )
+        current_product_dna = ProductDNA.objects.create(
+            product=product,
+            version=2,
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            content={"descrizione": "Corrente"},
+        )
+        open_company_request = RequestFactory().get(
+            reverse("zeus-admin-company-dna-open", args=[tenant.pk, current_company_dna.pk]),
+        )
+        open_company_request.user = staff
+        open_product_request = RequestFactory().get(
+            reverse("zeus-admin-product-dna-open", args=[tenant.pk, current_product_dna.pk]),
+        )
+        open_product_request.user = staff
+
+        company_response = views.open_company_dna(
+            open_company_request,
+            tenant.pk,
+            current_company_dna.pk,
+        )
+        product_response = views.open_product_dna(
+            open_product_request,
+            tenant.pk,
+            current_product_dna.pk,
+        )
+        company_payload = json.loads(company_response.content)
+        product_payload = json.loads(product_response.content)
+
+        assert company_response.status_code == 200
+        assert company_payload["title"] == "DNA completo v2"
+        assert '"chi_siamo": "Versione corrente"' in company_payload["content"]
+        assert product_response.status_code == 200
+        assert product_payload["title"] == "Prodotto DNA · DNA completo v2"
+        assert '"descrizione": "Corrente"' in product_payload["content"]
+
+        delete_company_request = RequestFactory().post(
+            reverse("zeus-admin-company-dna-delete", args=[tenant.pk, current_company_dna.pk]),
+        )
+        delete_company_request.user = staff
+        delete_product_request = RequestFactory().post(
+            reverse("zeus-admin-product-dna-delete", args=[tenant.pk, current_product_dna.pk]),
+        )
+        delete_product_request.user = staff
+
+        company_delete_response = views.delete_company_dna(
+            delete_company_request,
+            tenant.pk,
+            current_company_dna.pk,
+        )
+        product_delete_response = views.delete_product_dna(
+            delete_product_request,
+            tenant.pk,
+            current_product_dna.pk,
+        )
+
+        older_company_dna.refresh_from_db()
+        older_product_dna.refresh_from_db()
+        assert company_delete_response.status_code == 302
+        assert product_delete_response.status_code == 302
+        assert not CompanyDNA.objects.filter(pk=current_company_dna.pk).exists()
+        assert not ProductDNA.objects.filter(pk=current_product_dna.pk).exists()
+        assert older_company_dna.is_current is True
+        assert older_product_dna.is_current is True

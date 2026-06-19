@@ -17,6 +17,16 @@ urlpatterns = [
         name="zeus-admin-company-file-delete",
     ),
     path(
+        "clients/<int:client_id>/company-dna/<int:dna_id>/",
+        views.open_company_dna,
+        name="zeus-admin-company-dna-open",
+    ),
+    path(
+        "clients/<int:client_id>/company-dna/<int:dna_id>/delete/",
+        views.delete_company_dna,
+        name="zeus-admin-company-dna-delete",
+    ),
+    path(
         "clients/<int:client_id>/product-files/<int:file_id>/",
         views.open_product_file,
         name="zeus-admin-product-file-open",
@@ -25,5 +35,15 @@ urlpatterns = [
         "clients/<int:client_id>/product-files/<int:file_id>/delete/",
         views.delete_product_file,
         name="zeus-admin-product-file-delete",
+    ),
+    path(
+        "clients/<int:client_id>/product-dna/<int:dna_id>/",
+        views.open_product_dna,
+        name="zeus-admin-product-dna-open",
+    ),
+    path(
+        "clients/<int:client_id>/product-dna/<int:dna_id>/delete/",
+        views.delete_product_dna,
+        name="zeus-admin-product-dna-delete",
     ),
 ]
