@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ZEUS Admin - {{ client.name }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        display: ['Space Grotesk', 'Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                },
+            },
+        }
+    </script>
+    <style>
+        :root {
+            --zeus-bg: #020617;
+            --zeus-panel: rgba(255, 255, 255, 0.03);
+            --zeus-panel-strong: rgba(255, 255, 255, 0.05);
+            --zeus-border: rgba(255, 255, 255, 0.08);
+            --zeus-cyan: #22d3ee;
+            --zeus-violet: #7c3aed;
+            --zeus-lime: #a3e635;
+            --zeus-amber: #fbbf24;
+            --zeus-red: #fb7185;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            min-height: 100vh;
+            margin: 0;
+            background:
+                radial-gradient(circle at 18% 8%, rgba(34, 211, 238, 0.10), transparent 28rem),
+                radial-gradient(circle at 78% 10%, rgba(124, 58, 237, 0.12), transparent 30rem),
+                radial-gradient(circle at 52% 92%, rgba(163, 230, 53, 0.06), transparent 24rem),
+                var(--zeus-bg);
+            color: white;
+            font-family: Inter, system-ui, sans-serif;
+        }
+
+        .glass-card {
+            border: 1px solid var(--zeus-border);
+            border-radius: 12px;
+            background: var(--zeus-panel);
+            box-shadow: 0 24px 100px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(22px) saturate(150%);
+            transition: all 0.2s ease;
+        }
+
+        .glass-card:hover {
+            border-color: rgba(34, 211, 238, 0.15);
+            background: var(--zeus-panel-strong);
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .tone-online { background: rgba(163, 230, 53, 0.12); color: var(--zeus-lime); }
+        .tone-online .status-dot { background: var(--zeus-lime); }
+        .tone-info { background: rgba(34, 211, 238, 0.12); color: var(--zeus-cyan); }
+        .tone-info .status-dot { background: var(--zeus-cyan); }
+        .tone-warning { background: rgba(251, 191, 36, 0.13); color: var(--zeus-amber); }
+        .tone-warning .status-dot { background: var(--zeus-amber); }
+        .tone-error { background: rgba(251, 113, 133, 0.13); color: var(--zeus-red); }
+        .tone-error .status-dot { background: var(--zeus-red); }
+        .tone-muted { background: rgba(255, 255, 255, 0.06); color: rgba(255, 255, 255, 0.50); }
+        .tone-muted .status-dot { background: rgba(255, 255, 255, 0.30); }
+
+        .nav-active {
+            position: relative;
+            background: rgba(34, 211, 238, 0.10);
+            color: var(--zeus-cyan);
+        }
+
+        .nav-active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 3px;
+            height: 20px;
+            background: var(--zeus-cyan);
+            border-radius: 0 2px 2px 0;
+        }
+
+        .health-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .health-ok { background: var(--zeus-lime); }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <aside class="fixed left-0 top-0 bottom-0 w-60 border-r border-white/[0.06] bg-[#12121f] z-50 flex flex-col">
+        <div class="h-14 flex items-center gap-3 px-5 border-b border-white/[0.06]">
+            <span class="flex h-8 w-8 items-center justify-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 text-base">⚡</span>
+            <div>
+                <span class="text-sm font-bold tracking-[0.15em] text-white">ZEUS</span>
+                <span class="block text-[9px] text-white/40 tracking-[0.2em] uppercase -mt-0.5">Knowledge Engine</span>
+            </div>
+        </div>
+        <nav class="flex-1 px-3 py-4 space-y-1">
+            <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium text-white/50 hover:text-white/80 hover:bg-white/[0.03]" href="{% url 'zeus-admin-dashboard' %}">
+                <span>📊</span>
+                <span>Dashboard</span>
+            </a>
+            <a class="nav-active flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium" href="{% url 'zeus-admin-clients' %}">
+                <span>👥</span>
+                <span>Clienti</span>
+            </a>
+            <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium text-white/50 hover:text-white/80 hover:bg-white/[0.03]" href="/admin/">
+                <span>🔧</span>
+                <span>Django Admin</span>
+            </a>
+        </nav>
+        <div class="px-4 py-4 border-t border-white/[0.06]">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-[10px] text-white/40 uppercase tracking-wider">Sistema</span>
+                <div class="flex items-center gap-1.5">
+                    <div class="health-dot health-ok"></div>
+                    <span class="text-[10px] text-[#a3e635] font-medium">Online</span>
+                </div>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="text-[10px] text-white/30">Versione</span>
+                <span class="text-[10px] text-white/50">v2.0.0</span>
+            </div>
+        </div>
+    </aside>
+
+    <main class="min-h-screen ml-60 px-6 py-5">
+        <header class="glass-card flex items-center justify-between px-6 py-4">
+            <div class="flex items-center gap-2 text-sm">
+                <a href="{% url 'zeus-admin-dashboard' %}" class="text-white/40 hover:text-white/70">ZEUS</a>
+                <span class="text-white/25">/</span>
+                <a href="{% url 'zeus-admin-clients' %}" class="text-white/40 hover:text-white/70">Clienti</a>
+                <span class="text-white/25">/</span>
+                <span class="text-white/70 font-medium">{{ client.name }}</span>
+            </div>
+            <a href="/accounts/logout/" class="text-xs font-medium text-white/50 hover:text-white/80 transition-colors">Logout</a>
+        </header>
+
+        {% if saved %}
+            <div class="mt-6 rounded-xl border border-[#a3e635]/20 bg-[#a3e635]/10 px-5 py-4 text-sm font-semibold text-[#a3e635]">Configurazione salvata.</div>
+        {% endif %}
+        {% if tenant.warning %}
+            <div class="mt-6 rounded-xl border border-[#fbbf24]/20 bg-[#fbbf24]/10 px-5 py-4 text-sm font-semibold text-[#fbbf24]">{{ tenant.warning }}</div>
+        {% endif %}
+
+        <section class="mt-6 glass-card p-6">
+            <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                <div class="flex items-start gap-4">
+                    <div class="flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-xl font-black text-cyan-100">{{ client.name|first }}</div>
+                    <div>
+                        <p class="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#22d3ee]">Workspace</p>
+                        <h1 class="mt-2 font-display text-3xl font-bold tracking-tight text-white">{{ client.name }}</h1>
+                        <p class="mt-1 font-mono text-xs text-white/45">schema: {{ client.schema_name }} · dominio: {{ domain|default:"-" }}</p>
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    {% if workspace_url %}
+                        <a href="{{ workspace_url }}" target="_blank" rel="noopener" class="rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-xs font-bold text-cyan-100 hover:bg-cyan-300/15">Apri Workspace</a>
+                    {% endif %}
+                    <a href="{{ admin_links.client }}" class="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-xs font-bold text-white/60 hover:text-white/85">Django Admin</a>
+                    <a href="{{ admin_links.password }}" class="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-xs font-bold text-white/60 hover:text-white/85">Cambia Password</a>
+                </div>
+            </div>
+        </section>
+
+        <section class="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-4">
+            <div class="glass-card p-5">
+                <p class="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/40">Subscription</p>
+                <p class="mt-3 text-2xl font-bold text-[#a3e635]">{{ subscription.status|default:"missing" }}</p>
+            </div>
+            <div class="glass-card p-5">
+                <p class="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/40">Piano</p>
+                <p class="mt-3 text-2xl font-bold text-[#22d3ee]">{{ subscription.plan.name|default:"Nessun piano" }}</p>
+            </div>
+            <div class="glass-card p-5">
+                <p class="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/40">LLM Mese</p>
+                <p class="mt-3 text-2xl font-bold text-[#a3e635]">${{ tenant.llm_cost_month|floatformat:2 }}</p>
+            </div>
+            <div class="glass-card p-5">
+                <p class="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/40">Allegati</p>
+                <p class="mt-3 text-2xl font-bold text-[#7c3aed]">{{ tenant.company_files_count|add:tenant.product_files_count }}</p>
+            </div>
+        </section>
+
+        <section class="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[420px_1fr]">
+            <div class="space-y-6">
+                <section class="glass-card p-5">
+                    <h2 class="text-sm font-semibold text-white/90">Configurazione Rapida</h2>
+                    <form method="post" class="mt-4 space-y-4">
+                        {% csrf_token %}
+                        <div>
+                            <label class="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/35">Piano</label>
+                            <select name="plan_id" class="mt-2 w-full rounded-xl border border-white/10 bg-[#07111f] px-4 py-3 text-sm text-white/75 outline-none focus:border-cyan-300/35">
+                                {% for plan in plans %}
+                                    <option value="{{ plan.pk }}" {% if plan.pk == current_plan_id %}selected{% endif %}>{{ plan.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/35">Status</label>
+                            <select name="status" class="mt-2 w-full rounded-xl border border-white/10 bg-[#07111f] px-4 py-3 text-sm text-white/75 outline-none focus:border-cyan-300/35">
+                                {% for status_value, status_label in status_choices %}
+                                    <option value="{{ status_value }}" {% if current_status == status_value %}selected{% endif %}>{{ status_label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <label class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/65">
+                                <input type="checkbox" name="on_trial" class="mr-2" {% if client.on_trial %}checked{% endif %}>
+                                Trial attivo
+                            </label>
+                            <div>
+                                <label class="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/35">Paid until</label>
+                                <input type="date" name="paid_until" value="{{ client.paid_until|date:'Y-m-d' }}" class="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white/75 outline-none focus:border-cyan-300/35">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/35">Note interne</label>
+                            <textarea name="notes" rows="4" class="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white/75 outline-none focus:border-cyan-300/35">{{ subscription.notes }}</textarea>
+                        </div>
+                        <button class="w-full rounded-xl bg-white px-5 py-3 text-sm font-bold text-slate-950 hover:bg-cyan-100" type="submit">Salva configurazione</button>
+                    </form>
+                </section>
+
+                <section class="glass-card p-5">
+                    <h2 class="text-sm font-semibold text-white/90">Limiti Piano</h2>
+                    <div class="mt-4 space-y-3 text-sm">
+                        <div class="flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.03] p-3">
+                            <span class="text-white/55">File aziendali</span>
+                            <span class="font-mono text-white/80">{{ limits.company_files.used }}/{{ limits.company_files.limit }}</span>
+                        </div>
+                        <div class="flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.03] p-3">
+                            <span class="text-white/55">Prodotti / ProductDNA</span>
+                            <span class="font-mono text-white/80">{{ limits.products.used }}/{{ limits.products.limit }}</span>
+                        </div>
+                        <div class="flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.03] p-3">
+                            <span class="text-white/55">File per prodotto</span>
+                            <span class="font-mono text-white/80">{{ limits.files_per_product }}</span>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="glass-card p-5">
+                    <h2 class="text-sm font-semibold text-white/90">Accesso e Domini</h2>
+                    <div class="mt-4 space-y-3 text-sm">
+                        <div class="rounded-xl border border-white/8 bg-white/[0.03] p-3">
+                            <p class="text-[11px] uppercase tracking-[0.1em] text-white/35">Owner email</p>
+                            <p class="mt-1 text-white/75">{{ owner_email }}</p>
+                        </div>
+                        {% for item in domains %}
+                            <div class="rounded-xl border border-white/8 bg-white/[0.03] p-3">
+                                <p class="font-mono text-xs text-white/70">{{ item.domain }}</p>
+                                <p class="mt-1 text-[10px] text-white/35">{% if item.is_primary %}Primario{% else %}Alias{% endif %}</p>
+                            </div>
+                        {% empty %}
+                            <p class="rounded-xl border border-[#fbbf24]/15 bg-[#fbbf24]/10 p-3 text-xs font-semibold text-[#fbbf24]">Nessun dominio configurato.</p>
+                        {% endfor %}
+                        <div class="flex flex-wrap gap-2 pt-2">
+                            <a href="{{ admin_links.domains }}" class="text-xs font-semibold text-cyan-100 hover:underline">Configura domini</a>
+                            <a href="{{ admin_links.workspace_access }}" class="text-xs font-semibold text-cyan-100 hover:underline">Configura accesso</a>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <div class="space-y-6">
+                <section class="glass-card p-5">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-sm font-semibold text-white/90">DNA Aziendale</h2>
+                        {% if tenant.current_dna %}
+                            <span class="status-pill {% if tenant.current_dna.is_fully_approved %}tone-online{% else %}tone-warning{% endif %}"><span class="status-dot"></span>v{{ tenant.current_dna.version }}</span>
+                        {% else %}
+                            <span class="status-pill tone-muted"><span class="status-dot"></span>Assente</span>
+                        {% endif %}
+                    </div>
+                    <div class="mt-4 grid gap-3 md:grid-cols-2">
+                        {% for dna in tenant.dna_versions %}
+                            <div class="rounded-xl border border-white/8 bg-white/[0.03] p-4">
+                                <div class="flex items-center justify-between gap-3">
+                                    <p class="text-sm font-semibold text-white/80">{{ dna.get_dna_type_display }} v{{ dna.version }}</p>
+                                    <span class="status-pill {% if dna.is_fully_approved %}tone-online{% else %}tone-warning{% endif %}"><span class="status-dot"></span>{% if dna.is_fully_approved %}Approvato{% else %}Review{% endif %}</span>
+                                </div>
+                                <p class="mt-2 text-[11px] text-white/35">Creato {{ dna.created_at|date:"d/m/Y H:i" }}</p>
+                            </div>
+                        {% empty %}
+                            <p class="rounded-xl border border-white/8 bg-white/[0.03] p-4 text-sm text-white/45">Nessun DNA generato.</p>
+                        {% endfor %}
+                    </div>
+                </section>
+
+                <section class="glass-card p-5">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-sm font-semibold text-white/90">Allegati Aziendali</h2>
+                        <span class="status-pill tone-info"><span class="status-dot"></span>{{ tenant.company_files_count }} file</span>
+                    </div>
+                    <div class="mt-4 space-y-3">
+                        {% for file in tenant.company_files %}
+                            <div class="rounded-xl border border-white/8 bg-white/[0.03] p-4">
+                                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                    <p class="text-sm font-semibold text-white/80">{{ file.original_name }}</p>
+                                    <span class="font-mono text-[11px] text-white/40">{{ file.file_size|filesizeformat }}</span>
+                                </div>
+                                <p class="mt-1 text-[11px] text-white/35">Caricato {{ file.created_at|date:"d/m/Y H:i" }}{% if file.uploaded_by %} da {{ file.uploaded_by.email|default:file.uploaded_by.username }}{% endif %}</p>
+                                <p class="mt-3 text-xs leading-5 text-white/45">{{ file.content_text|truncatechars:220 }}</p>
+                            </div>
+                        {% empty %}
+                            <p class="rounded-xl border border-white/8 bg-white/[0.03] p-4 text-sm text-white/45">Nessun allegato aziendale caricato.</p>
+                        {% endfor %}
+                    </div>
+                </section>
+
+                <section class="glass-card p-5">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-sm font-semibold text-white/90">Prodotti e Allegati Prodotto</h2>
+                        <span class="status-pill tone-info"><span class="status-dot"></span>{{ tenant.products_count }} prodotti</span>
+                    </div>
+                    <div class="mt-4 space-y-4">
+                        {% for item in tenant.products %}
+                            <div class="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <p class="text-base font-semibold text-white/85">{{ item.product.name }}</p>
+                                        <p class="mt-1 font-mono text-[11px] text-white/35">slug: {{ item.product.slug }}</p>
+                                    </div>
+                                    {% if item.current_dna %}
+                                        <span class="status-pill {% if item.current_dna.is_fully_approved %}tone-online{% else %}tone-warning{% endif %}"><span class="status-dot"></span>DNA v{{ item.current_dna.version }}</span>
+                                    {% else %}
+                                        <span class="status-pill tone-muted"><span class="status-dot"></span>No DNA</span>
+                                    {% endif %}
+                                </div>
+                                <div class="mt-4 space-y-2">
+                                    {% for file in item.files %}
+                                        <div class="rounded-xl border border-white/8 bg-black/10 p-3">
+                                            <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                                <p class="text-xs font-semibold text-white/75">{{ file.original_name }}</p>
+                                                <span class="font-mono text-[10px] text-white/35">{{ file.file_size|filesizeformat }}</span>
+                                            </div>
+                                            <p class="mt-2 text-[11px] leading-5 text-white/42">{{ file.content_text|truncatechars:180 }}</p>
+                                        </div>
+                                    {% empty %}
+                                        <p class="rounded-xl border border-white/8 bg-black/10 p-3 text-xs text-white/40">Nessun file prodotto caricato.</p>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        {% empty %}
+                            <p class="rounded-xl border border-white/8 bg-white/[0.03] p-4 text-sm text-white/45">Nessun prodotto creato.</p>
+                        {% endfor %}
+                    </div>
+                </section>
+
+                <section class="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                    <div class="glass-card p-5">
+                        <h2 class="text-sm font-semibold text-white/90">Pipeline Recenti</h2>
+                        <div class="mt-4 space-y-3">
+                            {% for run in tenant.pipeline_runs %}
+                                <div class="rounded-xl border border-white/8 bg-white/[0.03] p-3">
+                                    <div class="flex items-center justify-between gap-3">
+                                        <p class="font-mono text-xs text-white/60">#{{ run.pk }} · {{ run.current_step|default:"-" }}</p>
+                                        <span class="status-pill tone-{{ run.tone }}"><span class="status-dot"></span>{{ run.status }}</span>
+                                    </div>
+                                    <p class="mt-2 text-[11px] text-white/35">{{ run.created_at|date:"d/m/Y H:i" }}</p>
+                                    {% if run.error_msg %}<p class="mt-2 text-xs text-[#fb7185]">{{ run.error_msg }}</p>{% endif %}
+                                </div>
+                            {% empty %}
+                                <p class="rounded-xl border border-white/8 bg-white/[0.03] p-4 text-sm text-white/45">Nessuna pipeline registrata.</p>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="glass-card p-5">
+                        <h2 class="text-sm font-semibold text-white/90">LLM Recenti</h2>
+                        <div class="mt-4 space-y-3">
+                            {% for call in tenant.llm_calls %}
+                                <div class="rounded-xl border border-white/8 bg-white/[0.03] p-3">
+                                    <div class="flex items-center justify-between gap-3">
+                                        <p class="text-xs font-semibold text-white/70">{{ call.model_name }}</p>
+                                        <span class="font-mono text-xs text-[#a3e635]">${{ call.cost_usd|floatformat:4 }}</span>
+                                    </div>
+                                    <p class="mt-2 text-[11px] text-white/35">{{ call.tokens_in }} in · {{ call.tokens_out }} out · {{ call.latency_ms }}ms · {{ call.created_at|date:"d/m/Y H:i" }}</p>
+                                </div>
+                            {% empty %}
+                                <p class="rounded-xl border border-white/8 bg-white/[0.03] p-4 text-sm text-white/45">Nessuna chiamata LLM registrata.</p>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

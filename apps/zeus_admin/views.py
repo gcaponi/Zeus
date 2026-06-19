@@ -7,12 +7,21 @@ from urllib.parse import urlencode
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db import connection
 from django.db.models import Sum
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django_tenants.utils import schema_context
 
-from apps.companies.models import Company, CompanyDNA, LLMCall, PipelineRun, Product
+from apps.companies.models import (
+    Company,
+    CompanyDNA,
+    CompanyFile,
+    LLMCall,
+    PipelineRun,
+    Product,
+    ProductFile,
+)
 from apps.core.models import Client, Plan, WorkspaceAccess, WorkspaceSubscription
 
 
@@ -193,6 +202,7 @@ def _client_rows(clients):
                 "id": client.pk,
                 "name": client.name,
                 "schema_name": client.schema_name,
+                "detail_url": reverse("zeus-admin-client-detail", args=[client.pk]),
                 "domain": domain,
                 "workspace_url": f"https://{domain}/onboarding/" if domain else "",
                 "owner_email": _owner_email(domain),
@@ -335,6 +345,172 @@ def _client_rows_context(request):
     }
 
 
+def _limit_label(plan, field, unlimited_field):
+    if not plan:
+        return "-"
+    if getattr(plan, unlimited_field):
+        return "Illimitati"
+    return getattr(plan, field)
+
+
+def _client_admin_links(client, domain):
+    access_url = reverse("admin:core_workspaceaccess_changelist")
+    domain_url = reverse("admin:core_domain_changelist")
+    return {
+        "client": reverse("admin:core_client_change", args=[client.pk]),
+        "password": reverse("admin:core_client_change_password", args=[client.pk]),
+        "domains": f"{domain_url}?q={client.schema_name}",
+        "workspace_access": f"{access_url}?q={domain}" if domain else access_url,
+    }
+
+
+def _tenant_detail_data(client):
+    data = {
+        "company": None,
+        "company_files": [],
+        "company_files_count": 0,
+        "current_dna": None,
+        "complete_dna": None,
+        "dna_versions": [],
+        "products": [],
+        "products_count": 0,
+        "product_files_count": 0,
+        "sources": [],
+        "pipeline_runs": [],
+        "llm_calls": [],
+        "llm_cost_month": 0.0,
+        "warning": "",
+    }
+    try:
+        with _tenant_context(client.schema_name):
+            company = Company.objects.filter(schema_name=client.schema_name).first()
+            if not company:
+                data["warning"] = "Company non ancora creata nel tenant."
+                return data
+
+            data["company"] = company
+            data["company_files"] = list(company.company_files.select_related("uploaded_by")[:20])
+            data["company_files_count"] = CompanyFile.objects.filter(
+                company=company,
+            ).count()
+            data["current_dna"] = company.dna_versions.filter(is_current=True).first()
+            data["complete_dna"] = company.dna_versions.filter(
+                dna_type=CompanyDNA.TYPE_COMPLETE,
+                is_current=True,
+            ).first()
+            data["dna_versions"] = list(company.dna_versions.all()[:8])
+            data["sources"] = list(company.sources.all()[:6])
+            pipeline_runs = list(company.pipeline_runs.select_related("source")[:8])
+            for run in pipeline_runs:
+                run.tone = _pipeline_tone(run.status)
+            data["pipeline_runs"] = pipeline_runs
+            data["llm_calls"] = list(company.llm_calls.all()[:10])
+            data["llm_cost_month"] = (
+                company.llm_calls.filter(created_at__gte=_month_start()).aggregate(
+                    total=Sum("cost_usd"),
+                )["total"]
+                or 0.0
+            )
+
+            products = []
+            for product in company.products.prefetch_related(
+                "product_files",
+                "dna_versions",
+            ):
+                files = list(product.product_files.select_related("uploaded_by")[:10])
+                current_dna = product.dna_versions.filter(is_current=True).first()
+                products.append(
+                    {
+                        "product": product,
+                        "files": files,
+                        "files_count": len(files),
+                        "current_dna": current_dna,
+                    }
+                )
+            data["products"] = products
+            data["products_count"] = len(products)
+            data["product_files_count"] = ProductFile.objects.filter(
+                product__company=company,
+            ).count()
+    except Exception:
+        data["warning"] = "Tenant non leggibile. Controllare schema e migrazioni."
+    return data
+
+
+def _update_client_config(request, client):
+    plan = Plan.objects.filter(pk=request.POST.get("plan_id")).first() or Plan.get_default()
+    status = request.POST.get("status", WorkspaceSubscription.STATUS_TRIAL)
+    valid_statuses = {choice[0] for choice in WorkspaceSubscription.STATUS_CHOICES}
+    if status not in valid_statuses:
+        status = WorkspaceSubscription.STATUS_TRIAL
+
+    paid_until_raw = request.POST.get("paid_until", "").strip()
+    client.paid_until = parse_date(paid_until_raw) if paid_until_raw else None
+    client.on_trial = request.POST.get("on_trial") == "on"
+    client.save(update_fields=["paid_until", "on_trial"])
+
+    subscription, _ = WorkspaceSubscription.objects.get_or_create(
+        client=client,
+        defaults={"plan": plan, "status": status},
+    )
+    subscription.plan = plan
+    subscription.status = status
+    subscription.notes = request.POST.get("notes", "").strip()
+    subscription.save()
+
+
+def _client_detail_context(request, client):
+    domain = _primary_domain(client)
+    subscription = getattr(client, "subscription", None)
+    tenant_data = _tenant_detail_data(client)
+    plans = list(Plan.objects.filter(is_active=True).order_by("name"))
+    if not plans:
+        plans = [Plan.get_default()]
+    plan = subscription.plan if subscription else plans[0]
+    company_files_used = tenant_data["company_files_count"]
+    products_used = tenant_data["products_count"]
+    return {
+        "client": client,
+        "domain": domain,
+        "domains": list(client.domains.all()),
+        "owner_email": _owner_email(domain),
+        "workspace_url": f"https://{domain}/onboarding/" if domain else "",
+        "admin_links": _client_admin_links(client, domain),
+        "subscription": subscription,
+        "plans": plans,
+        "status_choices": WorkspaceSubscription.STATUS_CHOICES,
+        "current_status": subscription.status
+        if subscription
+        else WorkspaceSubscription.STATUS_TRIAL,
+        "current_plan_id": plan.pk,
+        "tenant": tenant_data,
+        "saved": request.GET.get("saved") == "1",
+        "limits": {
+            "company_files": {
+                "used": company_files_used,
+                "limit": _limit_label(
+                    plan,
+                    "max_company_files",
+                    "unlimited_company_files",
+                ),
+            },
+            "products": {
+                "used": products_used,
+                "limit": _limit_label(
+                    plan,
+                    "max_product_dnas",
+                    "unlimited_product_dnas",
+                ),
+            },
+            "files_per_product": _limit_label(
+                plan,
+                "max_files_per_product",
+                "unlimited_files_per_product",
+            ),
+        },
+    }
+
+
 @staff_member_required
 def dashboard(request):
     clients = list(_clients_queryset())
@@ -439,3 +615,13 @@ def clients(request):
     if request.headers.get("HX-Request"):
         template = "zeus_admin/_clients_results.html"
     return render(request, template, context)
+
+
+@staff_member_required
+def client_detail(request, client_id):
+    client = get_object_or_404(_clients_queryset(), pk=client_id)
+    if request.method == "POST":
+        _update_client_config(request, client)
+        return redirect(f"{reverse('zeus-admin-client-detail', args=[client.pk])}?saved=1")
+    context = _client_detail_context(request, client)
+    return render(request, "zeus_admin/client_detail.html", context)

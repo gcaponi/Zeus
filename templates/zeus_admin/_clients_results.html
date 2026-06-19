@@ -30,7 +30,7 @@
                                 {{ client.name|first }}
                             </div>
                             <div>
-                                <p class="text-xs font-medium text-white/80">{{ client.name }}</p>
+                                <a href="{{ client.detail_url }}" class="text-xs font-medium text-white/80 hover:text-cyan-100 hover:underline">{{ client.name }}</a>
                                 <p class="text-[10px] text-white/35 font-mono">{{ client.domain|default:client.schema_name }}</p>
                             </div>
                         </div>
@@ -68,6 +68,7 @@
                             {% if client.workspace_url %}
                                 <a href="{{ client.workspace_url }}" class="text-[10px] font-medium text-[#22d3ee] hover:underline" target="_blank" rel="noopener">Workspace</a>
                             {% endif %}
+                            <a href="{{ client.detail_url }}" class="text-[10px] font-medium text-cyan-100 hover:underline">Dettaglio</a>
                             <a href="/admin/core/client/{{ client.id }}/change/" class="text-[10px] font-medium text-white/40 hover:text-white/60 hover:underline">Admin</a>
                         </div>
                     </td>

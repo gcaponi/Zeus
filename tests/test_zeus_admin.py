@@ -1,10 +1,21 @@
+from datetime import date
+
 import pytest
 from django.contrib.auth import get_user_model
 from django.test import Client as TestClient
 from django.test import RequestFactory
 from django.urls import reverse
 
-from apps.companies.models import Company, CompanyDNA, LLMCall, PipelineRun, Product
+from apps.companies.models import (
+    Company,
+    CompanyDNA,
+    CompanyFile,
+    LLMCall,
+    PipelineRun,
+    Product,
+    ProductDNA,
+    ProductFile,
+)
 from apps.core.models import Client as TenantClient
 from apps.core.models import Domain, Plan, WorkspaceSubscription
 from apps.zeus_admin import views
@@ -28,6 +39,10 @@ class TestZeusAdminDashboard:
         assert response.status_code == 302
 
         response = client.get(reverse("zeus-admin-clients"))
+
+        assert response.status_code == 302
+
+        response = client.get(reverse("zeus-admin-client-detail", args=[1]))
 
         assert response.status_code == 302
 
@@ -203,3 +218,131 @@ class TestZeusAdminDashboard:
         assert response.status_code == 200
         assert "Risultati Clienti" in html
         assert "Clienti ZEUS" not in html
+
+    def test_client_detail_shows_configuration_and_uploaded_files(self, monkeypatch):
+        monkeypatch.setattr(TenantClient, "auto_create_schema", False)
+        staff = User.objects.create_user(
+            username="detail-staff",
+            email="detail@example.com",
+            password="pw",
+            is_staff=True,
+        )
+        tenant = TenantClient.objects.create(
+            schema_name="rossi-metalli",
+            name="Rossi Metalli",
+        )
+        Domain.objects.create(
+            tenant=tenant,
+            domain="rossi.zeus.cais.uno",
+            is_primary=True,
+        )
+        plan, _ = Plan.objects.update_or_create(
+            slug=Plan.SLUG_STARTER,
+            defaults=Plan.default_values(Plan.SLUG_STARTER),
+        )
+        WorkspaceSubscription.objects.create(
+            client=tenant,
+            plan=plan,
+            status=WorkspaceSubscription.STATUS_ACTIVE,
+            notes="Cliente strategico",
+        )
+        company = Company.objects.create(
+            schema_name="rossi-metalli",
+            name="Rossi Metalli SRL",
+        )
+        CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            content={"chi_siamo": "Rossi"},
+        )
+        CompanyFile.objects.create(
+            company=company,
+            original_name="Scheda tecnica aziendale.pdf",
+            content_text="Contenuto scheda aziendale",
+            file_size=2048,
+            uploaded_by=staff,
+        )
+        product = Product.objects.create(
+            company=company,
+            name="Prodotto Alpha",
+            slug="prodotto-alpha",
+        )
+        ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            content={"descrizione": "Alpha"},
+        )
+        ProductFile.objects.create(
+            product=product,
+            original_name="Manuale prodotto.pdf",
+            content_text="Istruzioni del prodotto Alpha",
+            file_size=4096,
+            uploaded_by=staff,
+        )
+        request = RequestFactory().get(
+            reverse("zeus-admin-client-detail", args=[tenant.pk]),
+        )
+        request.user = staff
+
+        response = views.client_detail(request, tenant.pk)
+        html = response.content.decode()
+
+        assert response.status_code == 200
+        assert "Configurazione Rapida" in html
+        assert "Limiti Piano" in html
+        assert "Rossi Metalli" in html
+        assert "Scheda tecnica aziendale.pdf" in html
+        assert "Prodotto Alpha" in html
+        assert "Manuale prodotto.pdf" in html
+        assert "Cambia Password" in html
+
+    def test_client_detail_updates_subscription_configuration(self, monkeypatch):
+        monkeypatch.setattr(TenantClient, "auto_create_schema", False)
+        staff = User.objects.create_user(
+            username="config-staff",
+            email="config@example.com",
+            password="pw",
+            is_staff=True,
+        )
+        foundation, _ = Plan.objects.update_or_create(
+            slug=Plan.SLUG_STARTER,
+            defaults=Plan.default_values(Plan.SLUG_STARTER),
+        )
+        professional, _ = Plan.objects.update_or_create(
+            slug=Plan.SLUG_PROFESSIONAL,
+            defaults=Plan.default_values(Plan.SLUG_PROFESSIONAL),
+        )
+        tenant = TenantClient.objects.create(
+            schema_name="config-client",
+            name="Config Client",
+            on_trial=True,
+        )
+        WorkspaceSubscription.objects.create(
+            client=tenant,
+            plan=foundation,
+            status=WorkspaceSubscription.STATUS_TRIAL,
+        )
+        request = RequestFactory().post(
+            reverse("zeus-admin-client-detail", args=[tenant.pk]),
+            {
+                "plan_id": str(professional.pk),
+                "status": WorkspaceSubscription.STATUS_SUSPENDED,
+                "paid_until": "2026-07-01",
+                "notes": "Upgrade sospeso in attesa pagamento",
+            },
+        )
+        request.user = staff
+
+        response = views.client_detail(request, tenant.pk)
+
+        tenant.refresh_from_db()
+        tenant.subscription.refresh_from_db()
+        assert response.status_code == 302
+        assert response.headers["Location"].endswith(f"/clients/{tenant.pk}/?saved=1")
+        assert tenant.on_trial is False
+        assert tenant.paid_until == date(2026, 7, 1)
+        assert tenant.subscription.plan == professional
+        assert tenant.subscription.status == WorkspaceSubscription.STATUS_SUSPENDED
+        assert tenant.subscription.notes == "Upgrade sospeso in attesa pagamento"
