@@ -27,6 +27,10 @@ class TestZeusAdminDashboard:
 
         assert response.status_code == 302
 
+        response = client.get(reverse("zeus-admin-clients"))
+
+        assert response.status_code == 302
+
     def test_staff_user_sees_real_dashboard_data(self, monkeypatch):
         monkeypatch.setattr(TenantClient, "auto_create_schema", False)
         staff = User.objects.create_user(
@@ -95,6 +99,8 @@ class TestZeusAdminDashboard:
         assert b"Database" in response.content
         assert b"Celery Worker" in response.content
         assert b"Storage" in response.content
+        assert b"/zeus-admin/clients/?segment=active" in response.content
+        assert b"/zeus-admin/clients/?segment=complete_dna" in response.content
 
     def test_system_health_in_context(self, monkeypatch):
         monkeypatch.setattr(TenantClient, "auto_create_schema", False)
@@ -116,3 +122,84 @@ class TestZeusAdminDashboard:
         assert "Storage" in html
         assert "Uptime" in html
         assert "Online" in html
+
+    def test_clients_page_filters_real_dashboard_data(self, monkeypatch):
+        monkeypatch.setattr(TenantClient, "auto_create_schema", False)
+        staff = User.objects.create_user(
+            username="clients-staff",
+            email="clients@example.com",
+            password="pw",
+            is_staff=True,
+        )
+        plan, _ = Plan.objects.update_or_create(
+            slug=Plan.SLUG_STARTER,
+            defaults=Plan.default_values(Plan.SLUG_STARTER),
+        )
+        active_tenant = TenantClient.objects.create(
+            schema_name="rossi-metalli",
+            name="Rossi Metalli",
+        )
+        Domain.objects.create(
+            tenant=active_tenant,
+            domain="rossi.zeus.cais.uno",
+            is_primary=True,
+        )
+        WorkspaceSubscription.objects.create(
+            client=active_tenant,
+            plan=plan,
+            status=WorkspaceSubscription.STATUS_ACTIVE,
+        )
+        suspended_tenant = TenantClient.objects.create(
+            schema_name="bianchi-infissi",
+            name="Bianchi Infissi",
+        )
+        WorkspaceSubscription.objects.create(
+            client=suspended_tenant,
+            plan=plan,
+            status=WorkspaceSubscription.STATUS_SUSPENDED,
+        )
+        company = Company.objects.create(
+            schema_name="rossi-metalli",
+            name="Rossi Metalli SRL",
+        )
+        CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            content={"chi_siamo": "Rossi"},
+        )
+        request = RequestFactory().get(
+            reverse("zeus-admin-clients"),
+            {"segment": "active", "q": "rossi"},
+        )
+        request.user = staff
+
+        response = views.clients(request)
+        html = response.content.decode()
+
+        assert response.status_code == 200
+        assert "Clienti ZEUS" in html
+        assert "Rossi Metalli" in html
+        assert "Bianchi Infissi" not in html
+        assert "1 di 2 workspace" in html
+
+    def test_clients_htmx_returns_results_partial(self, monkeypatch):
+        monkeypatch.setattr(TenantClient, "auto_create_schema", False)
+        staff = User.objects.create_user(
+            username="htmx-staff",
+            email="htmx@example.com",
+            password="pw",
+            is_staff=True,
+        )
+        request = RequestFactory().get(
+            reverse("zeus-admin-clients"),
+            HTTP_HX_REQUEST="true",
+        )
+        request.user = staff
+
+        response = views.clients(request)
+        html = response.content.decode()
+
+        assert response.status_code == 200
+        assert "Risultati Clienti" in html
+        assert "Clienti ZEUS" not in html

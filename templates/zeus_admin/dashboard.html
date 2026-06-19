@@ -146,7 +146,7 @@
                 <span>📊</span>
                 <span>Dashboard</span>
             </a>
-            <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium text-white/50 hover:text-white/80 hover:bg-white/[0.03]" href="#clients">
+            <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium text-white/50 hover:text-white/80 hover:bg-white/[0.03]" href="{% url 'zeus-admin-clients' %}">
                 <span>👥</span>
                 <span>Clienti</span>
             </a>
@@ -182,7 +182,7 @@
 
         <section class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {% for kpi in kpis %}
-                <article class="glass-card p-5">
+                <a href="{{ kpi.url }}" class="glass-card block p-5 focus:outline-none focus:ring-2 focus:ring-cyan-300/30">
                     <div class="flex items-start justify-between">
                         <div class="flex-1">
                             <p class="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/40 mb-2">{{ kpi.label }}</p>
@@ -192,7 +192,7 @@
                             {{ kpi.icon }}
                         </div>
                     </div>
-                </article>
+                </a>
             {% endfor %}
         </section>
 
@@ -202,7 +202,10 @@
                     <h2 class="text-sm font-semibold text-white/90">Clienti</h2>
                     <p class="text-[11px] text-white/40 mt-0.5">Workspace attivi con stato operativo.</p>
                 </div>
-                <span class="status-pill tone-info"><span class="status-dot"></span>{{ clients|length }} workspace</span>
+                <div class="flex items-center gap-3">
+                    <span class="status-pill tone-info"><span class="status-dot"></span>{{ clients|length }} workspace</span>
+                    <a href="{% url 'zeus-admin-clients' %}" class="text-[10px] font-medium text-[#22d3ee] hover:underline">Apri pagina Clienti</a>
+                </div>
             </div>
             <div class="overflow-x-auto">
                 <table class="w-full min-w-[800px] text-left text-sm">

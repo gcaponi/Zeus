@@ -1,0 +1,82 @@
+<div class="flex flex-col gap-2 border-b border-white/[0.06] px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+        <h2 class="text-sm font-semibold text-white/90">Risultati Clienti</h2>
+        <p class="text-[11px] text-white/40 mt-0.5">{{ visible_clients }} di {{ total_clients }} workspace mostrati.</p>
+    </div>
+    <span class="status-pill tone-info"><span class="status-dot"></span>{{ visible_clients }} risultati</span>
+</div>
+<div class="overflow-x-auto">
+    <table class="w-full min-w-[1120px] text-left text-sm">
+        <thead class="text-[10px] font-semibold uppercase tracking-[0.1em] text-white/35">
+            <tr class="border-b border-white/[0.06]">
+                <th class="px-6 py-3">Cliente</th>
+                <th class="px-6 py-3">Owner</th>
+                <th class="px-6 py-3">Piano</th>
+                <th class="px-6 py-3">Stato</th>
+                <th class="px-6 py-3">Onboarding</th>
+                <th class="px-6 py-3">DNA</th>
+                <th class="px-6 py-3">Prodotti</th>
+                <th class="px-6 py-3">Pipeline</th>
+                <th class="px-6 py-3">LLM Mese</th>
+                <th class="px-6 py-3">Azioni</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-white/[0.04]">
+            {% for client in clients %}
+                <tr class="hover:bg-white/[0.02] transition-colors">
+                    <td class="px-6 py-3">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-lg bg-white/[0.05] flex items-center justify-center text-xs font-bold text-white/60">
+                                {{ client.name|first }}
+                            </div>
+                            <div>
+                                <p class="text-xs font-medium text-white/80">{{ client.name }}</p>
+                                <p class="text-[10px] text-white/35 font-mono">{{ client.domain|default:client.schema_name }}</p>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-6 py-3 text-xs text-white/50">{{ client.owner_email }}</td>
+                    <td class="px-6 py-3 text-xs text-white/60">{{ client.plan }}</td>
+                    <td class="px-6 py-3">
+                        <span class="status-pill tone-{{ client.subscription_tone }}">
+                            <span class="status-dot"></span>
+                            {{ client.subscription_status }}
+                        </span>
+                    </td>
+                    <td class="px-6 py-3">
+                        <span class="status-pill tone-{{ client.onboarding_tone }}">
+                            <span class="status-dot"></span>
+                            {{ client.onboarding_step }}
+                        </span>
+                    </td>
+                    <td class="px-6 py-3">
+                        <span class="status-pill tone-{{ client.dna_tone }}">
+                            <span class="status-dot"></span>
+                            {{ client.dna_status }}
+                        </span>
+                    </td>
+                    <td class="px-6 py-3 text-xs font-mono text-white/60">{{ client.products_count }}</td>
+                    <td class="px-6 py-3">
+                        <span class="status-pill tone-{{ client.pipeline_tone }}">
+                            <span class="status-dot"></span>
+                            {{ client.pipeline_status }}
+                        </span>
+                    </td>
+                    <td class="px-6 py-3 text-xs font-mono text-white/60">${{ client.llm_cost_month|floatformat:4 }}</td>
+                    <td class="px-6 py-3">
+                        <div class="flex gap-2">
+                            {% if client.workspace_url %}
+                                <a href="{{ client.workspace_url }}" class="text-[10px] font-medium text-[#22d3ee] hover:underline" target="_blank" rel="noopener">Workspace</a>
+                            {% endif %}
+                            <a href="/admin/core/client/{{ client.id }}/change/" class="text-[10px] font-medium text-white/40 hover:text-white/60 hover:underline">Admin</a>
+                        </div>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="10" class="px-6 py-12 text-center text-sm text-white/40">Nessun cliente corrisponde ai filtri correnti.</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
