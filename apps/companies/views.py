@@ -200,6 +200,30 @@ def _dna_public_document(content):
     return "\n\n".join(paragraphs)
 
 
+def _dna_final_document(content):
+    """Return the complete client document as continuous conceptual text.
+
+    The final PDF/popup must not expose internal layer titles. It combines the
+    public synthesis with the generated layer text as paragraphs only.
+    """
+    if not isinstance(content, dict):
+        return _as_text(content).strip()
+
+    paragraphs = []
+    synthesis = _as_text(content.get("sintesi_cognitiva")).strip()
+    if synthesis:
+        paragraphs.append(synthesis)
+
+    for key in LAYER_KEYS:
+        text = _as_text(content.get(key)).strip()
+        if text and text not in paragraphs:
+            paragraphs.append(text)
+
+    if paragraphs:
+        return "\n\n".join(paragraphs)
+    return _dna_public_document(content)
+
+
 def _as_text(value):
     if isinstance(value, list):
         parts = [_as_text(item).strip() for item in value]
@@ -510,16 +534,42 @@ def _generate_company_questions(company, dna):
 
 
 def _dna_in_safe_mode(dna) -> bool:
-    """Return True if the DNA's enrichment bundle reports safe_mode (CRITICAL)."""
-    enrichment = dna._enrichment or {}
-    return bool(enrichment.get("validation", {}).get("safe_mode"))
+    """Return True only for approval-blocking CRITICAL conditions."""
+    return bool(_safe_mode_flags(dna))
 
 
 def _safe_mode_flags(dna) -> list:
-    """Return the CRITICAL flags from the enrichment bundle, for display."""
+    """Return CRITICAL flags that should block final approval.
+
+    Older complete DNA versions may have a stale global schema-mismatch flag
+    because their layers were rewritten as narrative paragraphs. If every
+    reviewable layer has visible text, that flag is diagnostic noise, not a
+    reason to block the client approval flow.
+    """
+    empty_layer_flags = [
+        {
+            "guard": "layer_completeness",
+            "severity": "CRITICAL",
+            "layer": section["key"],
+            "message": f"Lo strato '{section['label']}' e vuoto.",
+            "suggestion": "Modifica lo strato prima di approvare il DNA.",
+        }
+        for section in _dna_sections(dna.content)
+        if not section["value"].strip()
+    ]
+    if empty_layer_flags:
+        return empty_layer_flags
+
     enrichment = dna._enrichment or {}
     flags = enrichment.get("validation", {}).get("flags", [])
-    return [f for f in flags if f.get("severity") == "CRITICAL"]
+    return [
+        f for f in flags
+        if f.get("severity") == "CRITICAL"
+        and not (
+            f.get("guard") == "layer_completeness"
+            and f.get("layer") == "global"
+        )
+    ]
 
 
 def _create_complete_dna(company, pre_dna, user):
@@ -585,7 +635,8 @@ def _apply_self_critique(dna, company):
     """
     try:
         from apps.companies.dna_critique import self_critique_dna
-        from apps.companies.dna_schemas import DNAGeneraleSchema, LAYER_KEYS as LK
+        from apps.companies.dna_schemas import LAYER_KEYS as LK
+        from apps.companies.dna_schemas import DNAGeneraleSchema
 
         layer_content = {k: dna.content.get(k) for k in LK if k in dna.content}
         schema = DNAGeneraleSchema.model_validate(layer_content)
@@ -1228,16 +1279,38 @@ def dna_review(request):
     dna = company.dna_versions.filter(is_current=True).first()
     if not dna:
         return HttpResponse("DNA not found", status=404)
-    return render(request, "core/dna_review.html", {
+
+    return render(request, "core/dna_review.html", _dna_review_context(company, dna))
+
+
+def _dna_review_context(company, dna):
+    sections = _dna_sections(dna.content)
+    missing_keys = dna.missing_sections()
+    blocking_flags = []
+    if not missing_keys and not dna.is_fully_approved():
+        blocking_flags = _safe_mode_flags(dna)
+
+    return {
         "dna": dna,
-        "sections": _dna_sections(dna.content),
+        "sections": sections,
         "public_document": _dna_public_document(dna.content),
+        "final_document": _dna_final_document(dna.content),
         "approved_keys": dna.approved_sections(),
-        "missing_keys": dna.missing_sections(),
+        "missing_keys": missing_keys,
         "is_fully_approved": dna.is_fully_approved(),
         "is_export_ready": dna.is_export_ready(),
         "company_name": company.name,
-    })
+        "blocking_flags": blocking_flags,
+    }
+
+
+def _render_dna_review_fragment(request, company, dna, status=200):
+    return render(
+        request,
+        "core/partials/dna_review_content.html",
+        _dna_review_context(company, dna),
+        status=status,
+    )
 
 
 @login_required
@@ -1278,15 +1351,16 @@ def dna_section_approve(request, pk, section_key):
         # Check if all sections approved
         dna.refresh_from_db()
         if not dna.missing_sections():
+            from apps.companies.tasks import _compute_enrichment
+
+            dna._enrichment = _compute_enrichment(dna.content, company, source=None)
+            dna.save(update_fields=["_enrichment"])
             # PIANO 1.5: safe_mode blocks final approval. A DNA with a CRITICAL
             # validation flag (e.g. a whole layer empty) cannot be approved until
             # the issue is resolved — it must be edited first.
             if _dna_in_safe_mode(dna):
                 if request.headers.get("HX-Request") == "true":
-                    return _action_error(
-                        "DNA in safe mode: risolvi i flag CRITICAL (strati vuoti) "
-                        "prima di approvare.", status=409,
-                    )
+                    return _render_dna_review_fragment(request, company, dna)
                 return JsonResponse({
                     "error": "safe_mode",
                     "detail": "Risolvi i flag CRITICAL prima di approvare il DNA.",
@@ -1302,7 +1376,7 @@ def dna_section_approve(request, pk, section_key):
         )
 
     if request.headers.get("HX-Request") == "true":
-        return _redirect_after_htmx_action(request, "dna-review")
+        return _render_dna_review_fragment(request, company, dna)
 
     return JsonResponse({
         "section_key": section_key,
@@ -1370,7 +1444,7 @@ def dna_section_edit(request, pk, section_key):
             )
 
     if request.headers.get("HX-Request") == "true":
-        return _redirect_after_htmx_action(request, "dna-review")
+        return _render_dna_review_fragment(request, company, new_dna)
 
     return JsonResponse({
         "dna_id": new_dna.id,
@@ -1397,13 +1471,13 @@ def dna_download_pdf(request):
     if not dna:
         return HttpResponse("DNA not found", status=404)
 
-    pdf_bytes = _render_dna_pdf(company, dna, _dna_public_document(dna.content))
+    pdf_bytes = _render_dna_pdf(company, dna, _dna_final_document(dna.content))
     response = HttpResponse(pdf_bytes, content_type="application/pdf")
     response["Content-Disposition"] = 'attachment; filename="DNA_aziendale.pdf"'
     return response
 
 
-def _render_dna_pdf(company, dna, public_document):
+def _render_dna_pdf(company, dna, final_document):
     doc = fitz.open()
     page = doc.new_page(width=595, height=842)
     margin = 54
@@ -1433,7 +1507,7 @@ def _render_dna_pdf(company, dna, public_document):
         gap=18,
     )
 
-    write(public_document or "Non disponibile", size=10.5, color=(0.08, 0.08, 0.08), gap=16)
+    write(final_document or "Non disponibile", size=10.5, color=(0.08, 0.08, 0.08), gap=16)
 
     return doc.tobytes()
 

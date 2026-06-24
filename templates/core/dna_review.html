@@ -36,99 +36,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="mx-auto max-w-4xl">
-    <header class="mb-8">
-        <a href="{% url 'onboarding-index' %}" class="text-sm text-brand-cyan hover:underline">← Onboarding</a>
-        <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">Review DNA Generale</h1>
-        <p class="mt-2 text-content-secondary">Versione {{ dna.version }} · Rivedi la sintesi cognitiva finale.</p>
-    </header>
-
-    {% if is_fully_approved %}
-        <div class="mb-6 zeus-card p-5" style="border-color: rgba(34, 197, 94, 0.3); background: rgba(34, 197, 94, 0.05);">
-            <p class="zeus-label text-green-600">DNA aziendale approvato</p>
-            <p class="mt-2 text-lg font-bold font-display">Tutte le sezioni sono state approvate.</p>
-            <div class="mt-4 flex flex-wrap gap-3">
-                <button onclick="openDnaPopup()" class="zeus-btn zeus-btn-primary">Visualizza DNA completo</button>
-                <a href="{% url 'dna-download-pdf' %}" class="zeus-btn zeus-btn-secondary">Scarica PDF</a>
-            </div>
-        </div>
-    {% endif %}
-
-    <section class="zeus-card p-6 mb-6">
-        <p class="zeus-label text-brand-cyan">Sintesi Cognitiva</p>
-        <div class="mt-4 text-sm leading-7 text-content-primary whitespace-pre-line">{{ public_document|default:"Non disponibile" }}</div>
-    </section>
-
-    <details class="zeus-card p-5 mb-6">
-        <summary class="cursor-pointer font-bold font-display text-content-primary">Revisione tecnica interna ZEUS</summary>
-        <p class="mt-2 text-sm text-content-secondary">Questi strati servono solo a validare il ragionamento interno. Non sono il documento finale per il cliente.</p>
-        <div class="mt-5 space-y-4">
-        {% for section in sections %}
-            <section class="zeus-card p-5">
-                <div class="flex items-center justify-between">
-                    <h3 class="text-lg font-bold font-display text-brand-cyan">{{ section.label }}</h3>
-                    {% if section.key in approved_keys %}
-                        <span class="zeus-badge zeus-badge-lime">Approvato</span>
-                    {% elif section.key in missing_keys %}
-                        <span class="zeus-badge" style="background: rgba(251, 191, 36, 0.1); color: #d97706;">Da approvare</span>
-                    {% endif %}
-                </div>
-                <p class="mt-4 text-sm leading-7 text-content-primary whitespace-pre-line">{{ section.value|default:"Non disponibile" }}</p>
-
-                {% if section.key not in approved_keys and not is_fully_approved %}
-                    <div class="mt-4 flex gap-3">
-                        <button hx-post="{% url 'dna-section-approve' dna.pk section.key %}" hx-swap="outerHTML" class="zeus-btn" style="background: #22c55e; color: white;">Approva</button>
-                        <button onclick="document.getElementById('edit-{{ section.key }}').classList.toggle('hidden')" class="zeus-btn zeus-btn-ghost">Modifica</button>
-                    </div>
-                    <form id="edit-{{ section.key }}" class="hidden mt-4" hx-post="{% url 'dna-section-edit' dna.pk section.key %}" hx-swap="outerHTML" hx-target="closest section">
-                        {% csrf_token %}
-                        <textarea name="text" rows="4" class="zeus-input">{{ section.value }}</textarea>
-                        <button type="submit" class="zeus-btn zeus-btn-primary mt-3">Salva e crea nuova versione</button>
-                    </form>
-                {% endif %}
-            </section>
-        {% endfor %}
-        </div>
-    </details>
-
-    {% if is_fully_approved %}
-        <div class="mt-8 zeus-card p-6 text-center">
-            <p class="text-content-secondary">DNA aziendale completo e approvato. Ora puoi creare i DNA dei tuoi prodotti.</p>
-            <a href="{% url 'product-list-create' %}" class="zeus-btn zeus-btn-primary mt-4">Vai ai prodotti →</a>
-        </div>
-    {% endif %}
-</div>
-
-<!-- Popup DNA completo -->
-<div id="dna-popup-overlay" class="fixed inset-0 z-50 hidden items-center justify-center" style="background: rgba(2,6,23,0.6); backdrop-filter: blur(8px);">
-    <div class="dna-popup-panel relative w-full max-w-2xl max-h-[85vh] overflow-hidden rounded-3xl"
-         style="background: rgba(255,255,255,0.06); backdrop-filter: blur(40px) saturate(180%); border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 32px 100px rgba(0,0,0,0.5);">
-        <!-- Header popup -->
-        <div class="sticky top-0 px-8 py-5 flex items-center justify-between"
-             style="background: rgba(2,6,23,0.4); border-bottom: 1px solid rgba(255,255,255,0.08);">
-            <div>
-                <p class="text-xs font-bold uppercase tracking-widest text-brand-cyan-light">ZEUS</p>
-                <h2 class="dna-popup-title text-xl font-bold font-display">DNA Generale</h2>
-                <p class="dna-popup-meta text-xs mt-0.5">{{ company_name|default:"" }} · Versione {{ dna.version }}</p>
-            </div>
-            <button onclick="closeDnaPopup()" class="dna-popup-close w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-        </div>
-
-        <!-- Contenuto scrollabile -->
-        <div class="overflow-y-auto px-8 py-6" style="max-height: calc(85vh - 160px);">
-            <div class="dna-popup-section-text text-sm leading-7 whitespace-pre-line">{{ public_document|default:"Non disponibile" }}</div>
-        </div>
-
-        <!-- Footer popup -->
-        <div class="sticky bottom-0 px-8 py-4 flex gap-3"
-             style="background: rgba(2,6,23,0.4); border-top: 1px solid rgba(255,255,255,0.08);">
-            <a href="{% url 'dna-download-pdf' %}" class="zeus-btn zeus-btn-secondary flex-1">Scarica PDF</a>
-            <button onclick="closeDnaPopup()" class="zeus-btn zeus-btn-ghost flex-1">Chiudi</button>
-        </div>
-    </div>
-</div>
+{% include "core/partials/dna_review_content.html" %}
 
 <script>
 function openDnaPopup() {
@@ -147,6 +55,24 @@ function closeDnaPopup() {
 
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') closeDnaPopup();
+});
+
+document.body.addEventListener('htmx:beforeRequest', function(event) {
+    var button = event.detail.elt;
+    if (!button || !button.matches('[data-approve-button]')) return;
+    button.disabled = true;
+    button.classList.add('opacity-70', 'cursor-wait');
+    var label = button.querySelector('[data-approve-label]');
+    if (label) label.textContent = 'Approvo...';
+});
+
+document.body.addEventListener('htmx:responseError', function(event) {
+    var button = event.detail.elt;
+    if (!button || !button.matches('[data-approve-button]')) return;
+    button.disabled = false;
+    button.classList.remove('opacity-70', 'cursor-wait');
+    var label = button.querySelector('[data-approve-label]');
+    if (label) label.textContent = 'Approva';
 });
 </script>
 {% endblock %}

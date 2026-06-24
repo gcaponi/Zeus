@@ -24,7 +24,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from apps.companies.dna_schemas import DNAGeneraleSchema
+from apps.companies.dna_schemas import DNAGeneraleSchema, coerce_dna_generale_content
 
 # Score deltas per severity.
 _PENALTY = {"CRITICAL": 100, "HIGH": 15, "MEDIUM": 8}
@@ -261,7 +261,7 @@ def validate_dna(dna) -> DNAValidationResult:
     """
     if isinstance(dna, dict):
         try:
-            dna = DNAGeneraleSchema.model_validate(dna)
+            dna = coerce_dna_generale_content(dna)
         except ValidationError:
             return DNAValidationResult(
                 valid=False,

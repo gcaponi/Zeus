@@ -2,6 +2,7 @@ import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import fitz
 import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
@@ -967,6 +968,41 @@ class TestDNAQuestions:
         assert "Chi siamo" not in public_document
         assert "Il nostro tono" not in public_document
 
+    def test_final_document_combines_synthesis_and_layers_without_labels(self):
+        content = {
+            "sintesi_cognitiva": "Sintesi finale per il cliente.",
+            "identita": "Identita narrativa completa.",
+            "modelli_mentali": "Metodo decisionale completo.",
+        }
+
+        final_document = views._dna_final_document(content)
+
+        assert "Sintesi finale per il cliente." in final_document
+        assert "Identita narrativa completa." in final_document
+        assert "Metodo decisionale completo." in final_document
+        assert "Chi siamo" not in final_document
+        assert "Come ragioniamo" not in final_document
+
+    def test_render_dna_pdf_uses_continuous_final_document_without_layer_titles(self):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        dna = CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            content={"identita": "Identita narrativa"},
+        )
+        final_document = "Sintesi finale.\n\nIdentita narrativa.\n\nMetodo operativo."
+
+        pdf_bytes = views._render_dna_pdf(company, dna, final_document)
+        pdf = fitz.open(stream=pdf_bytes, filetype="pdf")
+        text = "\n".join(page.get_text() for page in pdf)
+
+        assert "Sintesi finale." in text
+        assert "Identita narrativa." in text
+        assert "Metodo operativo." in text
+        assert "Sintesi Cognitiva" not in text
+        assert "Chi siamo e come ci poniamo" not in text
+
     def test_submit_answers_requires_all_answers(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
         pre_dna = CompanyDNA.objects.create(
@@ -1023,7 +1059,7 @@ class TestDNAQuestions:
 
 @pytest.mark.django_db
 class TestDNAReviewViews:
-    def test_section_approve_htmx_redirects_to_review(self, rf_with_tenant):
+    def test_section_approve_htmx_updates_review_fragment(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
         dna = CompanyDNA.objects.create(
             company=company,
@@ -1041,11 +1077,12 @@ class TestDNAReviewViews:
 
         resp = views.dna_section_approve(req, dna.pk, "identita")
 
-        assert resp.status_code == 204
-        assert resp["HX-Redirect"] == reverse("dna-review")
+        assert resp.status_code == 200
+        assert b'id="dna-review-root"' in resp.content
+        assert "HX-Redirect" not in resp
         assert SectionApproval.objects.filter(dna=dna, section_key="identita").exists()
 
-    def test_section_edit_htmx_redirects_to_review(self, rf_with_tenant):
+    def test_section_edit_htmx_updates_review_fragment(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
         dna = CompanyDNA.objects.create(
             company=company,
@@ -1063,11 +1100,52 @@ class TestDNAReviewViews:
 
         resp = views.dna_section_edit(req, dna.pk, "identita")
 
-        assert resp.status_code == 204
-        assert resp["HX-Redirect"] == reverse("dna-review")
+        assert resp.status_code == 200
+        assert b'id="dna-review-root"' in resp.content
+        assert "HX-Redirect" not in resp
         new_dna = CompanyDNA.objects.get(company=company, is_current=True)
         assert new_dna.version == 2
         assert new_dna.content["identita"] == "Test aggiornato"
+
+    def test_final_narrative_layer_approval_is_not_blocked_by_safe_mode(self, rf_with_tenant):
+        from apps.companies.dna_schemas import LAYER_KEYS
+
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        dna = CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            content={key: f"Testo narrativo per {key}" for key in LAYER_KEYS},
+            _enrichment={
+                "validation": {
+                    "safe_mode": True,
+                    "flags": [{
+                        "guard": "layer_completeness",
+                        "severity": "CRITICAL",
+                        "layer": "global",
+                        "message": "Il contenuto non rispetta lo schema DNA a 6 strati.",
+                    }],
+                },
+            },
+        )
+        approver = rf_with_tenant("get", "/").user
+        for key in LAYER_KEYS[:-1]:
+            SectionApproval.objects.create(dna=dna, section_key=key, approved_by=approver)
+
+        req = rf_with_tenant(
+            "post",
+            reverse("dna-section-approve", args=[dna.pk, LAYER_KEYS[-1]]),
+            {},
+            form=True,
+        )
+        req.META["HTTP_HX_REQUEST"] = "true"
+
+        resp = views.dna_section_approve(req, dna.pk, LAYER_KEYS[-1])
+        dna.refresh_from_db()
+
+        assert resp.status_code == 200
+        assert dna.is_approved is not None
+        assert b"DNA aziendale approvato" in resp.content
 
 
 # rf_with_tenant fixture is defined in tests/conftest.py (shared).

@@ -21,7 +21,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from apps.companies.dna_schemas import DNAGeneraleSchema
+from apps.companies.dna_schemas import DNAGeneraleSchema, coerce_dna_generale_content
 
 # Completeness weights — not all layers matter equally for a manufacturing DNA.
 # nucleo_tecnico (the technical core) and confini (sign of maturity) weigh most.
@@ -86,7 +86,7 @@ def _to_schema(dna) -> DNAGeneraleSchema | None:
         return dna
     if isinstance(dna, dict):
         try:
-            return DNAGeneraleSchema.model_validate(dna)
+            return coerce_dna_generale_content(dna)
         except ValidationError:
             return None
     return None
