@@ -209,3 +209,180 @@ class TestGenerateDnaNotesSeparation:
         assert "Note importanti del cliente" in prompt
         assert "Catalogo prodotti" in prompt
         assert "# note-azienda.txt" not in prompt
+
+
+class TestDNAValidator:
+    """PIANO 1.5 Task 1 — deterministic 7-guard validation layer."""
+
+    def _good_dna(self) -> DNAGeneraleSchema:
+        """A well-formed DNA that passes all 7 guards."""
+        return DNAGeneraleSchema(
+            identita=Identita(
+                postura="Affianca il cliente con competenza tecnica [SRC:scrape]",
+                convinzioni=["La qualita del materiale non e negoziabile [SRC:file:iso.txt]"],
+            ),
+            modelli_mentali=ModelliMentali(
+                pilastri=["Partire sempre dal caso d'uso reale [SRC:note]"],
+                sequenza_di_lettura="Prima il caso d'uso, poi i materiali",
+            ),
+            nucleo_tecnico=NucleoTecnico(
+                approccio_distintivo="Lavorazione su misura con controllo qualita [SRC:scrape]",
+                trade_off_scelti="Tempi piu lunghi per garantire qualita [SRC:note]",
+                famiglie_prodotto=["Serbatoi pressurizzati [SRC:scrape]"],
+            ),
+            confini=Confini(
+                anti_pattern=["Non promettere tempistiche inferiori a 3 settimane [SRC:note]"],
+                richieste_rifiutate="Commesse sotto le 5 unita [SRC:note]",
+            ),
+            tono=Tono(
+                registro="Tecnico-accessibile, preciso ma comprensibile",
+                esempi=[{"sbagliato": "siamo i migliori", "giusto": "consigliamo il 316 oltre 200 gradi"}],
+            ),
+            logica_decisionale=LogicaDecisionale(
+                filosofia_custom="Valutiamo il custom caso per caso, partendo dalla fattibilita tecnica",
+                escalation="Coinvolgere un tecnico senior su requisiti non chiari",
+            ),
+        )
+
+    def test_valid_dna_passes_all_guards(self):
+        from apps.companies.dna_validator import validate_dna
+
+        result = validate_dna(self._good_dna())
+        assert result.valid is True
+        assert result.flags == []
+        assert result.guards_passed == 7
+        assert result.guards_total == 7
+        assert result.safe_mode is False
+        assert result.score >= 90
+
+    def test_layer_completeness_critical_when_layer_empty(self):
+        """A layer with all fields empty → CRITICAL flag + safe_mode."""
+        from apps.companies.dna_validator import validate_dna
+
+        dna = self._good_dna()
+        dna.confini = Confini(anti_pattern=[], richieste_rifiutate="")
+        result = validate_dna(dna)
+        flag = next(f for f in result.flags if f.guard == "layer_completeness")
+        assert flag.severity == "CRITICAL"
+        assert flag.layer == "confini"
+        assert result.safe_mode is True
+
+    def test_echo_chamber_detected(self):
+        """DNA with no anti-patterns → cognitive_tension flag (HIGH)."""
+        from apps.companies.dna_validator import validate_dna
+
+        dna = self._good_dna()
+        dna.confini = Confini(
+            anti_pattern=[],
+            richieste_rifiutate="Richieste fuori standard rifiutate [SRC:note]",
+        )
+        result = validate_dna(dna)
+        assert "cognitive_tension" in {f.guard for f in result.flags}
+
+    def test_boundary_realism_flagged(self):
+        """Rich famiglie_prodotto (>=2) + empty anti_pattern → boundary_realism."""
+        from apps.companies.dna_validator import validate_dna
+
+        dna = self._good_dna()
+        dna.nucleo_tecnico = NucleoTecnico(
+            approccio_distintivo="metodo X [SRC:scrape]",
+            trade_off_scelti="t [SRC:note]",
+            famiglie_prodotto=["fam A [SRC:scrape]", "fam B [SRC:scrape]", "fam C [SRC:scrape]"],
+        )
+        dna.confini = Confini(anti_pattern=[], richieste_rifiutate="rifiutiamo X [SRC:note]")
+        result = validate_dna(dna)
+        assert "boundary_realism" in {f.guard for f in result.flags}
+
+    def test_evidence_grounding_flagged_when_no_sources(self):
+        """No [SRC:] markers anywhere → evidence_grounding flag (MEDIUM)."""
+        from apps.companies.dna_validator import validate_dna
+
+        dna = DNAGeneraleSchema(
+            identita=Identita(postura="Affianca il cliente", convinczioni=["qualita"]),
+            modelli_mentali=ModelliMentali(pilastri=["principio"], sequenza_di_lettura="caso d'uso"),
+            nucleo_tecnico=NucleoTecnico(
+                approccio_distintivo="metodo", trade_off_scelti="tempi", famiglie_prodotto=["fam"],
+            ),
+            confini=Confini(anti_pattern=["non promettiamo"], richieste_rifiutate="sotto soglia"),
+            tono=Tono(registro="tecnico-accessibile", esempi=[{"sbagliato": "x", "giusto": "y"}]),
+            logica_decisionale=LogicaDecisionale(
+                filosofia_custom="caso per caso secondo principi tecnici",
+                escalation="tecnico senior interviene",
+            ),
+        )
+        result = validate_dna(dna)
+        assert "evidence_grounding" in {f.guard for f in result.flags}
+
+    def test_tone_anchoring_flagged(self):
+        """Generic registro + no examples → tone_anchoring flag (MEDIUM)."""
+        from apps.companies.dna_validator import validate_dna
+
+        dna = self._good_dna()
+        dna.tono = Tono(registro="professionale", esempi=[])
+        result = validate_dna(dna)
+        assert "tone_anchoring" in {f.guard for f in result.flags}
+
+    def test_decisional_depth_flagged(self):
+        """Short filosofia + generic escalation → decisional_depth flag (MEDIUM)."""
+        from apps.companies.dna_validator import validate_dna
+
+        dna = self._good_dna()
+        dna.logica_decisionale = LogicaDecisionale(
+            filosofia_custom="breve", escalation="chiedere al superiore",
+        )
+        result = validate_dna(dna)
+        assert "decisional_depth" in {f.guard for f in result.flags}
+
+    def test_identity_coherence_flagged(self):
+        """Leading posture + deferential registro → identity_coherence flag (HIGH)."""
+        from apps.companies.dna_validator import validate_dna
+
+        dna = self._good_dna()
+        dna.identita = Identita(
+            postura="Guidiamo il cliente con visione [SRC:scrape]",
+            convinzioni=["qualita [SRC:note]"],
+        )
+        dna.tono = Tono(
+            registro="Deferente e ossequiente",
+            esempi=[{"sbagliato": "x", "giusto": "y"}],
+        )
+        result = validate_dna(dna)
+        assert "identity_coherence" in {f.guard for f in result.flags}
+
+    def test_safe_mode_caps_score_at_39(self):
+        """Any CRITICAL flag → safe_mode=True, score <= 39."""
+        from apps.companies.dna_validator import validate_dna
+
+        dna = self._good_dna()
+        dna.confini = Confini(anti_pattern=[], richieste_rifiutate="")
+        result = validate_dna(dna)
+        assert result.safe_mode is True
+        assert result.score <= 39
+
+    def test_validator_accepts_dict_input(self):
+        """validate_dna must accept a plain dict (as stored in CompanyDNA.content)."""
+        from apps.companies.dna_validator import validate_dna
+
+        dna_dict = self._good_dna().model_dump()
+        result = validate_dna(dna_dict)
+        assert result.valid is True
+        assert result.guards_passed == 7
+
+    def test_malformed_dict_triggers_safe_mode(self):
+        """A dict that fails schema validation → CRITICAL safe_mode result."""
+        from apps.companies.dna_validator import validate_dna
+
+        result = validate_dna({"not": "a valid dna"})
+        assert result.safe_mode is True
+        assert result.score == 0
+        assert result.guards_passed == 0
+
+    def test_score_decreases_with_medium_flags(self):
+        """Each flag should reduce the score from the clean baseline."""
+        from apps.companies.dna_validator import validate_dna
+
+        good = validate_dna(self._good_dna())
+        dna = self._good_dna()
+        dna.tono = Tono(registro="professionale", esempi=[])  # tone_anchoring MEDIUM
+        flagged = validate_dna(dna)
+        assert flagged.score < good.score
