@@ -860,3 +860,83 @@ class TestSelfCritiqueLoop:
         assert isinstance(report, CritiqueReport)
         assert len(report.checks) == 5
         assert hasattr(report, "refined")
+
+
+class TestAuditHashChain:
+    """PIANO 1.5 Task 6 — HMAC-SHA256 audit chain over DNA versions.
+
+    Each version's hash includes the previous version's hash, so any
+    retroactive edit breaks the chain (tamper-evident).
+    """
+
+    def test_hash_is_deterministic(self):
+        """Same payload + same previous hash → same audit hash."""
+        from apps.companies.audit import compute_audit_hash
+
+        payload = {"identita": {"postura": "x"}, "nucleo_tecnico": {"fam": ["a"]}}
+        h1 = compute_audit_hash(payload, previous_hash="")
+        h2 = compute_audit_hash(payload, previous_hash="")
+        assert h1 == h2
+        assert len(h1) == 64  # sha256 hex
+
+    def test_hash_changes_with_payload(self):
+        """Different payload → different hash."""
+        from apps.companies.audit import compute_audit_hash
+
+        a = compute_audit_hash({"x": 1}, previous_hash="")
+        b = compute_audit_hash({"x": 2}, previous_hash="")
+        assert a != b
+
+    def test_hash_changes_with_previous_hash(self):
+        """Different previous_hash → different hash (chain linking)."""
+        from apps.companies.audit import compute_audit_hash
+
+        payload = {"x": 1}
+        standalone = compute_audit_hash(payload, previous_hash="")
+        chained = compute_audit_hash(payload, previous_hash="abc123")
+        assert standalone != chained
+
+    def test_hash_independent_of_key_order(self):
+        """JSON key ordering must not change the hash (sort_keys)."""
+        from apps.companies.audit import compute_audit_hash
+
+        a = compute_audit_hash({"a": 1, "b": 2}, previous_hash="")
+        b = compute_audit_hash({"b": 2, "a": 1}, previous_hash="")
+        assert a == b
+
+    def test_verify_accepts_correct_hash(self):
+        """verify_audit_hash returns True for the matching hash."""
+        from apps.companies.audit import compute_audit_hash, verify_audit_hash
+
+        payload = {"identita": {"postura": "affianca"}}
+        h = compute_audit_hash(payload, previous_hash="")
+        assert verify_audit_hash(h, payload, previous_hash="") is True
+
+    def test_verify_rejects_tampered_payload(self):
+        """A modified payload must fail verification (tamper detection)."""
+        from apps.companies.audit import compute_audit_hash, verify_audit_hash
+
+        original = {"identita": {"postura": "affianca"}}
+        h = compute_audit_hash(original, previous_hash="")
+        tampered = {"identita": {"postura": "leader"}}
+        assert verify_audit_hash(h, tampered, previous_hash="") is False
+
+    def test_verify_rejects_wrong_previous_hash(self):
+        """A different previous_hash must fail verification."""
+        from apps.companies.audit import compute_audit_hash, verify_audit_hash
+
+        payload = {"x": 1}
+        h = compute_audit_hash(payload, previous_hash="real_prev")
+        assert verify_audit_hash(h, payload, previous_hash="fake_prev") is False
+
+    def test_chain_links_pre_to_complete(self):
+        """Complete DNA hash must differ when it includes the pre-DNA hash."""
+        from apps.companies.audit import compute_audit_hash
+
+        payload = {"identita": {"postura": "affianca"}}
+        pre_hash = compute_audit_hash(payload, previous_hash="")
+        # Complete DNA links to the pre-DNA hash.
+        complete_payload = {**payload, "confini": {"anti_pattern": ["x"]}}
+        unlinked = compute_audit_hash(complete_payload, previous_hash="")
+        linked = compute_audit_hash(complete_payload, previous_hash=pre_hash)
+        assert unlinked != linked  # chain linkage changes the hash

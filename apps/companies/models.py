@@ -62,6 +62,10 @@ class CompanyDNA(models.Model):
     confidence_score = models.FloatField(null=True, blank=True)
     is_current = models.BooleanField(default=True)
     is_approved = models.DateTimeField(null=True, blank=True)
+    # Tamper-evident audit chain (PIANO 1.5 Task 6). audit_hash binds the
+    # content to the previous version's hash; previous_hash links the chain.
+    audit_hash = models.CharField(max_length=64, null=True, blank=True)
+    previous_hash = models.CharField(max_length=64, null=True, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
