@@ -739,3 +739,124 @@ class TestEvidenceGrounding:
         available = {"scrape": True, "note": False, "files": []}
         result = check_source_consistency(dna, available)
         assert result.has_mismatch is True
+
+
+class TestSelfCritiqueLoop:
+    """PIANO 1.5 Task 4 — Delphi-inspired 2-pass self-critique loop.
+
+    Pass 1: cross-layer challenge (Conflict Matrix checks coherence).
+    Pass 2: refinement (reformulates layers flagged as TENSION/CONFLICT).
+    A single LLM reviews its own output — NOT multi-agent.
+    """
+
+    def _good_dna(self) -> DNAGeneraleSchema:
+        return DNAGeneraleSchema(
+            identita=Identita(
+                postura="Affianca il cliente [SRC:scrape]",
+                convinzioni=["qualita certificata [SRC:file]"],
+            ),
+            modelli_mentali=ModelliMentali(
+                pilastri=["principio [SRC:scrape]"], sequenza_di_lettura="caso d'uso [SRC:note]",
+            ),
+            nucleo_tecnico=NucleoTecnico(
+                approccio_distintivo="metodo [SRC:scrape]", trade_off_scelti="tempi [SRC:note]",
+                famiglie_prodotto=["fam [SRC:scrape]"],
+            ),
+            confini=Confini(
+                anti_pattern=["no promesse [SRC:note]"], richieste_rifiutate="sotto soglia [SRC:note]",
+            ),
+            tono=Tono(
+                registro="tecnico-accessibile", esempi=[{"sbagliato": "x", "giusto": "y"}],
+            ),
+            logica_decisionale=LogicaDecisionale(
+                filosofia_custom="caso per caso secondo principi tecnici",
+                escalation="tecnico senior interviene",
+            ),
+        )
+
+    def test_cross_layer_check_returns_five_checks(self):
+        """The Conflict Matrix always produces exactly 5 cross-layer checks."""
+        from apps.companies.dna_critique import run_cross_layer_check
+
+        client = MockLLMClient()
+        checks = run_cross_layer_check(self._good_dna(), client)
+        assert len(checks) == 5
+        # Each check carries a checker, target, status, and note.
+        for check in checks:
+            assert check.checker in {"confini", "logica_decisionale", "tono", "nucleo_tecnico", "identita"}
+            assert check.target in {"nucleo_tecnico", "identita", "confini", "modelli_mentali", "tono"}
+            assert check.status in {"OK", "TENSION", "CONFLICT"}
+
+    def test_self_critique_returns_dna_when_no_tension(self):
+        """If all cross-layer checks are OK, the DNA is returned unchanged."""
+        from apps.companies.dna_critique import self_critique_dna, CrossLayerCheck
+        from apps.companies.dna_schemas import DNAGeneraleSchema as Schema
+
+        # A mock client whose cross-layer check returns all OK.
+        ok_checks = [
+            CrossLayerCheck(checker="confini", target="nucleo_tecnico", status="OK", note=""),
+            CrossLayerCheck(checker="logica_decisionale", target="identita", status="OK", note=""),
+            CrossLayerCheck(checker="tono", target="confini", status="OK", note=""),
+            CrossLayerCheck(checker="nucleo_tecnico", target="modelli_mentali", status="OK", note=""),
+            CrossLayerCheck(checker="identita", target="tono", status="OK", note=""),
+        ]
+
+        class AllOkClient:
+            def generate_structured(self, prompt, response_model, model=None):
+                return ok_checks
+
+        dna = self._good_dna()
+        result, report = self_critique_dna(dna, AllOkClient())
+        assert isinstance(result, DNAGeneraleSchema)
+        # No refinement happened: same content.
+        assert result.model_dump() == dna.model_dump()
+        assert report.refined is False
+        assert len(report.checks) == 5
+
+    def test_self_critique_refines_on_tension(self):
+        """If any check is TENSION/CONFLICT, the loop refines the DNA."""
+        from apps.companies.dna_critique import self_critique_dna, CrossLayerCheck
+
+        tension_checks = [
+            CrossLayerCheck(checker="confini", target="nucleo_tecnico", status="OK", note=""),
+            CrossLayerCheck(checker="logica_decisionale", target="identita", status="TENSION", note="postura vs decisione"),
+            CrossLayerCheck(checker="tono", target="confini", status="OK", note=""),
+            CrossLayerCheck(checker="nucleo_tecnico", target="modelli_mentali", status="OK", note=""),
+            CrossLayerCheck(checker="identita", target="tono", status="OK", note=""),
+        ]
+
+        class TensionClient:
+            def __init__(self):
+                self.calls = 0
+            def generate_structured(self, prompt, response_model, model=None):
+                self.calls += 1
+                if self.calls == 1:
+                    return tension_checks
+                # Second call: return a refined DNA schema.
+                return MockLLMClient().generate_structured(prompt, response_model, model)
+
+        client = TensionClient()
+        result, report = self_critique_dna(self._good_dna(), client)
+        assert report.refined is True
+        assert client.calls == 2  # challenge + refine
+        assert isinstance(result, DNAGeneraleSchema)
+
+    def test_conflict_matrix_covers_all_pairs(self):
+        """The 5 Conflict Matrix pairs must cover every layer at least once."""
+        from apps.companies.dna_critique import CONFLICT_MATRIX
+
+        layers_involved = set()
+        for checker, target, _desc in CONFLICT_MATRIX:
+            layers_involved.add(checker)
+            layers_involved.add(target)
+        assert layers_involved == set(LAYER_KEYS)
+
+    def test_self_critique_report_carries_checks(self):
+        """The critique report must expose the cross-layer checks for audit."""
+        from apps.companies.dna_critique import self_critique_dna, CritiqueReport
+
+        client = MockLLMClient()
+        _, report = self_critique_dna(self._good_dna(), client)
+        assert isinstance(report, CritiqueReport)
+        assert len(report.checks) == 5
+        assert hasattr(report, "refined")

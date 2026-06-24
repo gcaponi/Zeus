@@ -300,6 +300,17 @@ class MockLLMClient(LLMClient):
                     ),
                 ),
             )
+        # Self-critique cross-layer check — return 5 Conflict Matrix checks (all OK).
+        from apps.companies.dna_critique import CrossLayerCheckResult, CrossLayerCheckItem
+        if response_model is CrossLayerCheckResult:
+            return CrossLayerCheckResult(checks=[
+                CrossLayerCheckItem(checker="confini", target="nucleo_tecnico", status="OK", note=""),
+                CrossLayerCheckItem(checker="logica_decisionale", target="identita", status="OK", note=""),
+                CrossLayerCheckItem(checker="tono", target="confini", status="OK", note=""),
+                CrossLayerCheckItem(checker="nucleo_tecnico", target="modelli_mentali", status="OK", note=""),
+                CrossLayerCheckItem(checker="identita", target="tono", status="OK", note=""),
+            ])
+
         # Generic fallback: instantiate with empty defaults if possible
         try:
             return response_model()
