@@ -8,11 +8,43 @@ from django.db import connection
 from django.utils import timezone
 from django_tenants.utils import schema_context
 
+from apps.companies.audit import compute_audit_hash
 from apps.companies.llm_client import LLM_MODEL, get_llm_client
 from apps.companies.models import CompanyDNA, LLMCall, PipelineRun, Product, ProductDNA, Source
 from apps.companies.scraper import get_scraper
 
 logger = logging.getLogger(__name__)
+
+
+def _available_sources(source, company) -> dict:
+    """Describe the sources actually available to the LLM for evidence checks."""
+    files = [
+        f.original_name
+        for f in company.company_files.all()
+        if f.original_name != "note-azienda.txt"
+    ]
+    has_note = company.company_files.filter(original_name="note-azienda.txt").exists()
+    return {
+        "scrape": bool(source and source.scraped_data),
+        "note": has_note,
+        "files": files,
+    }
+
+
+def _compute_enrichment(content, company, source=None) -> dict:
+    """Compute the cognitive enrichment bundle for a DNA payload.
+
+    Guarded: if enrichment fails (e.g. malformed content), returns a minimal
+    bundle so the DNA is still saved. Enrichment is diagnostic, never blocking
+    at the pre-DNA stage.
+    """
+    from apps.companies.dna_enrichment import build_enrichment
+    try:
+        available = _available_sources(source, company) if source else {}
+        return build_enrichment(content, available_sources=available)
+    except Exception:
+        logger.exception("Enrichment computation failed; saving DNA without full bundle")
+        return {"error": "enrichment_computation_failed"}
 
 
 def _generate_dna(source: Source, company):
@@ -80,6 +112,11 @@ def _generate_dna(source: Source, company):
         dna_type=CompanyDNA.TYPE_PRE,
         content=content,
     )
+    # Cognitive enrichment + audit hash (PIANO 1.5 integration).
+    dna._enrichment = _compute_enrichment(content, company, source)
+    dna.audit_hash = compute_audit_hash(content, previous_hash="")
+    dna.previous_hash = ""
+    dna.save(update_fields=["_enrichment", "audit_hash", "previous_hash"])
     return dna, llm_call
 
 

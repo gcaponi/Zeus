@@ -66,6 +66,9 @@ class CompanyDNA(models.Model):
     # content to the previous version's hash; previous_hash links the chain.
     audit_hash = models.CharField(max_length=64, null=True, blank=True)
     previous_hash = models.CharField(max_length=64, null=True, blank=True)
+    # Cognitive enrichment bundle (PIANO 1.5 integration): validator flags,
+    # scoring metrics, evidence mismatches — all diagnostics in one JSON.
+    _enrichment = models.JSONField(null=True, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

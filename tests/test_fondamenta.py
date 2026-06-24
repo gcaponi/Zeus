@@ -940,3 +940,201 @@ class TestAuditHashChain:
         unlinked = compute_audit_hash(complete_payload, previous_hash="")
         linked = compute_audit_hash(complete_payload, previous_hash=pre_hash)
         assert unlinked != linked  # chain linkage changes the hash
+
+
+class TestEnrichmentBundle:
+    """PIANO 1.5 integration — build_enrichment packs validator+scoring+evidence."""
+
+    def _rich_content(self) -> dict:
+        return {
+            "identita": {"postura": "Affianca il cliente [SRC:scrape]", "convinzioni": ["qualita certificata [SRC:file]"]},
+            "modelli_mentali": {"pilastri": ["principio [SRC:scrape]"], "sequenza_di_lettura": "caso [SRC:note]"},
+            "nucleo_tecnico": {"approccio_distintivo": "metodo [SRC:scrape]", "trade_off_scelti": "tempi [SRC:note]", "famiglie_prodotto": ["fam [SRC:scrape]"]},
+            "confini": {"anti_pattern": ["no promesse [SRC:note]"], "richieste_rifiutate": "sotto soglia [SRC:note]"},
+            "tono": {"registro": "tecnico-accessibile", "esempi": [{"sbagliato": "x", "giusto": "y"}]},
+            "logica_decisionale": {"filosofia_custom": "caso per caso secondo principi tecnici", "escalation": "senior interviene"},
+        }
+
+    def test_bundle_has_three_sections(self):
+        from apps.companies.dna_enrichment import build_enrichment
+
+        bundle = build_enrichment(self._rich_content())
+        assert set(bundle.keys()) == {"validation", "scoring", "evidence"}
+
+    def test_bundle_validation_has_flags_and_safe_mode(self):
+        from apps.companies.dna_enrichment import build_enrichment
+
+        bundle = build_enrichment(self._rich_content())
+        v = bundle["validation"]
+        assert "score" in v and "safe_mode" in v and "flags" in v
+        assert "guards_passed" in v and "guards_total" in v
+
+    def test_bundle_scoring_has_six_metrics(self):
+        from apps.companies.dna_enrichment import build_enrichment
+
+        s = build_enrichment(self._rich_content())["scoring"]
+        for key in ("completeness", "cognitive_tension", "evidence_density",
+                    "source_diversity", "confidence", "overall"):
+            assert key in s
+
+    def test_bundle_evidence_reports_mismatch(self):
+        from apps.companies.dna_enrichment import build_enrichment
+
+        # rich content cites [SRC:note] but note is unavailable → mismatch.
+        bundle = build_enrichment(self._rich_content(), available_sources={"scrape": True, "note": False, "files": []})
+        assert bundle["evidence"]["has_mismatch"] is True
+
+    def test_summary_compacts_bundle(self):
+        from apps.companies.dna_enrichment import build_enrichment, enrichment_summary
+
+        bundle = build_enrichment(self._rich_content())
+        summary = enrichment_summary(bundle)
+        assert summary["available"] is True
+        assert "validation_score" in summary
+        assert "flag_count" in summary
+
+    def test_summary_handles_missing_enrichment(self):
+        from apps.companies.dna_enrichment import enrichment_summary
+
+        assert enrichment_summary(None)["available"] is False
+
+
+@pytest.mark.django_db
+class TestPipelineIntegration:
+    """PIANO 1.5 integration — the pipeline must populate _enrichment + audit_hash."""
+
+    def _company_with_source(self):
+        from apps.companies.models import Company, Source
+        company = Company.objects.create(schema_name="integco", name="IntegCo")
+        source = Source.objects.create(
+            company=company, url="https://example.com", status="scraped",
+            scraped_data={"markdown": "# IntegCo\nProdotti industriali"},
+        )
+        return company, source
+
+    def test_generate_dna_populates_enrichment_and_audit(self, monkeypatch):
+        """_generate_dna must compute _enrichment and audit_hash on the pre-DNA."""
+        from apps.companies import tasks
+        from apps.companies.models import Company, CompanyFile, Source
+
+        company, source = self._company_with_source()
+        monkeypatch.setattr(tasks, "get_llm_client", lambda: MockLLMClient())
+
+        dna, llm_call = tasks._generate_dna(source, company)
+
+        assert dna._enrichment is not None
+        assert "validation" in dna._enrichment
+        assert "scoring" in dna._enrichment
+        assert "evidence" in dna._enrichment
+        assert dna.audit_hash is not None
+        assert len(dna.audit_hash) == 64
+
+    def test_generate_dna_audit_chain_pre_empty_previous(self, monkeypatch):
+        """First DNA (pre-DNA) has empty previous_hash."""
+        from apps.companies import tasks
+        from apps.companies.models import Company, Source
+
+        company, source = self._company_with_source()
+        monkeypatch.setattr(tasks, "get_llm_client", lambda: MockLLMClient())
+
+        dna, _ = tasks._generate_dna(source, company)
+        assert dna.previous_hash == "" or dna.previous_hash is None
+
+    def test_create_complete_dna_links_audit_to_pre(self, monkeypatch):
+        """Complete DNA audit chain must link to the pre-DNA audit_hash."""
+        from apps.companies import tasks
+        from apps.companies.models import Company, CompanyDNA, Source
+        from apps.companies.views import _create_complete_dna
+
+        company, source = self._company_with_source()
+        monkeypatch.setattr(tasks, "get_llm_client", lambda: MockLLMClient())
+
+        pre_dna, _ = tasks._generate_dna(source, company)
+        complete = _create_complete_dna(company, pre_dna, user=None)
+
+        assert complete.audit_hash is not None
+        assert complete.previous_hash == pre_dna.audit_hash
+        assert complete.audit_hash != pre_dna.audit_hash
+
+    def test_create_complete_dna_populates_enrichment(self, monkeypatch):
+        """Complete DNA must carry a cognitive enrichment bundle."""
+        from apps.companies import tasks
+        from apps.companies.models import Company, Source
+        from apps.companies.views import _create_complete_dna
+
+        company, source = self._company_with_source()
+        monkeypatch.setattr(tasks, "get_llm_client", lambda: MockLLMClient())
+
+        pre_dna, _ = tasks._generate_dna(source, company)
+        complete = _create_complete_dna(company, pre_dna, user=None)
+
+        assert complete._enrichment is not None
+        assert "scoring" in complete._enrichment
+
+    def test_safe_mode_blocks_final_approval(self, rf_with_tenant):
+        """A DNA in safe_mode (CRITICAL flag) cannot be approved even when
+        all sections are marked as approved."""
+        from apps.companies import views
+        from apps.companies.models import Company, CompanyDNA, SectionApproval
+
+        # Company schema_name must match the fixture's tenant (test-tenant).
+        company = Company.objects.create(schema_name="test-tenant", name="SafeCo")
+        # Build a DNA with an empty layer → layer_completeness CRITICAL → safe_mode.
+        dna = CompanyDNA.objects.create(
+            company=company, version=1, dna_type=CompanyDNA.TYPE_COMPLETE,
+            content={k: "testo" for k in LAYER_KEYS},
+        )
+        dna.content["confini"] = {}  # whole layer empty → CRITICAL
+        dna.save(update_fields=["content"])
+        # Pre-populate the enrichment bundle so safe_mode is detected.
+        from apps.companies.dna_enrichment import build_enrichment
+        dna._enrichment = build_enrichment(dna.content)
+        dna.save(update_fields=["_enrichment"])
+        assert dna._enrichment["validation"]["safe_mode"] is True
+
+        # Approve all 6 layers (so missing_sections() is empty).
+        approver = rf_with_tenant("get", "/").user
+        for key in LAYER_KEYS:
+            SectionApproval.objects.create(dna=dna, section_key=key, approved_by=approver)
+        assert dna.missing_sections() == []
+
+        # Attempt the final approval → must be blocked (409).
+        req = rf_with_tenant(
+            "post", f"/onboarding/{dna.pk}/dna/section/identita/approve/", {}, form=True,
+        )
+        resp = views.dna_section_approve(req, dna.pk, "identita")
+        assert resp.status_code == 409
+        dna.refresh_from_db()
+        assert dna.is_approved is None  # NOT approved
+
+    def test_safe_mode_allows_approval_when_clean(self, rf_with_tenant):
+        """A clean DNA (no safe_mode) is approved normally."""
+        from apps.companies import views
+        from apps.companies.models import Company, CompanyDNA, SectionApproval
+
+        company = Company.objects.create(schema_name="test-tenant", name="CleanCo")
+        # Use a structurally-valid 6-layer content (from the mock) so the
+        # validator does not flag layer_completeness / safe_mode.
+        clean_content = MockLLMClient().generate_structured(
+            prompt="GENERA DNA GENERALE", response_model=DNAGeneraleSchema,
+        ).model_dump()
+        dna = CompanyDNA.objects.create(
+            company=company, version=1, dna_type=CompanyDNA.TYPE_COMPLETE,
+            content=clean_content,
+        )
+        # Clean enrichment (no safe_mode).
+        from apps.companies.dna_enrichment import build_enrichment
+        dna._enrichment = build_enrichment(dna.content)
+        dna.save(update_fields=["_enrichment"])
+        assert dna._enrichment["validation"]["safe_mode"] is False
+
+        approver = rf_with_tenant("get", "/").user
+        for key in LAYER_KEYS:
+            SectionApproval.objects.create(dna=dna, section_key=key, approved_by=approver)
+
+        req = rf_with_tenant(
+            "post", f"/onboarding/{dna.pk}/dna/section/identita/approve/", {}, form=True,
+        )
+        resp = views.dna_section_approve(req, dna.pk, "identita")
+        dna.refresh_from_db()
+        assert dna.is_approved is not None  # approved

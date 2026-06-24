@@ -509,6 +509,19 @@ def _generate_company_questions(company, dna):
     return list(dna.questions.all())
 
 
+def _dna_in_safe_mode(dna) -> bool:
+    """Return True if the DNA's enrichment bundle reports safe_mode (CRITICAL)."""
+    enrichment = dna._enrichment or {}
+    return bool(enrichment.get("validation", {}).get("safe_mode"))
+
+
+def _safe_mode_flags(dna) -> list:
+    """Return the CRITICAL flags from the enrichment bundle, for display."""
+    enrichment = dna._enrichment or {}
+    flags = enrichment.get("validation", {}).get("flags", [])
+    return [f for f in flags if f.get("severity") == "CRITICAL"]
+
+
 def _create_complete_dna(company, pre_dna, user):
     questions = list(pre_dna.questions.all())
     plan_slug = questions[0].plan_slug if questions else _plan_slug_for_company(company)
@@ -547,13 +560,55 @@ def _create_complete_dna(company, pre_dna, user):
     last_version = company.dna_versions.order_by("-version").first()
     next_version = (last_version.version + 1) if last_version else 1
     company.dna_versions.filter(is_current=True).update(is_current=False)
-    return CompanyDNA.objects.create(
+    dna = CompanyDNA.objects.create(
         company=company,
         version=next_version,
         dna_type=CompanyDNA.TYPE_COMPLETE,
         content=content,
         created_by=user if user and user.is_authenticated else None,
     )
+
+    # PIANO 1.5 integration — self-critique + audit chain + enrichment.
+    # The self-critique loop refines the 6 cognitive layers only; the extra
+    # content keys (questionario, profilo) are preserved unchanged.
+    _apply_self_critique(dna, company)
+    _finalize_complete_dna(dna, pre_dna, company)
+
+    return dna
+
+
+def _apply_self_critique(dna, company):
+    """Run the 2-pass self-critique loop on the 6 cognitive layers.
+
+    Guarded: any failure falls back to the original DNA. The critique is a
+    refinement, never a blocker — if the LLM hiccups, we keep the unrefined DNA.
+    """
+    try:
+        from apps.companies.dna_critique import self_critique_dna
+        from apps.companies.dna_schemas import DNAGeneraleSchema, LAYER_KEYS as LK
+
+        layer_content = {k: dna.content.get(k) for k in LK if k in dna.content}
+        schema = DNAGeneraleSchema.model_validate(layer_content)
+        refined, _report = self_critique_dna(schema, get_llm_client())
+        # Re-apply only the 6 layers; keep the rest of content intact.
+        new_content = dict(dna.content)
+        new_content.update(refined.model_dump())
+        dna.content = new_content
+        dna.save(update_fields=["content"])
+    except Exception:
+        logger.exception("Self-critique loop failed; keeping unrefined DNA")
+
+
+def _finalize_complete_dna(dna, pre_dna, company):
+    """Compute enrichment + audit chain for a complete DNA (links to pre-DNA)."""
+    from apps.companies.audit import compute_audit_hash
+    from apps.companies.tasks import _compute_enrichment
+
+    previous_hash = pre_dna.audit_hash or ""
+    dna._enrichment = _compute_enrichment(dna.content, company, source=None)
+    dna.audit_hash = compute_audit_hash(dna.content, previous_hash=previous_hash)
+    dna.previous_hash = previous_hash
+    dna.save(update_fields=["_enrichment", "audit_hash", "previous_hash"])
 
 
 def _extract_company_file_text(uploaded_file):
@@ -1223,6 +1278,20 @@ def dna_section_approve(request, pk, section_key):
         # Check if all sections approved
         dna.refresh_from_db()
         if not dna.missing_sections():
+            # PIANO 1.5: safe_mode blocks final approval. A DNA with a CRITICAL
+            # validation flag (e.g. a whole layer empty) cannot be approved until
+            # the issue is resolved — it must be edited first.
+            if _dna_in_safe_mode(dna):
+                if request.headers.get("HX-Request") == "true":
+                    return _action_error(
+                        "DNA in safe mode: risolvi i flag CRITICAL (strati vuoti) "
+                        "prima di approvare.", status=409,
+                    )
+                return JsonResponse({
+                    "error": "safe_mode",
+                    "detail": "Risolvi i flag CRITICAL prima di approvare il DNA.",
+                    "flags": _safe_mode_flags(dna),
+                }, status=409)
             dna.is_approved = timezone.now()
             dna.save(update_fields=["is_approved"])
 
@@ -1279,6 +1348,15 @@ def dna_section_edit(request, pk, section_key):
         content=content,
         created_by=request.user,
     )
+
+    # PIANO 1.5: recompute enrichment + link audit chain to the previous version.
+    from apps.companies.audit import compute_audit_hash
+    from apps.companies.tasks import _compute_enrichment
+    previous_hash = old_dna.audit_hash or ""
+    new_dna._enrichment = _compute_enrichment(content, company, source=None)
+    new_dna.audit_hash = compute_audit_hash(content, previous_hash=previous_hash)
+    new_dna.previous_hash = previous_hash
+    new_dna.save(update_fields=["_enrichment", "audit_hash", "previous_hash"])
 
     # Transfer approvals from old DNA to new DNA (Option B)
     for approval in old_dna.section_approvals.all():

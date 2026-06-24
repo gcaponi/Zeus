@@ -1070,32 +1070,7 @@ class TestDNAReviewViews:
         assert new_dna.content["identita"] == "Test aggiornato"
 
 
-@pytest.fixture
-def rf_with_tenant(django_user_model):
-    """RequestFactory with request.tenant + authenticated user."""
-    from django.test.client import RequestFactory
-
-    rf = RequestFactory()
-    user = django_user_model.objects.create_user(username="u", email="test@x.it", password="pw")
-
-    def _make(method, path, data=None, form=False):
-        if method == "post":
-            if form:
-                req = rf.post(path, data or {})
-            else:
-                req = rf.post(path, json.dumps(data or {}), content_type="application/json")
-        else:
-            req = rf.get(path)
-
-        class FakeTenant:
-            schema_name = "test-tenant"
-            name = "Test Tenant"
-
-        req.tenant = FakeTenant()
-        req.user = user
-        return req
-
-    return _make
+# rf_with_tenant fixture is defined in tests/conftest.py (shared).
 
 
 @pytest.mark.django_db
