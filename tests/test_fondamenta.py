@@ -78,3 +78,33 @@ class TestDNASchema:
             "identita", "modelli_mentali", "nucleo_tecnico",
             "confini", "tono", "logica_decisionale",
         }
+
+
+from apps.companies.llm_client import MockLLMClient
+
+
+class TestGenerateStructured:
+    def test_mock_returns_valid_dna_schema(self):
+        """MockLLMClient.generate_structured must return a DNAGeneraleSchema with 6 layers."""
+        client = MockLLMClient()
+        dna = client.generate_structured(
+            prompt="GENERA DNA GENERALE",
+            response_model=DNAGeneraleSchema,
+        )
+        assert isinstance(dna, DNAGeneraleSchema)
+        assert dna.identita.postura  # non-empty
+        assert len(dna.nucleo_tecnico.famiglie_prodotto) >= 1
+        assert len(dna.confini.anti_pattern) >= 1
+        assert len(dna.tono.esempi) >= 1
+
+    def test_mock_generate_structured_to_dict(self):
+        """The schema returned must serialize to the 6-layer dict shape."""
+        client = MockLLMClient()
+        dna = client.generate_structured(
+            prompt="GENERA DNA GENERALE",
+            response_model=DNAGeneraleSchema,
+        )
+        d = dna.model_dump()
+        assert "chi_siamo" not in d  # old keys must be gone
+        assert "identita" in d
+        assert "logica_decisionale" in d

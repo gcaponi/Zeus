@@ -38,6 +38,10 @@ class LLMClient(ABC):
     def generate(self, prompt: str, model: str | None = None) -> LLMResult:
         ...
 
+    @abstractmethod
+    def generate_structured(self, prompt: str, response_model, model: str | None = None):
+        ...
+
 
 class OpenAIClient(LLMClient):
     def __init__(self, api_key: str = LLM_API_KEY, base_url: str = LLM_BASE_URL):
@@ -69,6 +73,19 @@ class OpenAIClient(LLMClient):
             text=text, tokens_in=tokens_in, tokens_out=tokens_out,
             cost=round(cost, 6), latency_ms=latency,
         )
+
+    def generate_structured(self, prompt: str, response_model, model: str | None = None):
+        import instructor
+
+        model = model or LLM_MODEL
+        structured_client = instructor.from_openai(self._client)
+        instance = structured_client.chat.completions.create(
+            model=model,
+            response_model=response_model,
+            max_retries=2,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return instance
 
 
 class MockLLMClient(LLMClient):
@@ -186,6 +203,85 @@ class MockLLMClient(LLMClient):
             cost=0.0001,
             latency_ms=1200,
         )
+
+    def generate_structured(self, prompt: str, response_model, model: str | None = None):
+        """Mock structured generation — returns a valid DNAGeneraleSchema instance."""
+        from apps.companies.dna_schemas import (
+            DNAGeneraleSchema,
+            Identita,
+            ModelliMentali,
+            NucleoTecnico,
+            Confini,
+            Tono,
+            LogicaDecisionale,
+        )
+
+        if response_model is DNAGeneraleSchema:
+            return DNAGeneraleSchema(
+                identita=Identita(
+                    postura="Affianca il cliente con competenza tecnica",
+                    convinzioni=[
+                        "La qualita del materiale non e negoziabile",
+                        "Le consegne si rispettano sempre",
+                    ],
+                ),
+                modelli_mentali=ModelliMentali(
+                    pilastri=[
+                        "Partire sempre dal caso d'uso reale",
+                        "Documentare ogni scelta tecnica",
+                    ],
+                    sequenza_di_lettura=(
+                        "Prima il caso d'uso, poi i materiali, infine i vincoli produttivi"
+                    ),
+                ),
+                nucleo_tecnico=NucleoTecnico(
+                    approccio_distintivo=(
+                        "Lavorazione su misura con controllo qualita integrato"
+                    ),
+                    trade_off_scelti=(
+                        "Tempi leggermente piu lunghi per garantire qualita"
+                    ),
+                    famiglie_prodotto=[
+                        "Serbatoi pressurizzati — recipienti per uso industriale",
+                        "Componenti per oleodinamica — valvole e raccordi",
+                    ],
+                ),
+                confini=Confini(
+                    anti_pattern=[
+                        "Non promettere tempistiche inferiori a 3 settimane",
+                        "Non accettare commesse senza specifiche tecniche",
+                    ],
+                    richieste_rifiutate=(
+                        "Commesse sotto le 5 unita — non sostenibili economicamente"
+                    ),
+                ),
+                tono=Tono(
+                    registro="Tecnico-accessibile, preciso ma comprensibile",
+                    esempi=[
+                        {
+                            "sbagliato": "I nostri prodotti sono i migliori del mercato",
+                            "giusto": (
+                                "Per applicazioni sotto i 200 gradi consigliamo il 304; "
+                                "oltre, il 316"
+                            ),
+                        }
+                    ],
+                ),
+                logica_decisionale=LogicaDecisionale(
+                    filosofia_custom=(
+                        "Valutiamo il custom caso per caso, partendo dalla fattibilita tecnica"
+                    ),
+                    escalation=(
+                        "Quando il problema oltrepassa il nostro dominio produttivo, "
+                        "segnaliamo e indirizziamo"
+                    ),
+                ),
+            )
+        # Generic fallback: instantiate with empty defaults if possible
+        try:
+            return response_model()
+        except Exception:
+            return response_model.model_validate({})
 
     @staticmethod
     def _extract_section_key(prompt: str, prefix: str) -> str:
