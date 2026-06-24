@@ -300,7 +300,7 @@ class TestDNAValidator:
         from apps.companies.dna_validator import validate_dna
 
         dna = DNAGeneraleSchema(
-            identita=Identita(postura="Affianca il cliente", convinczioni=["qualita"]),
+            identita=Identita(postura="Affianca il cliente", convinzioni=["qualita"]),
             modelli_mentali=ModelliMentali(pilastri=["principio"], sequenza_di_lettura="caso d'uso"),
             nucleo_tecnico=NucleoTecnico(
                 approccio_distintivo="metodo", trade_off_scelti="tempi", famiglie_prodotto=["fam"],
@@ -478,7 +478,7 @@ class TestDNAScoring:
         from apps.companies.dna_scoring import score_dna
 
         dna = DNAGeneraleSchema(
-            identita=Identita(postura="leader del mercato", convinczioni=["qualita"]),
+            identita=Identita(postura="leader del mercato", convinzioni=["qualita"]),
             modelli_mentali=ModelliMentali(pilastri=["eccellenza"], sequenza_di_lettura="innovazione"),
             nucleo_tecnico=NucleoTecnico(
                 approccio_distintivo="i migliori", trade_off_scelti="",
@@ -531,7 +531,7 @@ class TestDNAScoring:
         dna2 = self._rich_dna()
         dna2.identita = Identita(
             postura="Cambiamo postura [SRC:scrape]",
-            convinczioni=["nuova convinzione [SRC:note]"],
+            convinzioni=["nuova convinzione [SRC:note]"],
         )
         s3 = score_dna(dna2)
         assert s3.reproducibility_hash != s1.reproducibility_hash
@@ -544,7 +544,7 @@ class TestDNAScoring:
 
         # Brochure DNA → LOW confidence.
         brochure = DNAGeneraleSchema(
-            identita=Identita(postura="leader", convinczioni=["qualita"]),
+            identita=Identita(postura="leader", convinzioni=["qualita"]),
             modelli_mentali=ModelliMentali(pilastri=["eccellenza"], sequenza_di_lettura="innovazione"),
             nucleo_tecnico=NucleoTecnico(
                 approccio_distintivo="migliori", trade_off_scelti="",
@@ -607,3 +607,135 @@ class TestPromptSourceProtocol:
         # With markers present, evidence_grounding must NOT flag.
         guard_names = {f.guard for f in result.flags}
         assert "evidence_grounding" not in guard_names
+
+
+class TestEvidenceGrounding:
+    """PIANO 1.5 Task 5 — parse [SRC:...] markers and detect source mismatches."""
+
+    def test_extract_sources_from_dna(self):
+        """extract_sources must return all [SRC:type] markers found in a DNA."""
+        from apps.companies.evidence import extract_sources
+
+        dna = DNAGeneraleSchema(
+            identita=Identita(
+                postura="Affianca il cliente [SRC:scrape]",
+                convinzioni=["qualita [SRC:file:brochure.pdf]", "tempi [SRC:note]"],
+            ),
+            modelli_mentali=ModelliMentali(pilastri=["x"], sequenza_di_lettura="y"),
+            nucleo_tecnico=NucleoTecnico(
+                approccio_distintivo="a", trade_off_scelti="t", famiglie_prodotto=["f"],
+            ),
+            confini=Confini(anti_pattern=["n"], richieste_rifiutate="r"),
+            tono=Tono(registro="r", esempi=[{"sbagliato": "s", "giusto": "g"}]),
+            logica_decisionale=LogicaDecisionale(filosofia_custom="c", escalation="e"),
+        )
+        sources = extract_sources(dna)
+        # Three distinct source categories should be present.
+        categories = {s.category for s in sources}
+        assert "scrape" in categories
+        assert "file" in categories
+        assert "note" in categories
+        # The file source should carry its identifier.
+        file_refs = [s for s in sources if s.category == "file"]
+        assert any(s.ref == "brochure.pdf" for s in file_refs)
+
+    def test_extract_sources_from_dict(self):
+        """extract_sources must accept a plain dict (CompanyDNA.content shape)."""
+        from apps.companies.evidence import extract_sources
+
+        dna_dict = {
+            "identita": {"postura": "x [SRC:scrape]", "convinzioni": ["y [SRC:note]"]},
+            "modelli_mentali": {"pilastri": ["z"], "sequenza_di_lettura": "w"},
+            "nucleo_tecnico": {"approccio_distintivo": "a", "trade_off_scelti": "t", "famiglie_prodotto": ["f"]},
+            "confini": {"anti_pattern": ["n"], "richieste_rifiutate": "r"},
+            "tono": {"registro": "r", "esempi": [{"sbagliato": "s", "giusto": "g"}]},
+            "logica_decisionale": {"filosofia_custom": "c", "escalation": "e"},
+        }
+        sources = extract_sources(dna_dict)
+        assert len(sources) >= 2
+        assert any(s.category == "scrape" for s in sources)
+
+    def test_extract_sources_empty_when_no_markers(self):
+        """A DNA with no [SRC:] markers yields an empty source list."""
+        from apps.companies.evidence import extract_sources
+
+        dna = DNAGeneraleSchema(
+            identita=Identita(postura="no sources here", convinzioni=["none"]),
+            modelli_mentali=ModelliMentali(pilastri=["x"], sequenza_di_lettura="y"),
+            nucleo_tecnico=NucleoTecnico(
+                approccio_distintivo="a", trade_off_scelti="t", famiglie_prodotto=["f"],
+            ),
+            confini=Confini(anti_pattern=["n"], richieste_rifiutate="r"),
+            tono=Tono(registro="r", esempi=[{"sbagliato": "s", "giusto": "g"}]),
+            logica_decisionale=LogicaDecisionale(filosofia_custom="c", escalation="e"),
+        )
+        assert extract_sources(dna) == []
+
+    def test_source_mismatch_detected_when_ref_not_in_available(self):
+        """A [SRC:file:name] referencing a file not in the available set is a mismatch."""
+        from apps.companies.evidence import check_source_consistency, SourceMismatch
+
+        dna = DNAGeneraleSchema(
+            identita=Identita(
+                postura="x [SRC:scrape]",
+                convinzioni=["claim grounded in un file inesistente [SRC:file:fantasma.pdf]"],
+            ),
+            modelli_mentali=ModelliMentali(pilastri=["x"], sequenza_di_lettura="y"),
+            nucleo_tecnico=NucleoTecnico(
+                approccio_distintivo="a", trade_off_scelti="t", famiglie_prodotto=["f"],
+            ),
+            confini=Confini(anti_pattern=["n"], richieste_rifiutate="r"),
+            tono=Tono(registro="r", esempi=[{"sbagliato": "s", "giusto": "g"}]),
+            logica_decisionale=LogicaDecisionale(filosofia_custom="c", escalation="e"),
+        )
+        # Available sources: scrape + note present, but no files at all.
+        available = {"scrape": True, "note": True, "files": []}
+        result = check_source_consistency(dna, available)
+        assert result.has_mismatch is True
+        assert any(
+            isinstance(m, SourceMismatch) and "fantasma.pdf" in m.detail
+            for m in result.mismatches
+        )
+
+    def test_source_consistency_ok_when_refs_match(self):
+        """No mismatch when all [SRC:file:name] reference real available files."""
+        from apps.companies.evidence import check_source_consistency
+
+        dna = DNAGeneraleSchema(
+            identita=Identita(
+                postura="x [SRC:scrape]",
+                convinzioni=["claim da un file reale [SRC:file:catalogo.pdf]"],
+            ),
+            modelli_mentali=ModelliMentali(pilastri=["x"], sequenza_di_lettura="y"),
+            nucleo_tecnico=NucleoTecnico(
+                approccio_distintivo="a [SRC:scrape]", trade_off_scelti="t", famiglie_prodotto=["f"],
+            ),
+            confini=Confini(anti_pattern=["n [SRC:note]"], richieste_rifiutate="r"),
+            tono=Tono(registro="r", esempi=[{"sbagliato": "s", "giusto": "g"}]),
+            logica_decisionale=LogicaDecisionale(filosofia_custom="c", escalation="e"),
+        )
+        available = {
+            "scrape": True, "note": True,
+            "files": ["catalogo.pdf", "altro.docx"],
+        }
+        result = check_source_consistency(dna, available)
+        assert result.has_mismatch is False
+        assert result.mismatches == []
+
+    def test_source_mismatch_when_category_unavailable(self):
+        """[SRC:note] present but notes were not provided is a mismatch."""
+        from apps.companies.evidence import check_source_consistency
+
+        dna = DNAGeneraleSchema(
+            identita=Identita(postura="x [SRC:scrape]", convinzioni=["da nota [SRC:note]"]),
+            modelli_mentali=ModelliMentali(pilastri=["x"], sequenza_di_lettura="y"),
+            nucleo_tecnico=NucleoTecnico(
+                approccio_distintivo="a", trade_off_scelti="t", famiglie_prodotto=["f"],
+            ),
+            confini=Confini(anti_pattern=["n"], richieste_rifiutate="r"),
+            tono=Tono(registro="r", esempi=[{"sbagliato": "s", "giusto": "g"}]),
+            logica_decisionale=LogicaDecisionale(filosofia_custom="c", escalation="e"),
+        )
+        available = {"scrape": True, "note": False, "files": []}
+        result = check_source_consistency(dna, available)
+        assert result.has_mismatch is True
