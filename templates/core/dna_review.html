@@ -39,8 +39,8 @@
 <div class="mx-auto max-w-4xl">
     <header class="mb-8">
         <a href="{% url 'onboarding-index' %}" class="text-sm text-brand-cyan hover:underline">← Onboarding</a>
-        <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">Review DNA Aziendale</h1>
-        <p class="mt-2 text-content-secondary">Versione {{ dna.version }} · Approva ogni sezione per completare il DNA.</p>
+        <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">Review DNA Generale</h1>
+        <p class="mt-2 text-content-secondary">Versione {{ dna.version }} · Rivedi la sintesi cognitiva finale.</p>
     </header>
 
     {% if is_fully_approved %}
@@ -54,7 +54,15 @@
         </div>
     {% endif %}
 
-    <div class="space-y-4">
+    <section class="zeus-card p-6 mb-6">
+        <p class="zeus-label text-brand-cyan">Sintesi Cognitiva</p>
+        <div class="mt-4 text-sm leading-7 text-content-primary whitespace-pre-line">{{ public_document|default:"Non disponibile" }}</div>
+    </section>
+
+    <details class="zeus-card p-5 mb-6">
+        <summary class="cursor-pointer font-bold font-display text-content-primary">Revisione tecnica interna ZEUS</summary>
+        <p class="mt-2 text-sm text-content-secondary">Questi strati servono solo a validare il ragionamento interno. Non sono il documento finale per il cliente.</p>
+        <div class="mt-5 space-y-4">
         {% for section in sections %}
             <section class="zeus-card p-5">
                 <div class="flex items-center justify-between">
@@ -80,7 +88,8 @@
                 {% endif %}
             </section>
         {% endfor %}
-    </div>
+        </div>
+    </details>
 
     {% if is_fully_approved %}
         <div class="mt-8 zeus-card p-6 text-center">
@@ -99,7 +108,7 @@
              style="background: rgba(2,6,23,0.4); border-bottom: 1px solid rgba(255,255,255,0.08);">
             <div>
                 <p class="text-xs font-bold uppercase tracking-widest text-brand-cyan-light">ZEUS</p>
-                <h2 class="dna-popup-title text-xl font-bold font-display">DNA Aziendale</h2>
+                <h2 class="dna-popup-title text-xl font-bold font-display">DNA Generale</h2>
                 <p class="dna-popup-meta text-xs mt-0.5">{{ company_name|default:"" }} · Versione {{ dna.version }}</p>
             </div>
             <button onclick="closeDnaPopup()" class="dna-popup-close w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors">
@@ -109,14 +118,7 @@
 
         <!-- Contenuto scrollabile -->
         <div class="overflow-y-auto px-8 py-6" style="max-height: calc(85vh - 160px);">
-            <div class="space-y-6">
-                {% for section in sections %}
-                    <div>
-                        <h3 class="text-sm font-bold uppercase tracking-wider text-brand-cyan">{{ section.label }}</h3>
-                        <p class="dna-popup-section-text mt-2 text-sm leading-7 whitespace-pre-line">{{ section.value|default:"Non disponibile" }}</p>
-                    </div>
-                {% endfor %}
-            </div>
+            <div class="dna-popup-section-text text-sm leading-7 whitespace-pre-line">{{ public_document|default:"Non disponibile" }}</div>
         </div>
 
         <!-- Footer popup -->

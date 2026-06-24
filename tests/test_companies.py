@@ -941,6 +941,32 @@ class TestDNAQuestions:
         assert "descrizione" not in values["identita"]
         assert "{" not in values["identita"]
 
+    def test_public_document_uses_sintesi_cognitiva_without_layer_titles(self):
+        content = {
+            "sintesi_cognitiva": "CAIS integra l'intelligenza artificiale nei processi operativi.",
+            "identita": {"postura": "Test identita"},
+            "modelli_mentali": {"pilastri": ["Test pilastro"]},
+        }
+
+        public_document = views._dna_public_document(content)
+
+        assert public_document == "CAIS integra l'intelligenza artificiale nei processi operativi."
+        assert "Test identita" not in public_document
+        assert "modelli_mentali" not in public_document
+
+    def test_public_document_falls_back_to_layer_text_without_labels(self):
+        content = {
+            "identita": {"postura": "Test identita"},
+            "tono": {"registro": "Test tono"},
+        }
+
+        public_document = views._dna_public_document(content)
+
+        assert "Test identita" in public_document
+        assert "Test tono" in public_document
+        assert "Chi siamo" not in public_document
+        assert "Il nostro tono" not in public_document
+
     def test_submit_answers_requires_all_answers(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
         pre_dna = CompanyDNA.objects.create(

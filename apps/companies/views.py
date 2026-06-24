@@ -181,6 +181,25 @@ def _dna_sections(content, old_content=None):
     return sections
 
 
+def _dna_public_document(content):
+    """Return the client-facing Sintesi Cognitiva, never the internal layer map."""
+    if not isinstance(content, dict):
+        return _as_text(content).strip()
+
+    explicit = _as_text(content.get("sintesi_cognitiva")).strip()
+    if explicit:
+        return explicit
+
+    # Fallback for DNA generated before the public renderer existed: keep the
+    # internal order but hide layer labels so the client sees a continuous text.
+    paragraphs = []
+    for key in LAYER_KEYS:
+        text = _as_text(content.get(key)).strip()
+        if text:
+            paragraphs.append(text)
+    return "\n\n".join(paragraphs)
+
+
 def _as_text(value):
     if isinstance(value, list):
         parts = [_as_text(item).strip() for item in value]
@@ -1157,6 +1176,7 @@ def dna_review(request):
     return render(request, "core/dna_review.html", {
         "dna": dna,
         "sections": _dna_sections(dna.content),
+        "public_document": _dna_public_document(dna.content),
         "approved_keys": dna.approved_sections(),
         "missing_keys": dna.missing_sections(),
         "is_fully_approved": dna.is_fully_approved(),
@@ -1299,13 +1319,13 @@ def dna_download_pdf(request):
     if not dna:
         return HttpResponse("DNA not found", status=404)
 
-    pdf_bytes = _render_dna_pdf(company, dna, _dna_sections(dna.content))
+    pdf_bytes = _render_dna_pdf(company, dna, _dna_public_document(dna.content))
     response = HttpResponse(pdf_bytes, content_type="application/pdf")
     response["Content-Disposition"] = 'attachment; filename="DNA_aziendale.pdf"'
     return response
 
 
-def _render_dna_pdf(company, dna, sections):
+def _render_dna_pdf(company, dna, public_document):
     doc = fitz.open()
     page = doc.new_page(width=595, height=842)
     margin = 54
@@ -1335,11 +1355,7 @@ def _render_dna_pdf(company, dna, sections):
         gap=18,
     )
 
-    for section in sections:
-        if y > 720:
-            new_page()
-        write(section["label"].upper(), size=13, color=(0.0, 0.42, 0.55), gap=4, width=70)
-        write(section["value"], size=10.5, color=(0.08, 0.08, 0.08), gap=16)
+    write(public_document or "Non disponibile", size=10.5, color=(0.08, 0.08, 0.08), gap=16)
 
     return doc.tobytes()
 

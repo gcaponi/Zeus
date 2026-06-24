@@ -119,10 +119,32 @@ articles.
 
 # OUTPUT
 
-JSON with the 6 keys matching the DNAGeneraleSchema:
-identita, modelli_mentali, nucleo_tecnico, confini, tono, logica_decisionale.
+JSON with these top-level keys:
 
-Each value is a structured object matching the schema. No markdown inside the JSON.
+1. sintesi_cognitiva — the ONLY client-facing final document.
+2. identita, modelli_mentali, nucleo_tecnico, confini, tono, logica_decisionale —
+   internal reasoning layers used by ZEUS for validation and future specialists.
+
+## sintesi_cognitiva rules
+
+- Write a single conceptual text in Italian, 5-8 paragraphs.
+- DO NOT use titles, headings, bullets, numbered lists, or layer names.
+- DO NOT expose the internal labels: identita, modelli_mentali, nucleo_tecnico,
+  confini, tono, logica_decisionale.
+- Transform raw evidence into concepts. If the source says a support agent target
+  was "55% requests solved in 60 days", do NOT copy that metric into the final
+  text unless it is essential. Convert it into the concept: the company measures
+  AI integration through operational KPIs defined before deployment.
+- Specific numbers, examples, tools, and implementation details are evidence.
+  Use them to infer principles, posture, boundaries and decision logic. Do not
+  dump them into the final text.
+- The final text must read like a professional cognitive profile, not a case
+  study, not a sales page, not a technical audit log.
+
+The 6 internal layer values must still be structured objects matching the schema.
+They may contain concise evidence, but they must also transform raw data into
+concepts. No markdown inside the JSON.
+
 Respond with ONLY the JSON, no preamble, no explanation.
 
 === COMPANY WEBSITE (scraped) ===
