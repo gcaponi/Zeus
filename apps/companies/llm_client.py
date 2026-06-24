@@ -191,34 +191,34 @@ class MockLLMClient(LLMClient):
         return LLMResult(
             text=json.dumps({
                 "identita": {
-                    "postura": "Rossi Metalli affianca aziende tecniche affidabili.",
-                    "convinzioni": ["qualita certificata", "tempi chiari"],
+                    "postura": "Rossi Metalli affianca aziende tecniche affidabili [SRC:scrape]",
+                    "convinzioni": ["qualita certificata [SRC:file]", "tempi chiari [SRC:note]"],
                 },
                 "modelli_mentali": {
-                    "pilastri": ["qualita del materiale", "consegne puntuali"],
+                    "pilastri": ["qualita del materiale [SRC:scrape]", "consegne puntuali [SRC:note]"],
                     "sequenza_di_lettura": (
-                        "parte dall'uso finale e risale a materiale, lavorazione e consegna"
+                        "parte dall'uso finale e risale a materiale, lavorazione e consegna [SRC:scrape]"
                     ),
                 },
                 "nucleo_tecnico": {
-                    "approccio_distintivo": "acciai speciali per edilizia e industria",
-                    "trade_off_scelti": "personalizzazione tecnica con controllo tempi",
-                    "famiglie_prodotto": ["profili speciali", "acciai certificati"],
+                    "approccio_distintivo": "acciai speciali per edilizia e industria [SRC:scrape]",
+                    "trade_off_scelti": "personalizzazione tecnica con controllo tempi [SRC:note]",
+                    "famiglie_prodotto": ["profili speciali [SRC:scrape]", "acciai certificati [SRC:file]"],
                 },
                 "confini": {
-                    "anti_pattern": ["promesse non verificabili", "assenza di certificazione"],
-                    "richieste_rifiutate": "richieste incompatibili con qualita e tracciabilita",
+                    "anti_pattern": ["promesse non verificabili [SRC:note]", "assenza di certificazione [SRC:file]"],
+                    "richieste_rifiutate": "richieste incompatibili con qualita e tracciabilita [SRC:note]",
                 },
                 "tono": {
-                    "registro": "tecnico-accessibile",
+                    "registro": "tecnico-accessibile [SRC:scrape]",
                     "esempi": [{
                         "sbagliato": "siamo i migliori",
-                        "giusto": "consigliamo questa soluzione per vincoli certificati",
+                        "giusto": "consigliamo questa soluzione per vincoli certificati [SRC:note]",
                     }],
                 },
                 "logica_decisionale": {
-                    "filosofia_custom": "il fuori standard deve produrre valore tecnico reale",
-                    "escalation": "coinvolgere un tecnico senior su requisiti non chiari",
+                    "filosofia_custom": "il fuori standard deve produrre valore tecnico reale [SRC:note]",
+                    "escalation": "coinvolgere un tecnico senior su requisiti non chiari [SRC:scrape]",
                 },
             }, ensure_ascii=False),
             tokens_in=350,
@@ -242,61 +242,61 @@ class MockLLMClient(LLMClient):
         if response_model is DNAGeneraleSchema:
             return DNAGeneraleSchema(
                 identita=Identita(
-                    postura="Affianca il cliente con competenza tecnica",
+                    postura="Affianca il cliente con competenza tecnica [SRC:scrape]",
                     convinzioni=[
-                        "La qualita del materiale non e negoziabile",
-                        "Le consegne si rispettano sempre",
+                        "La qualita del materiale non e negoziabile [SRC:file]",
+                        "Le consegne si rispettano sempre [SRC:note]",
                     ],
                 ),
                 modelli_mentali=ModelliMentali(
                     pilastri=[
-                        "Partire sempre dal caso d'uso reale",
-                        "Documentare ogni scelta tecnica",
+                        "Partire sempre dal caso d'uso reale [SRC:scrape]",
+                        "Documentare ogni scelta tecnica [SRC:file]",
                     ],
                     sequenza_di_lettura=(
-                        "Prima il caso d'uso, poi i materiali, infine i vincoli produttivi"
+                        "Prima il caso d'uso, poi i materiali, infine i vincoli produttivi [SRC:note]"
                     ),
                 ),
                 nucleo_tecnico=NucleoTecnico(
                     approccio_distintivo=(
-                        "Lavorazione su misura con controllo qualita integrato"
+                        "Lavorazione su misura con controllo qualita integrato [SRC:scrape]"
                     ),
                     trade_off_scelti=(
-                        "Tempi leggermente piu lunghi per garantire qualita"
+                        "Tempi leggermente piu lunghi per garantire qualita [SRC:note]"
                     ),
                     famiglie_prodotto=[
-                        "Serbatoi pressurizzati — recipienti per uso industriale",
-                        "Componenti per oleodinamica — valvole e raccordi",
+                        "Serbatoi pressurizzati — recipienti per uso industriale [SRC:scrape]",
+                        "Componenti per oleodinamica — valvole e raccordi [SRC:file]",
                     ],
                 ),
                 confini=Confini(
                     anti_pattern=[
-                        "Non promettere tempistiche inferiori a 3 settimane",
-                        "Non accettare commesse senza specifiche tecniche",
+                        "Non promettere tempistiche inferiori a 3 settimane [SRC:note]",
+                        "Non accettare commesse senza specifiche tecniche [SRC:file]",
                     ],
                     richieste_rifiutate=(
-                        "Commesse sotto le 5 unita — non sostenibili economicamente"
+                        "Commesse sotto le 5 unita — non sostenibili economicamente [SRC:note]"
                     ),
                 ),
                 tono=Tono(
-                    registro="Tecnico-accessibile, preciso ma comprensibile",
+                    registro="Tecnico-accessibile, preciso ma comprensibile [SRC:scrape]",
                     esempi=[
                         {
                             "sbagliato": "I nostri prodotti sono i migliori del mercato",
                             "giusto": (
                                 "Per applicazioni sotto i 200 gradi consigliamo il 304; "
-                                "oltre, il 316"
+                                "oltre, il 316 [SRC:note]"
                             ),
                         }
                     ],
                 ),
                 logica_decisionale=LogicaDecisionale(
                     filosofia_custom=(
-                        "Valutiamo il custom caso per caso, partendo dalla fattibilita tecnica"
+                        "Valutiamo il custom caso per caso, partendo dalla fattibilita tecnica [SRC:note]"
                     ),
                     escalation=(
                         "Quando il problema oltrepassa il nostro dominio produttivo, "
-                        "segnaliamo e indirizziamo"
+                        "segnaliamo e indirizziamo [SRC:scrape]"
                     ),
                 ),
             )

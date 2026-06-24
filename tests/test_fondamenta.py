@@ -1,4 +1,6 @@
 """Tests for the ZEUS Fondamenta plan: 6-layer DNA schema + Instructor integration."""
+import json
+
 import pytest
 from pydantic import ValidationError
 
@@ -568,3 +570,40 @@ class TestDNAScoring:
         s = score_dna(self._rich_dna().model_dump())
         assert s.completeness == 100
         assert len(s.reproducibility_hash) == 64
+
+
+class TestPromptSourceProtocol:
+    """PIANO 1.5 Task 3 — the prompt must instruct the LLM to tag claims
+    with [SRC:...] markers, and the mock client must emit them."""
+
+    def test_prompt_template_contains_source_protocol(self):
+        """The dna_generale_v1.md prompt must define the [SRC:...] convention."""
+        from pathlib import Path
+
+        prompt_path = Path(__file__).resolve().parents[1] / "apps" / "companies" / "prompts" / "dna_generale_v1.md"
+        text = prompt_path.read_text(encoding="utf-8")
+        # The three canonical source categories must be documented in the prompt.
+        assert "[SRC:scrape]" in text
+        assert "[SRC:file]" in text
+        assert "[SRC:note]" in text
+
+    def test_mock_generate_emits_source_markers(self):
+        """MockLLMClient.generate (free-text DNA) must include [SRC:...] markers."""
+        client = MockLLMClient()
+        result = client.generate("GENERA DNA GENERALE")
+        data = json.loads(result.text)
+        blob = json.dumps(data, ensure_ascii=False)
+        assert "[SRC:" in blob  # at least one marker present
+        # Markers must use one of the canonical categories.
+        assert "[SRC:scrape]" in blob or "[SRC:file]" in blob or "[SRC:note]" in blob
+
+    def test_mock_generate_structured_emits_source_markers(self):
+        """MockLLMClient.generate_structured must return a schema whose values
+        carry [SRC:...] markers — so validator/scorer see grounded claims."""
+        client = MockLLMClient()
+        dna = client.generate_structured(prompt="GENERA DNA GENERALE", response_model=DNAGeneraleSchema)
+        from apps.companies.dna_validator import validate_dna
+        result = validate_dna(dna)
+        # With markers present, evidence_grounding must NOT flag.
+        guard_names = {f.guard for f in result.flags}
+        assert "evidence_grounding" not in guard_names

@@ -11,6 +11,24 @@ what technical approach. Focus is 90% on PRODUCTS and the PRODUCTION DOMAIN. The
 company's capacity to PRODUCE and its TECHNICAL APPROACH matter more than its
 business-card pitch.
 
+# SCIENTIFIC PROTOCOL — Evidence Grounding
+
+Every claim you extract MUST trace back to a source. Append a source marker to the end
+of each value (after the content, before any closing quote). Use exactly these tags:
+
+- [SRC:scrape] — the claim comes from the scraped company website
+- [SRC:file] — the claim comes from an uploaded company document
+- [SRC:note] — the claim comes from the client's free-text note
+
+Rules:
+- A single value may carry multiple markers: "Postura tecnica [SRC:scrape] [SRC:note]".
+- Each item in a list may carry its own marker.
+- NEVER fabricate a marker. If a value is your hypothesis (not grounded in any source),
+  do NOT add a marker — the validator will flag it as ungrounded, which is the correct
+  signal for "to confirm in interview".
+- Markers are the only way ZEUS can later measure evidence density and source diversity,
+  so they are mandatory for every grounded claim.
+
 # WHAT YOU MUST EXTRACT (6 layers)
 
 ## LAYER 1: identita — Who they are and how they position themselves
