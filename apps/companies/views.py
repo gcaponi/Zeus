@@ -12,6 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
+from apps.companies.dna_schemas import LAYER_KEYS, LAYER_TITLES
 from apps.companies.llm_client import LLM_MODEL, get_llm_client
 from apps.companies.models import (
     Company,
@@ -34,6 +35,8 @@ from apps.core.models import Plan, WorkspaceSubscription
 from apps.core.views import redirect_to_workspace_or_login
 
 logger = logging.getLogger(__name__)
+
+DNA_GENERALE_FALLBACK_LAYER = "logica_decisionale"
 
 QUESTION_GENERATION_PROFILES = {
     Plan.SLUG_STARTER: {
@@ -161,15 +164,9 @@ def _onboarding_context(request):
 
 
 def _dna_sections(content, old_content=None):
-    labels = {
-        "chi_siamo": "Chi siamo",
-        "mission": "Mission",
-        "settore": "Settore",
-        "mercato": "Mercato",
-        "pilastri": "Pilastri",
-    }
     sections = []
-    for key, label in labels.items():
+    for key in LAYER_KEYS:
+        label = LAYER_TITLES[key]
         value = _as_text(content.get(key) if isinstance(content, dict) else None)
         old_value = None
         if old_content and isinstance(old_content, dict):
@@ -256,7 +253,7 @@ Formato JSON:
   "questions": [
     {{
       "code": "A1",
-      "section_key": "chi_siamo|mission|settore|mercato|pilastri",
+      "section_key": "identita|modelli_mentali|nucleo_tecnico|confini|tono|logica_decisionale",
       "principle": "nome breve del principio usato",
       "question": "domanda al cliente",
       "answer_depth": "generica|mirata|analitica",
@@ -364,7 +361,7 @@ ISTRUZIONI:
   ricca e professionale dell'{entity_type}.
 
 {'- Restituisci un array JSON di 3-5 stringhe brevi (max 80 caratteri).'
-  if section_key in ('pilastri', 'valore')
+  if section_key in ('modelli_mentali', 'valore')
   else '- Restituisci una singola stringa JSON.'}
 
 Rispondi SOLO con il valore JSON (stringa o array), senza markdown,
@@ -410,7 +407,7 @@ RISPOSTE_CLIENTE:
 
 def _parse_rewrite_response(text, section_key):
     text = text.strip()
-    if section_key in ("pilastri", "valore"):
+    if section_key in ("modelli_mentali", "valore"):
         try:
             payload = json.loads(text)
         except json.JSONDecodeError:
@@ -468,12 +465,12 @@ def _generate_company_questions(company, dna):
         latency_ms=result.latency_ms,
     )
 
-    section_keys = {"chi_siamo", "mission", "settore", "mercato", "pilastri"}
+    section_keys = set(LAYER_KEYS)
     questions_data = _parse_question_generation(result.text)
     for index, raw_question in enumerate(questions_data):
-        section_key = raw_question.get("section_key", "pilastri")
+        section_key = raw_question.get("section_key", DNA_GENERALE_FALLBACK_LAYER)
         if section_key not in section_keys:
-            section_key = "pilastri"
+            section_key = DNA_GENERALE_FALLBACK_LAYER
         code = f"A{index + 1}"
         CompanyQuestion.objects.update_or_create(
             dna=dna,
@@ -497,8 +494,12 @@ def _create_complete_dna(company, pre_dna, user):
     questions = list(pre_dna.questions.all())
     plan_slug = questions[0].plan_slug if questions else _plan_slug_for_company(company)
     content = dict(pre_dna.content) if isinstance(pre_dna.content, dict) else {}
-    section_keys = ["chi_siamo", "mission", "settore", "mercato", "pilastri"]
-    answers_by_section = _answers_by_section(questions, section_keys, "pilastri")
+    section_keys = list(LAYER_KEYS)
+    answers_by_section = _answers_by_section(
+        questions,
+        section_keys,
+        DNA_GENERALE_FALLBACK_LAYER,
+    )
     content = _rewrite_sections_with_answers(
         company,
         content,
@@ -1174,7 +1175,7 @@ def dna_section_approve(request, pk, section_key):
     dna = CompanyDNA.objects.filter(pk=pk, company=company, is_current=True).first()
     if not dna:
         return JsonResponse({"error": "dna not found"}, status=404)
-    if section_key not in {"chi_siamo", "mission", "settore", "mercato", "pilastri"}:
+    if section_key not in LAYER_KEYS:
         return JsonResponse({"error": "invalid section_key"}, status=400)
 
     body = _request_data(request)
@@ -1233,7 +1234,7 @@ def dna_section_edit(request, pk, section_key):
     old_dna = CompanyDNA.objects.filter(pk=pk, company=company, is_current=True).first()
     if not old_dna:
         return JsonResponse({"error": "dna not found"}, status=404)
-    if section_key not in {"chi_siamo", "mission", "settore", "mercato", "pilastri"}:
+    if section_key not in LAYER_KEYS:
         return JsonResponse({"error": "invalid section_key"}, status=400)
 
     body = _request_data(request)

@@ -6,6 +6,8 @@ import os
 import time
 from abc import ABC, abstractmethod
 
+from apps.companies.dna_schemas import LAYER_KEYS
+
 logger = logging.getLogger(__name__)
 
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
@@ -92,7 +94,7 @@ class MockLLMClient(LLMClient):
     def generate(self, prompt: str, model: str | None = None) -> LLMResult:
         if "RISCRIVI_SEZIONE_" in prompt and "RIFORMULA_DNA_CON_RISPOSTE" in prompt:
             section_key = self._extract_section_key(prompt, "RISCRIVI_SEZIONE_")
-            if section_key in ("pilastri", "valore"):
+            if section_key in ("modelli_mentali", "valore"):
                 return LLMResult(
                     text=json.dumps([
                         f"Pilastro {section_key} 1 riformulato",
@@ -164,7 +166,7 @@ class MockLLMClient(LLMClient):
             if plan_slug == "enterprise":
                 anchor = "mentalita aziendale"
             questions = []
-            sections = ["chi_siamo", "mission", "pilastri", "mercato", "settore"]
+            sections = list(LAYER_KEYS)
             for index in range(10):
                 code = f"A{index + 1}"
                 questions.append({
@@ -187,17 +189,38 @@ class MockLLMClient(LLMClient):
             )
 
         return LLMResult(
-            text=(
-                '{"chi_siamo": "Rossi Metalli SRL opera da 40 anni nel settore siderurgico '
-                'con produzione di acciai speciali per edilizia e industria.", '
-                '"mission": "Fornire acciai di alta qualità con tempi di consegna ridotti.", '
-                '"settore": "Siderurgia — produzione e distribuzione di acciai speciali.", '
-                '"mercato": "Edilizia residenziale, grandi infrastrutture, industria meccanica.", '
-                '"pilastri": ["Qualità del materiale certificata", '
-                '"Consegne rapide e puntuali", '
-                '"Personalizzazione dei profili", '
-                '"Assistenza tecnica pre e post vendita"]}'
-            ),
+            text=json.dumps({
+                "identita": {
+                    "postura": "Rossi Metalli affianca aziende tecniche affidabili.",
+                    "convinzioni": ["qualita certificata", "tempi chiari"],
+                },
+                "modelli_mentali": {
+                    "pilastri": ["qualita del materiale", "consegne puntuali"],
+                    "sequenza_di_lettura": (
+                        "parte dall'uso finale e risale a materiale, lavorazione e consegna"
+                    ),
+                },
+                "nucleo_tecnico": {
+                    "approccio_distintivo": "acciai speciali per edilizia e industria",
+                    "trade_off_scelti": "personalizzazione tecnica con controllo tempi",
+                    "famiglie_prodotto": ["profili speciali", "acciai certificati"],
+                },
+                "confini": {
+                    "anti_pattern": ["promesse non verificabili", "assenza di certificazione"],
+                    "richieste_rifiutate": "richieste incompatibili con qualita e tracciabilita",
+                },
+                "tono": {
+                    "registro": "tecnico-accessibile",
+                    "esempi": [{
+                        "sbagliato": "siamo i migliori",
+                        "giusto": "consigliamo questa soluzione per vincoli certificati",
+                    }],
+                },
+                "logica_decisionale": {
+                    "filosofia_custom": "il fuori standard deve produrre valore tecnico reale",
+                    "escalation": "coinvolgere un tecnico senior su requisiti non chiari",
+                },
+            }, ensure_ascii=False),
             tokens_in=350,
             tokens_out=180,
             cost=0.0001,
@@ -207,13 +230,13 @@ class MockLLMClient(LLMClient):
     def generate_structured(self, prompt: str, response_model, model: str | None = None):
         """Mock structured generation — returns a valid DNAGeneraleSchema instance."""
         from apps.companies.dna_schemas import (
+            Confini,
             DNAGeneraleSchema,
             Identita,
+            LogicaDecisionale,
             ModelliMentali,
             NucleoTecnico,
-            Confini,
             Tono,
-            LogicaDecisionale,
         )
 
         if response_model is DNAGeneraleSchema:

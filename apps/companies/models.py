@@ -1,6 +1,10 @@
 from django.conf import settings
 from django.db import models
 
+from apps.companies.dna_schemas import LAYER_KEYS, LAYER_TITLES
+
+DNA_GENERALE_SECTION_CHOICES = [(key, LAYER_TITLES[key]) for key in LAYER_KEYS]
+
 
 class Company(models.Model):
     schema_name = models.SlugField(
@@ -117,18 +121,12 @@ class CompanyDNA(models.Model):
         return {s.section_key for s in self.section_approvals.filter(is_clarification=False)}
 
     def missing_sections(self):
-        all_keys = {"chi_siamo", "mission", "settore", "mercato", "pilastri"}
+        all_keys = set(LAYER_KEYS)
         return sorted(all_keys - self.approved_sections())
 
 
 class SectionApproval(models.Model):
-    SECTION_KEYS = [
-        ("chi_siamo", "Chi siamo"),
-        ("mission", "Mission"),
-        ("settore", "Settore"),
-        ("mercato", "Mercato"),
-        ("pilastri", "Pilastri"),
-    ]
+    SECTION_KEYS = DNA_GENERALE_SECTION_CHOICES
 
     dna = models.ForeignKey(
         CompanyDNA,
@@ -190,7 +188,7 @@ class CompanyQuestion(models.Model):
     )
     code = models.CharField(max_length=4)
     plan_slug = models.CharField(max_length=20, default="starter")
-    section_key = models.CharField(max_length=20, default="pilastri")
+    section_key = models.CharField(max_length=20, default="logica_decisionale")
     principle = models.CharField(max_length=120)
     question = models.TextField()
     answer_depth = models.CharField(max_length=40, default="generica")

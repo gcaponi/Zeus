@@ -16,6 +16,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django_tenants.utils import schema_context
 
+from apps.companies.dna_schemas import LAYER_KEYS, LAYER_TITLES
 from apps.companies.models import (
     Company,
     CompanyDNA,
@@ -71,15 +72,9 @@ def _excluded_domains():
     return set(getattr(settings, "ZEUS_ADMIN_EXCLUDED_DOMAINS", DEFAULT_EXCLUDED_DOMAINS))
 
 
-DNA_SECTION_LABELS = {
-    "chi_siamo": "Chi Siamo",
-    "mission": "Mission",
-    "settore": "Settore",
-    "mercato": "Mercato",
-    "pilastri": "Pilastri",
-}
+DNA_SECTION_LABELS = LAYER_TITLES
 
-SECTION_ORDER = ["chi_siamo", "mission", "settore", "mercato", "pilastri"]
+SECTION_ORDER = LAYER_KEYS
 
 
 def _dna_content_text(dna):

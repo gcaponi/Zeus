@@ -299,10 +299,10 @@ class TestLLMClient:
         client = MockLLMClient()
         result = client.generate("test prompt")
         data = json.loads(result.text)
-        assert "chi_siamo" in data
-        assert "mission" in data
-        assert "pilastri" in data
-        assert isinstance(data["pilastri"], list)
+        assert "identita" in data
+        assert "modelli_mentali" in data
+        assert "logica_decisionale" in data
+        assert isinstance(data["modelli_mentali"]["pilastri"], list)
         assert result.tokens_in == 350
         assert result.cost == 0.0001
 
@@ -350,7 +350,7 @@ class TestLLMGenerateAPI:
         assert response.status_code == 201
         data = json.loads(response.content)
         assert data["version"] == 1
-        assert data["content"]["chi_siamo"] != ""
+        assert data["content"]["identita"]["postura"] != ""
         assert data["tokens_in"] > 0
 
         assert LLMCall.objects.count() == 1
@@ -767,11 +767,31 @@ class TestDNAQuestions:
             version=1,
             dna_type=CompanyDNA.TYPE_PRE,
             content={
-                "chi_siamo": "Azienda manifatturiera B2B.",
-                "mission": "Servire clienti tecnici.",
-                "settore": "Meccanica.",
-                "mercato": "Italia ed Europa.",
-                "pilastri": ["Qualita", "Rapidita"],
+                "identita": {"postura": "Azienda manifatturiera B2B.", "convinzioni": ["qualita"]},
+                "modelli_mentali": {
+                    "pilastri": ["Qualita", "Rapidita"],
+                    "sequenza_di_lettura": "parte dal caso d'uso",
+                },
+                "nucleo_tecnico": {
+                    "approccio_distintivo": "Meccanica di precisione.",
+                    "trade_off_scelti": "rapidita con controllo qualita",
+                    "famiglie_prodotto": ["componenti"],
+                },
+                "confini": {
+                    "anti_pattern": ["promesse non verificabili"],
+                    "richieste_rifiutate": "fuori tolleranza non validato",
+                },
+                "tono": {
+                    "registro": "tecnico-accessibile",
+                    "esempi": [{
+                        "sbagliato": "siamo i migliori",
+                        "giusto": "validiamo il vincolo tecnico",
+                    }],
+                },
+                "logica_decisionale": {
+                    "filosofia_custom": "custom solo se ha senso tecnico",
+                    "escalation": "coinvolgere tecnico senior",
+                },
             },
         )
 
@@ -865,9 +885,9 @@ class TestDNAQuestions:
         assert len(complete_dna.content["questionario_a1_a20"]) == 10
         assert complete_dna.content["profilo_questionario"]["plan"] == Plan.SLUG_STARTER
         assert complete_dna.content["profilo_questionario"]["starter_minimum_pages"] == 2
-        assert "riformulata integrando le risposte" in complete_dna.content["chi_siamo"]
-        assert "Approfondimenti cliente" not in complete_dna.content["chi_siamo"]
-        assert "Risposta A1" not in complete_dna.content["chi_siamo"]
+        assert "riformulata integrando le risposte" in complete_dna.content["identita"]
+        assert "Approfondimenti cliente" not in complete_dna.content["identita"]
+        assert "Risposta A1" not in complete_dna.content["identita"]
         pre_dna.refresh_from_db()
         assert pre_dna.is_current is False
 
@@ -903,21 +923,23 @@ class TestDNAQuestions:
 
     def test_dna_sections_hide_nested_description_keys(self):
         sections = views._dna_sections({
-            "chi_siamo": {"descrizione": "Testo chi siamo pulito."},
-            "mission": {"description": "Testo mission pulito."},
-            "settore": {"testo": "Testo settore pulito."},
-            "mercato": {"value": "Testo mercato pulito."},
-            "pilastri": [{"descrizione": "Qualita"}, {"descrizione": "Rapidita"}],
+            "identita": {"descrizione": "Testo identita pulito."},
+            "modelli_mentali": [{"descrizione": "Qualita"}, {"descrizione": "Rapidita"}],
+            "nucleo_tecnico": {"testo": "Testo nucleo pulito."},
+            "confini": {"value": "Testo confini pulito."},
+            "tono": {"description": "Testo tono pulito."},
+            "logica_decisionale": {"contenuto": "Testo logica pulito."},
         })
 
         values = {section["key"]: section["value"] for section in sections}
-        assert values["chi_siamo"] == "Testo chi siamo pulito."
-        assert values["mission"] == "Testo mission pulito."
-        assert values["settore"] == "Testo settore pulito."
-        assert values["mercato"] == "Testo mercato pulito."
-        assert values["pilastri"] == "Qualita, Rapidita"
-        assert "descrizione" not in values["chi_siamo"]
-        assert "{" not in values["chi_siamo"]
+        assert values["identita"] == "Testo identita pulito."
+        assert values["modelli_mentali"] == "Qualita, Rapidita"
+        assert values["nucleo_tecnico"] == "Testo nucleo pulito."
+        assert values["confini"] == "Testo confini pulito."
+        assert values["tono"] == "Testo tono pulito."
+        assert values["logica_decisionale"] == "Testo logica pulito."
+        assert "descrizione" not in values["identita"]
+        assert "{" not in values["identita"]
 
     def test_submit_answers_requires_all_answers(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
@@ -925,7 +947,7 @@ class TestDNAQuestions:
             company=company,
             version=1,
             dna_type=CompanyDNA.TYPE_PRE,
-            content={"chi_siamo": "Test"},
+            content={"identita": "Test"},
         )
         views.dna_questions(rf_with_tenant("get", reverse("dna-questions")))
         first_question = pre_dna.questions.first()
@@ -948,7 +970,7 @@ class TestDNAQuestions:
             "questions": [
                 {
                     "code": "A1",
-                    "section_key": "chi_siamo",
+                    "section_key": "identita",
                     "principle": f"Principio {index}",
                     "question": f"Domanda {index}",
                     "answer_depth": "generica",
@@ -981,21 +1003,21 @@ class TestDNAReviewViews:
             company=company,
             version=1,
             dna_type=CompanyDNA.TYPE_COMPLETE,
-            content={"chi_siamo": "Test"},
+            content={"identita": "Test"},
         )
         req = rf_with_tenant(
             "post",
-            reverse("dna-section-approve", args=[dna.pk, "chi_siamo"]),
+            reverse("dna-section-approve", args=[dna.pk, "identita"]),
             {},
             form=True,
         )
         req.META["HTTP_HX_REQUEST"] = "true"
 
-        resp = views.dna_section_approve(req, dna.pk, "chi_siamo")
+        resp = views.dna_section_approve(req, dna.pk, "identita")
 
         assert resp.status_code == 204
         assert resp["HX-Redirect"] == reverse("dna-review")
-        assert SectionApproval.objects.filter(dna=dna, section_key="chi_siamo").exists()
+        assert SectionApproval.objects.filter(dna=dna, section_key="identita").exists()
 
     def test_section_edit_htmx_redirects_to_review(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
@@ -1003,23 +1025,23 @@ class TestDNAReviewViews:
             company=company,
             version=1,
             dna_type=CompanyDNA.TYPE_COMPLETE,
-            content={"chi_siamo": "Test"},
+            content={"identita": "Test"},
         )
         req = rf_with_tenant(
             "post",
-            reverse("dna-section-edit", args=[dna.pk, "chi_siamo"]),
+            reverse("dna-section-edit", args=[dna.pk, "identita"]),
             {"text": "Test aggiornato"},
             form=True,
         )
         req.META["HTTP_HX_REQUEST"] = "true"
 
-        resp = views.dna_section_edit(req, dna.pk, "chi_siamo")
+        resp = views.dna_section_edit(req, dna.pk, "identita")
 
         assert resp.status_code == 204
         assert resp["HX-Redirect"] == reverse("dna-review")
         new_dna = CompanyDNA.objects.get(company=company, is_current=True)
         assert new_dna.version == 2
-        assert new_dna.content["chi_siamo"] == "Test aggiornato"
+        assert new_dna.content["identita"] == "Test aggiornato"
 
 
 @pytest.fixture

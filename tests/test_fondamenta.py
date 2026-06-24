@@ -1,15 +1,19 @@
 """Tests for the ZEUS Fondamenta plan: 6-layer DNA schema + Instructor integration."""
 import pytest
+from pydantic import ValidationError
+
 from apps.companies.dna_schemas import (
+    LAYER_KEYS,
+    Confini,
     DNAGeneraleSchema,
     Identita,
+    LogicaDecisionale,
     ModelliMentali,
     NucleoTecnico,
-    Confini,
     Tono,
-    LogicaDecisionale,
-    LAYER_KEYS,
 )
+from apps.companies.llm_client import MockLLMClient
+from apps.companies.models import Company, CompanyDNA, CompanyQuestion, SectionApproval
 
 
 class TestDNASchema:
@@ -49,7 +53,7 @@ class TestDNASchema:
 
     def test_invalid_dna_missing_layer_raises(self):
         """Pydantic should reject a DNA missing a required layer."""
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             DNAGeneraleSchema(
                 identita=Identita(postura="x", convinzioni=["x"]),
                 modelli_mentali=ModelliMentali(pilastri=["x"], sequenza_di_lettura="x"),
@@ -79,10 +83,25 @@ class TestDNASchema:
             "confini", "tono", "logica_decisionale",
         }
 
+    def test_django_section_choices_use_six_layers(self):
+        """Django models must use the same 6-layer keys as the Pydantic schema."""
+        assert [key for key, _label in SectionApproval.SECTION_KEYS] == LAYER_KEYS
+        field = CompanyQuestion._meta.get_field("section_key")
+        assert field.default == "logica_decisionale"
 
-from apps.companies.llm_client import MockLLMClient
+    @pytest.mark.django_db
+    def test_missing_sections_uses_six_layer_keys(self):
+        """CompanyDNA.missing_sections must check approvals against the 6 layers."""
+        company = Company.objects.create(schema_name="testco6", name="TestCo")
+        dna = CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            content={"identita": {}},
+            is_current=True,
+        )
 
-
+        assert set(dna.missing_sections()) == set(LAYER_KEYS)
 class TestGenerateStructured:
     def test_mock_returns_valid_dna_schema(self):
         """MockLLMClient.generate_structured must return a DNAGeneraleSchema with 6 layers."""
