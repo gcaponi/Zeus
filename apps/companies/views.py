@@ -224,6 +224,18 @@ def _dna_final_document(content):
     return _dna_public_document(content)
 
 
+def _document_paragraphs(document):
+    """Split a client document into display/PDF paragraphs.
+
+    Rendering owns formatting; the stored text stays plain and title-free.
+    """
+    text = _as_text(document).strip()
+    if not text:
+        return []
+    paragraphs = re.split(r"\n\s*\n+", text)
+    return [" ".join(paragraph.split()) for paragraph in paragraphs if paragraph.strip()]
+
+
 def _as_text(value):
     if isinstance(value, list):
         parts = [_as_text(item).strip() for item in value]
@@ -1289,12 +1301,14 @@ def _dna_review_context(company, dna):
     blocking_flags = []
     if not missing_keys and not dna.is_fully_approved():
         blocking_flags = _safe_mode_flags(dna)
+    final_document = _dna_final_document(dna.content)
 
     return {
         "dna": dna,
         "sections": sections,
         "public_document": _dna_public_document(dna.content),
-        "final_document": _dna_final_document(dna.content),
+        "final_document": final_document,
+        "final_paragraphs": _document_paragraphs(final_document),
         "approved_keys": dna.approved_sections(),
         "missing_keys": missing_keys,
         "is_fully_approved": dna.is_fully_approved(),
@@ -1497,6 +1511,19 @@ def _render_dna_pdf(company, dna, final_document):
             y += size + 5
         y += gap
 
+    def write_paragraphs(document, size=10.5, color=(0.08, 0.08, 0.08), width=88):
+        nonlocal y
+        paragraphs = _document_paragraphs(document) or ["Non disponibile"]
+        for index, paragraph in enumerate(paragraphs):
+            if index and y > 760:
+                new_page()
+            for line in textwrap.wrap(paragraph, width=width) or [""]:
+                if y > 780:
+                    new_page()
+                page.insert_text((margin, y), line, fontsize=size, fontname="helv", color=color)
+                y += size + 5
+            y += 10
+
     write("DNA Aziendale", size=24, color=(0.02, 0.18, 0.32), gap=10, width=60)
     write(company.name, size=14, color=(0.18, 0.18, 0.18), gap=4)
     approved_at = dna.is_approved.strftime("%d/%m/%Y %H:%M") if dna.is_approved else "n/d"
@@ -1507,7 +1534,7 @@ def _render_dna_pdf(company, dna, final_document):
         gap=18,
     )
 
-    write(final_document or "Non disponibile", size=10.5, color=(0.08, 0.08, 0.08), gap=16)
+    write_paragraphs(final_document)
 
     return doc.tobytes()
 

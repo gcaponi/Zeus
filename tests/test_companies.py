@@ -983,6 +983,17 @@ class TestDNAQuestions:
         assert "Chi siamo" not in final_document
         assert "Come ragioniamo" not in final_document
 
+    def test_document_paragraphs_preserve_final_document_blocks(self):
+        document = "Prima parte.\n\nSeconda parte con\nlinea interna.\n\n\nTerza parte."
+
+        paragraphs = views._document_paragraphs(document)
+
+        assert paragraphs == [
+            "Prima parte.",
+            "Seconda parte con linea interna.",
+            "Terza parte.",
+        ]
+
     def test_render_dna_pdf_uses_continuous_final_document_without_layer_titles(self):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
         dna = CompanyDNA.objects.create(

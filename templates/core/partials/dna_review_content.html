@@ -103,7 +103,13 @@
             </div>
 
             <div class="overflow-y-auto px-8 py-6" style="max-height: calc(85vh - 160px);">
-                <div class="dna-popup-section-text text-sm leading-7 whitespace-pre-line">{{ final_document|default:"Non disponibile" }}</div>
+                <div class="dna-popup-section-text space-y-5 text-sm leading-7">
+                    {% for paragraph in final_paragraphs %}
+                        <p>{{ paragraph }}</p>
+                    {% empty %}
+                        <p>Non disponibile</p>
+                    {% endfor %}
+                </div>
             </div>
 
             <div class="sticky bottom-0 px-8 py-4 flex gap-3"
