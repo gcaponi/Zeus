@@ -10,6 +10,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client as TestClient
 from django.test import RequestFactory
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.companies import views
 from apps.companies.models import (
@@ -562,6 +563,53 @@ class TestOnboardingViews:
         assert b"hx-post" in resp.content
         assert b"hx-target=\"#onboarding-step\"" in resp.content
 
+    def test_onboarding_revise_shows_prefilled_source_form(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        Source.objects.create(company=company, url="https://cais.uno", status=Source.STATUS_SCRAPED)
+        CompanyFile.objects.create(
+            company=company,
+            original_name="note-azienda.txt",
+            content_text="Nota gia inserita.",
+        )
+        CompanyFile.objects.create(
+            company=company,
+            original_name="profilo.pdf",
+            content_text="Documento esistente.",
+        )
+        CompanyDNA.objects.create(company=company, version=1, content={"identita": "test"})
+
+        req = rf_with_tenant("get", "/onboarding/?revise=1")
+        resp = views.onboarding_index(req)
+
+        assert resp.status_code == 200
+        assert b"Revisione non distruttiva" in resp.content
+        assert b'value="https://cais.uno"' in resp.content
+        assert b"Nota gia inserita" in resp.content
+        assert b"profilo.pdf" in resp.content
+        assert b"Continua alle risposte" in resp.content
+
+    def test_onboarding_source_create_detects_no_initial_changes(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        Source.objects.create(company=company, url="https://cais.uno", status=Source.STATUS_SCRAPED)
+        CompanyFile.objects.create(
+            company=company,
+            original_name="note-azienda.txt",
+            content_text="Nota stabile.",
+        )
+        CompanyDNA.objects.create(company=company, version=1, content={"identita": "test"})
+
+        req = rf_with_tenant("post", "/onboarding/source/", {
+            "url": "https://cais.uno",
+            "company_notes": "Nota stabile.",
+        }, form=True)
+        req.META["HTTP_HX_REQUEST"] = "true"
+        resp = views.onboarding_source_create(req)
+
+        assert resp.status_code == 200
+        assert b"Nessuna modifica rilevata" in resp.content
+        assert Source.objects.filter(company=company).count() == 1
+        assert PipelineRun.objects.filter(company=company).count() == 0
+
     def test_onboarding_source_create_generates_dna(self, rf_with_tenant):
         from apps.companies.llm_client import MockLLMClient
 
@@ -891,6 +939,73 @@ class TestDNAQuestions:
         assert "Risposta A1" not in complete_dna.content["identita"]
         pre_dna.refresh_from_db()
         assert pre_dna.is_current is False
+
+    def test_submit_same_answers_does_not_regenerate_complete_dna(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        pre_dna = self._make_pre_dna(company)
+        views.dna_questions(rf_with_tenant("get", reverse("dna-questions")))
+        questions = list(pre_dna.questions.all())
+        for question in questions:
+            question.answer = f"Risposta {question.code}"
+            question.answered_at = timezone.now()
+            question.save(update_fields=["answer", "answered_at"])
+        company.dna_versions.filter(is_current=True).update(is_current=False)
+        CompanyDNA.objects.create(
+            company=company,
+            version=2,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            content={"identita": "Completo"},
+        )
+        data = {f"answer_{question.id}": question.answer for question in questions}
+
+        req = rf_with_tenant("post", reverse("dna-questions"), data, form=True)
+        resp = views.dna_questions(req)
+
+        assert resp.status_code == 302
+        assert resp["Location"] == reverse("dna-review")
+        assert CompanyDNA.objects.filter(
+            company=company,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+        ).count() == 1
+
+    def test_changed_answers_regenerate_and_wait_for_new_complete_version(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        pre_dna = self._make_pre_dna(company)
+        views.dna_questions(rf_with_tenant("get", reverse("dna-questions")))
+        questions = list(pre_dna.questions.all())
+        for question in questions:
+            question.answer = f"Risposta {question.code}"
+            question.answered_at = timezone.now()
+            question.save(update_fields=["answer", "answered_at"])
+        company.dna_versions.filter(is_current=True).update(is_current=False)
+        CompanyDNA.objects.create(
+            company=company,
+            version=2,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            content={"identita": "Completo vecchio"},
+        )
+        data = {f"answer_{question.id}": question.answer for question in questions}
+        data[f"answer_{questions[0].id}"] = "Risposta modificata"
+
+        req = rf_with_tenant("post", reverse("dna-questions"), data, form=True)
+        req.session = {}
+        resp = views.dna_questions(req)
+
+        assert resp.status_code == 302
+        assert resp["Location"] == reverse("dna-generating")
+        assert req.session["pending_complete_min_version"] == 3
+        assert CompanyDNA.objects.filter(
+            company=company,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+        ).count() == 2
+
+        wait_req = rf_with_tenant("get", reverse("dna-generating"))
+        wait_req.session = req.session
+        wait_resp = views.dna_generating(wait_req)
+
+        assert wait_resp.status_code == 302
+        assert wait_resp["Location"] == reverse("dna-review")
+        assert "pending_complete_min_version" not in wait_req.session
 
     def test_dna_generating_waits_then_hx_redirects(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")

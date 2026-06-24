@@ -151,7 +151,9 @@ def _onboarding_context(request):
     latest_run = company.pipeline_runs.select_related("source").order_by("-created_at").first()
     latest_dna = company.dna_versions.filter(is_current=True).order_by("-version").first()
     sections = _dna_sections(latest_dna.content) if latest_dna else []
-    step = 4 if latest_dna else 3 if latest_run else 2
+    review_start = request.GET.get("revise") == "1"
+    run_is_pending = bool(latest_run and latest_run.status in {"running", "pending"})
+    step = 2 if review_start else 4 if latest_dna else 3 if latest_run else 2
     return {
         "company": company,
         "source": latest_source,
@@ -159,6 +161,8 @@ def _onboarding_context(request):
         "dna": latest_dna,
         "sections": sections,
         "step": step,
+        "show_source_form": review_start or (latest_dna is None and not run_is_pending),
+        **_source_form_context(company, review_mode=review_start),
         "is_done": latest_dna is not None,
     }
 
@@ -276,6 +280,48 @@ def _company_document_context(company):
         if text:
             snippets.append(f"{company_file.original_name}: {text}")
     return " | ".join(snippets) or "Nessun documento aziendale caricato"
+
+
+def _latest_source_url(company):
+    source = company.sources.order_by("-created_at").first()
+    return source.url if source else ""
+
+
+def _current_company_notes(company):
+    note = company.company_files.filter(
+        original_name="note-azienda.txt",
+    ).order_by("-created_at").first()
+    return note.content_text if note else ""
+
+
+def _existing_company_documents(company):
+    return list(
+        company.company_files.exclude(original_name="note-azienda.txt")
+        .order_by("-created_at")
+        .values_list("original_name", flat=True)[:8]
+    )
+
+
+def _source_form_context(company, *, error=None, notice=None, review_mode=False):
+    return {
+        "error": error,
+        "notice": notice,
+        "review_mode": review_mode,
+        "source_url": _latest_source_url(company),
+        "company_notes": _current_company_notes(company),
+        "existing_documents": _existing_company_documents(company),
+        "has_existing_dna": company.dna_versions.exists(),
+    }
+
+
+def _initial_info_changed(company, url, notes, uploaded_file) -> bool:
+    if not company.dna_versions.exists():
+        return True
+    if url != _latest_source_url(company):
+        return True
+    if notes.strip() != _current_company_notes(company).strip():
+        return True
+    return bool(uploaded_file)
 
 
 def _question_generation_prompt(company, dna, plan_slug):
@@ -693,35 +739,55 @@ def _extract_company_file_text(uploaded_file):
     return text[:30000], len(raw), name
 
 
-def _save_company_file_from_request(company, request):
+def _save_or_update_company_notes(company, notes, user):
+    note = company.company_files.filter(
+        original_name="note-azienda.txt",
+    ).order_by("-created_at").first()
+    encoded_size = len(notes.encode("utf-8"))
+    if note:
+        note.content_text = notes[:30000]
+        note.file_size = encoded_size
+        note.uploaded_by = user if user and user.is_authenticated else note.uploaded_by
+        note.save(update_fields=["content_text", "file_size", "uploaded_by"])
+        return
+    if notes:
+        CompanyFile.objects.create(
+            company=company,
+            original_name="note-azienda.txt",
+            content_text=notes[:30000],
+            file_size=encoded_size,
+            uploaded_by=user if user and user.is_authenticated else None,
+        )
+
+
+def _save_company_file_from_request(company, request, *, replace_notes=False):
     notes = request.POST.get("company_notes", "").strip()
     uploaded_file = getattr(request, "FILES", {}).get("company_file")
-    if not notes and not uploaded_file:
+    existing_note = company.company_files.filter(original_name="note-azienda.txt").exists()
+    adds_new_note = bool(notes and (not replace_notes or not existing_note))
+    adds_new_file = bool(uploaded_file)
+    if not notes and not uploaded_file and not replace_notes:
         return None
 
     block_reason = _company_file_block_reason(company)
-    if block_reason:
+    if (adds_new_note or adds_new_file) and block_reason:
         return block_reason
 
     if uploaded_file:
         content_text, file_size, original_name = _extract_company_file_text(uploaded_file)
-        if notes:
-            content_text = f"{content_text}\n\nNote aggiuntive:\n{notes}".strip()
-    else:
-        content_text = notes[:30000]
-        file_size = len(content_text.encode("utf-8"))
-        original_name = "note-azienda.txt"
+        if not content_text.strip():
+            return "Il documento aziendale non contiene testo leggibile."
+        CompanyFile.objects.create(
+            company=company,
+            original_name=original_name,
+            content_text=content_text,
+            file_size=file_size,
+            uploaded_by=request.user if request.user.is_authenticated else None,
+        )
 
-    if not content_text.strip():
-        return "Il documento aziendale non contiene testo leggibile."
+    if replace_notes or notes:
+        _save_or_update_company_notes(company, notes, request.user)
 
-    CompanyFile.objects.create(
-        company=company,
-        original_name=original_name,
-        content_text=content_text,
-        file_size=file_size,
-        uploaded_by=request.user if request.user.is_authenticated else None,
-    )
     subscription = _subscription_for_company(company)
     if subscription:
         subscription.company_files_used = company.company_files.count()
@@ -757,6 +823,29 @@ def _redirect_after_htmx_action(request, viewname, *args):
         response["HX-Redirect"] = url
         return response
     return redirect(url)
+
+
+def _set_pending_complete_generation(request, min_version):
+    if not hasattr(request, "session"):
+        return
+    request.session["pending_complete_min_version"] = min_version
+    if hasattr(request.session, "modified"):
+        request.session.modified = True
+
+
+def _pending_complete_min_version(request):
+    if not hasattr(request, "session"):
+        return None
+    return request.session.get("pending_complete_min_version")
+
+
+def _clear_pending_complete_generation(request):
+    if not hasattr(request, "session"):
+        return
+    if "pending_complete_min_version" in request.session:
+        del request.session["pending_complete_min_version"]
+        if hasattr(request.session, "modified"):
+            request.session.modified = True
 
 
 def _action_error(message, status=400):
@@ -809,21 +898,47 @@ def onboarding_source_create(request):
 
     url = _normalize_source_url(request.POST.get("url", ""))
     if not url:
-        return _source_form_response({
-            "error": "Inserisci un URL valido.",
-        }, status=400)
+        return _source_form_response(
+            _source_form_context(
+                company,
+                error="Inserisci un URL valido.",
+                review_mode=company.dna_versions.exists(),
+            ),
+            status=400,
+        )
+
+    notes = request.POST.get("company_notes", "").strip()
+    uploaded_file = getattr(request, "FILES", {}).get("company_file")
+    has_existing_dna = company.dna_versions.exists()
+    if has_existing_dna and not _initial_info_changed(company, url, notes, uploaded_file):
+        return _source_form_response(
+            _source_form_context(
+                company,
+                notice=(
+                    "Nessuna modifica rilevata nei dati iniziali. "
+                    "Puoi continuare alle risposte senza rigenerare il pre-DNA."
+                ),
+                review_mode=True,
+            ),
+        )
 
     block_reason = _workspace_block_reason(company)
     if block_reason:
-        return _source_form_response({
-            "error": block_reason,
-        }, status=403)
+        return _source_form_response(
+            _source_form_context(company, error=block_reason, review_mode=has_existing_dna),
+            status=403,
+        )
 
-    file_error = _save_company_file_from_request(company, request)
+    file_error = _save_company_file_from_request(
+        company,
+        request,
+        replace_notes=has_existing_dna,
+    )
     if file_error:
-        return _source_form_response({
-            "error": file_error,
-        }, status=403)
+        return _source_form_response(
+            _source_form_context(company, error=file_error, review_mode=has_existing_dna),
+            status=403,
+        )
 
     source = Source.objects.create(company=company, url=url, status=Source.STATUS_PENDING)
     run = PipelineRun.objects.create(
@@ -1226,19 +1341,31 @@ def dna_questions(request):
     if request.method == "POST" and not error:
         body = _request_data(request)
         missing = []
+        answers_changed = False
         for question in questions:
             answer = body.get(f"answer_{question.id}", "").strip()
             if not answer:
                 missing.append(question.code)
                 continue
+            if answer != question.answer:
+                answers_changed = True
             question.answer = answer
             question.answered_at = timezone.now()
             question.save(update_fields=["answer", "answered_at"])
         if missing:
             error = "Rispondi a tutte le domande prima di generare il DNA completo."
+        elif complete_dna and not answers_changed:
+            return redirect("dna-review")
         else:
             from apps.companies.tasks import generate_complete_dna
             tenant_schema = getattr(request, "tenant", None)
+            latest_complete = company.dna_versions.filter(
+                dna_type=CompanyDNA.TYPE_COMPLETE,
+            ).order_by("-version").first()
+            _set_pending_complete_generation(
+                request,
+                (latest_complete.version + 1) if latest_complete else 1,
+            )
             generate_complete_dna.delay(
                 company.id,
                 pre_dna.id,
@@ -1271,13 +1398,22 @@ def dna_generating(request):
         dna_type=CompanyDNA.TYPE_COMPLETE,
         is_current=True,
     ).first()
+    min_complete_version = _pending_complete_min_version(request)
+    if min_complete_version:
+        complete_dna = company.dna_versions.filter(
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            is_current=True,
+            version__gte=min_complete_version,
+        ).first()
     if request.headers.get("HX-Request") == "true":
         if complete_dna:
+            _clear_pending_complete_generation(request)
             response = HttpResponse(status=204)
             response["HX-Redirect"] = reverse("dna-review")
             return response
         return HttpResponse(status=204)
     if complete_dna:
+        _clear_pending_complete_generation(request)
         return redirect("dna-review")
     return render(request, "core/dna_generating.html")
 

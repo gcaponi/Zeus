@@ -16,9 +16,24 @@
         </div>
     {% endif %}
 
+    {% if notice %}
+        <div class="rounded-xl border border-brand-cyan/30 bg-brand-cyan/10 p-4 text-sm text-content-secondary">
+            {{ notice }}
+        </div>
+    {% endif %}
+
+    {% if review_mode %}
+        <div class="rounded-xl border border-violet-400/25 bg-violet-400/10 p-4">
+            <p class="zeus-label text-brand-violet">Revisione non distruttiva</p>
+            <p class="mt-2 text-sm leading-6 text-content-secondary">
+                Modifica URL, note o aggiungi documenti: ZEUS creerà una nuova versione del DNA solo se rileva cambiamenti. Le versioni e le risposte già inserite restano salvate.
+            </p>
+        </div>
+    {% endif %}
+
     <div>
         <label class="zeus-label" for="url">URL del sito aziendale</label>
-        <input type="text" name="url" id="url" inputmode="url" placeholder="cais.uno" class="zeus-input" required>
+        <input type="text" name="url" id="url" inputmode="url" placeholder="cais.uno" value="{{ source_url|default:'' }}" class="zeus-input" required>
         <p class="mt-2 text-xs text-content-muted">Puoi scrivere solo il dominio, per esempio <span class="font-semibold">cais.uno</span>.</p>
     </div>
 
@@ -26,14 +41,22 @@
         <label class="zeus-label" for="company_file">Documenti aziendali (opzionale)</label>
         <input type="file" name="company_file" id="company_file" accept=".pdf,.txt,.md" class="zeus-input" style="padding: 0.6rem;">
         <p class="mt-2 text-xs text-content-muted">PDF, TXT o MD — brochure, presentazioni, documenti aziendali.</p>
+        {% if existing_documents %}
+            <p class="mt-2 text-xs text-content-muted">Già caricati: {{ existing_documents|join:", " }}</p>
+        {% endif %}
     </div>
 
     <div>
         <label class="zeus-label" for="company_notes">Note aggiuntive (opzionale)</label>
-        <textarea name="company_notes" id="company_notes" rows="3" class="zeus-input" placeholder="Descrivi brevemente la tua azienda, i prodotti principali, il mercato di riferimento..."></textarea>
+        <textarea name="company_notes" id="company_notes" rows="3" class="zeus-input" placeholder="Descrivi brevemente la tua azienda, i prodotti principali, il mercato di riferimento...">{{ company_notes|default:'' }}</textarea>
     </div>
 
-    <button type="submit" class="zeus-btn zeus-btn-primary w-full">
-        Avvia analisi →
-    </button>
+    <div class="flex flex-col gap-3 sm:flex-row">
+        <button type="submit" class="zeus-btn zeus-btn-primary flex-1">
+            {% if review_mode %}Aggiorna dati e rigenera{% else %}Avvia analisi →{% endif %}
+        </button>
+        {% if has_existing_dna %}
+            <a href="{% url 'dna-questions' %}" class="zeus-btn zeus-btn-secondary flex-1">Continua alle risposte</a>
+        {% endif %}
+    </div>
 </form>

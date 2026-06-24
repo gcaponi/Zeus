@@ -36,7 +36,9 @@
             </div>
 
             <div id="onboarding-step">
-                {% if dna %}
+                {% if show_source_form %}
+                    {% include "core/onboarding/_source_form.html" %}
+                {% elif dna %}
                     {% include "core/onboarding/_dna.html" %}
                 {% elif run and run.status in "running pending" %}
                     {% include "core/onboarding/_progress.html" %}
@@ -74,13 +76,9 @@
                 <a href="{% url 'dna-download-pdf' %}" class="zeus-btn zeus-btn-secondary w-full">
                     Scarica PDF
                 </a>
-                <form method="post" action="{% url 'onboarding-dna-reset' %}" class="w-full">
-                    {% csrf_token %}
-                    <button type="submit" class="zeus-btn zeus-btn-danger w-full"
-                            onclick="return confirm('Sei sicuro di voler cancellare il DNA e ricominciare? Questa azione non puo essere annullata.')">
-                        Cancella DNA e ricomincia
-                    </button>
-                </form>
+                <a href="{% url 'onboarding-index' %}?revise=1" class="zeus-btn zeus-btn-ghost w-full">
+                    Rivedi dall'inizio
+                </a>
             </div>
             {% endif %}
         </aside>
