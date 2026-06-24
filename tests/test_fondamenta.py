@@ -386,3 +386,185 @@ class TestDNAValidator:
         dna.tono = Tono(registro="professionale", esempi=[])  # tone_anchoring MEDIUM
         flagged = validate_dna(dna)
         assert flagged.score < good.score
+
+
+class TestDNAScoring:
+    """PIANO 1.5 Task 2 — deterministic cognitive scoring (no LLM)."""
+
+    def _rich_dna(self) -> DNAGeneraleSchema:
+        """A cognitively rich DNA — high tension, multiple sources, deep layers."""
+        return DNAGeneraleSchema(
+            identita=Identita(
+                postura="Affianca il cliente con competenza tecnica [SRC:scrape]",
+                convinzioni=[
+                    "La qualita del materiale non e negoziabile [SRC:file:iso.txt]",
+                    "Le certificazioni devono essere tracciabili [SRC:note]",
+                ],
+            ),
+            modelli_mentali=ModelliMentali(
+                pilastri=["Partire sempre dal caso d'uso reale [SRC:scrape]"],
+                sequenza_di_lettura="Prima il caso d'uso, poi i materiali [SRC:note]",
+            ),
+            nucleo_tecnico=NucleoTecnico(
+                approccio_distintivo="Lavorazione su misura con controllo qualita [SRC:scrape]",
+                trade_off_scelti="Tempi piu lunghi per garantire qualita [SRC:note]",
+                famiglie_prodotto=["Serbatoi pressurizzati [SRC:scrape]"],
+            ),
+            confini=Confini(
+                anti_pattern=["Non promettere tempistiche inferiori a 3 settimane [SRC:note]"],
+                richieste_rifiutate="Commesse sotto le 5 unita [SRC:note]",
+            ),
+            tono=Tono(
+                registro="Tecnico-accessibile, preciso ma comprensibile",
+                esempi=[{"sbagliato": "siamo i migliori", "giusto": "consigliamo il 316 oltre 200 gradi"}],
+            ),
+            logica_decisionale=LogicaDecisionale(
+                filosofia_custom="Valutiamo il custom caso per caso, partendo dalla fattibilita tecnica",
+                escalation="Coinvolgere un tecnico senior su requisiti non chiari",
+            ),
+        )
+
+    def test_score_returns_six_metrics(self):
+        from apps.companies.dna_scoring import score_dna
+
+        s = score_dna(self._rich_dna())
+        assert 0 <= s.completeness <= 100
+        assert 0 <= s.cognitive_tension <= 100
+        assert 0 <= s.evidence_density <= 100
+        assert 0 <= s.source_diversity <= 100
+        assert s.confidence in ("LOW", "MEDIUM", "HIGH")
+        assert len(s.reproducibility_hash) == 64  # sha256 hex
+        assert 0 <= s.overall <= 100
+
+    def test_completeness_full_when_all_fields_populated(self):
+        from apps.companies.dna_scoring import score_dna
+
+        s = score_dna(self._rich_dna())
+        assert s.completeness == 100
+
+    def test_completeness_drops_when_fields_empty(self):
+        from apps.companies.dna_scoring import score_dna
+
+        dna = self._rich_dna()
+        dna.tono = Tono(registro="", esempi=[])  # both tono fields empty
+        s = score_dna(dna)
+        assert s.completeness < 100
+
+    def test_completeness_uses_layer_weights(self):
+        """nucleo_tecnico (weight 1.5) empty should hurt more than tono (0.8)."""
+        from apps.companies.dna_scoring import score_dna
+
+        dna_tono = self._rich_dna()
+        dna_tono.tono = Tono(registro="", esempi=[])
+        dna_nucleo = self._rich_dna()
+        dna_nucleo.nucleo_tecnico = NucleoTecnico(
+            approccio_distintivo="", trade_off_scelti="", famiglie_prodotto=[],
+        )
+        score_tono = score_dna(dna_tono).completeness
+        score_nucleo = score_dna(dna_nucleo).completeness
+        # Clearing the heavily-weighted nucleo_tecnico must hurt more.
+        assert score_nucleo < score_tono
+
+    def test_cognitive_tension_high_for_rich_dna(self):
+        from apps.companies.dna_scoring import score_dna
+
+        s = score_dna(self._rich_dna())
+        # Has anti_pattern + trade_off + esempi + specific convinzioni → >= 80.
+        assert s.cognitive_tension >= 80
+
+    def test_cognitive_tension_low_for_brochure_dna(self):
+        from apps.companies.dna_scoring import score_dna
+
+        dna = DNAGeneraleSchema(
+            identita=Identita(postura="leader del mercato", convinczioni=["qualita"]),
+            modelli_mentali=ModelliMentali(pilastri=["eccellenza"], sequenza_di_lettura="innovazione"),
+            nucleo_tecnico=NucleoTecnico(
+                approccio_distintivo="i migliori", trade_off_scelti="",
+                famiglie_prodotto=["prodotti premium"],
+            ),
+            confini=Confini(anti_pattern=[], richieste_rifiutate=""),
+            tono=Tono(registro="professionale", esempi=[]),
+            logica_decisionale=LogicaDecisionale(
+                filosofia_custom="siamo i migliori", escalation="",
+            ),
+        )
+        s = score_dna(dna)
+        # No anti_pattern, no trade_off, no examples, generic convictions → low.
+        assert s.cognitive_tension <= 20
+
+    def test_evidence_density_increases_with_sources(self):
+        from apps.companies.dna_scoring import score_dna
+
+        no_src = DNAGeneraleSchema(
+            identita=Identita(postura="affianca", convinzioni=["qualita"]),
+            modelli_mentali=ModelliMentali(pilastri=["principio"], sequenza_di_lettura="caso"),
+            nucleo_tecnico=NucleoTecnico(
+                approccio_distintivo="metodo", trade_off_scelti="tempi", famiglie_prodotto=["fam"],
+            ),
+            confini=Confini(anti_pattern=["no promesse"], richieste_rifiutate="sotto soglia"),
+            tono=Tono(registro="tecnico", esempi=[{"sbagliato": "x", "giusto": "y"}]),
+            logica_decisionale=LogicaDecisionale(
+                filosofia_custom="caso per caso secondo principi tecnici", escalation="senior",
+            ),
+        )
+        s_empty = score_dna(no_src)
+        s_rich = score_dna(self._rich_dna())
+        assert s_rich.evidence_density > s_empty.evidence_density
+
+    def test_source_diversity_counts_distinct_types(self):
+        from apps.companies.dna_scoring import score_dna
+
+        s = score_dna(self._rich_dna())
+        # rich_dna has scrape, file, note → 3 distinct types → high diversity.
+        assert s.source_diversity >= 60
+
+    def test_reproducibility_hash_is_deterministic(self):
+        """Same DNA → same hash. Different DNA → different hash."""
+        from apps.companies.dna_scoring import score_dna
+
+        s1 = score_dna(self._rich_dna())
+        s2 = score_dna(self._rich_dna())
+        assert s1.reproducibility_hash == s2.reproducibility_hash
+
+        dna2 = self._rich_dna()
+        dna2.identita = Identita(
+            postura="Cambiamo postura [SRC:scrape]",
+            convinczioni=["nuova convinzione [SRC:note]"],
+        )
+        s3 = score_dna(dna2)
+        assert s3.reproducibility_hash != s1.reproducibility_hash
+
+    def test_confidence_thresholds(self):
+        from apps.companies.dna_scoring import score_dna
+
+        # Rich DNA → HIGH confidence.
+        assert score_dna(self._rich_dna()).confidence == "HIGH"
+
+        # Brochure DNA → LOW confidence.
+        brochure = DNAGeneraleSchema(
+            identita=Identita(postura="leader", convinczioni=["qualita"]),
+            modelli_mentali=ModelliMentali(pilastri=["eccellenza"], sequenza_di_lettura="innovazione"),
+            nucleo_tecnico=NucleoTecnico(
+                approccio_distintivo="migliori", trade_off_scelti="",
+                famiglie_prodotto=["premium"],
+            ),
+            confini=Confini(anti_pattern=[], richieste_rifiutate=""),
+            tono=Tono(registro="professionale", esempi=[]),
+            logica_decisionale=LogicaDecisionale(filosofia_custom="siamo i migliori", escalation=""),
+        )
+        assert score_dna(brochure).confidence == "LOW"
+
+    def test_overall_is_weighted_combination(self):
+        """Overall must sit within the range of its component metrics."""
+        from apps.companies.dna_scoring import score_dna
+
+        s = score_dna(self._rich_dna())
+        components = [s.completeness, s.cognitive_tension, s.evidence_density, s.source_diversity]
+        assert min(components) <= s.overall <= max(components) + 1
+
+    def test_scoring_accepts_dict_input(self):
+        from apps.companies.dna_scoring import score_dna
+
+        s = score_dna(self._rich_dna().model_dump())
+        assert s.completeness == 100
+        assert len(s.reproducibility_hash) == 64
