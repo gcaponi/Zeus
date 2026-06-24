@@ -127,3 +127,85 @@ class TestGenerateStructured:
         assert "chi_siamo" not in d  # old keys must be gone
         assert "identita" in d
         assert "logica_decisionale" in d
+
+
+@pytest.mark.django_db
+class TestQuestionPoolField:
+    def test_question_has_pool_field_with_default(self):
+        """CompanyQuestion must have a pool field defaulting to 'template'."""
+        company = Company.objects.create(schema_name="poolco", name="PoolCo")
+        dna = CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_PRE,
+            content={"identita": {}},
+            is_current=True,
+        )
+        q = CompanyQuestion.objects.create(
+            company=company,
+            dna=dna,
+            code="A1",
+            section_key="confini",
+            principle="test",
+            question="test?",
+        )
+        assert q.pool == "template"
+
+    def test_question_pool_choices(self):
+        """pool must accept 'template' and 'kb_anchored'."""
+        pools = dict(CompanyQuestion._meta.get_field("pool").choices)
+        assert "template" in pools
+        assert "kb_anchored" in pools
+
+
+@pytest.mark.django_db
+class TestGenerateDnaNotesSeparation:
+    def test_notes_and_documents_separated_in_prompt(self, monkeypatch):
+        """_generate_dna must place client notes in {{company_notes}} and
+        real documents in {{company_documents}}, not concatenate them."""
+        from apps.companies import tasks
+        from apps.companies.models import Company, CompanyFile, Source
+
+        company = Company.objects.create(schema_name="notesco", name="NotesCo")
+        CompanyFile.objects.create(
+            company=company,
+            original_name="note-azienda.txt",
+            content_text="Note importanti del cliente sulle preferenze",
+            file_size=50,
+        )
+        CompanyFile.objects.create(
+            company=company,
+            original_name="catalogo.pdf",
+            content_text="Catalogo prodotti 2026 con specifiche tecniche",
+            file_size=100,
+        )
+        source = Source.objects.create(
+            company=company,
+            url="https://example.com",
+            status="scraped",
+            scraped_data={"markdown": "# Example Corp\nProdotti industriali"},
+        )
+
+        captured_prompt = {}
+
+        class FakeClient:
+            def generate(self, prompt, model=None):
+                captured_prompt["prompt"] = prompt
+                from apps.companies.llm_client import LLMResult
+                return LLMResult(
+                    text='{"identita": {"postura": "x", "convinzioni": []}}',
+                    tokens_in=100,
+                    tokens_out=50,
+                    cost=0.0001,
+                    latency_ms=100,
+                )
+
+        monkeypatch.setattr(tasks, "get_llm_client", lambda: FakeClient())
+
+        tasks._generate_dna(source, company)
+
+        prompt = captured_prompt["prompt"]
+        assert "=== CLIENT NOTES ===" in prompt
+        assert "Note importanti del cliente" in prompt
+        assert "Catalogo prodotti" in prompt
+        assert "# note-azienda.txt" not in prompt

@@ -189,6 +189,13 @@ class CompanyQuestion(models.Model):
     code = models.CharField(max_length=4)
     plan_slug = models.CharField(max_length=20, default="starter")
     section_key = models.CharField(max_length=20, default="logica_decisionale")
+    POOL_TEMPLATE = "template"
+    POOL_KB_ANCHORED = "kb_anchored"
+    POOL_CHOICES = [
+        (POOL_TEMPLATE, "Template-anchored"),
+        (POOL_KB_ANCHORED, "KB-anchored"),
+    ]
+    pool = models.CharField(max_length=20, choices=POOL_CHOICES, default=POOL_TEMPLATE)
     principle = models.CharField(max_length=120)
     question = models.TextField()
     answer_depth = models.CharField(max_length=40, default="generica")

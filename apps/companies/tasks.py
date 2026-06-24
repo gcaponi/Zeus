@@ -16,18 +16,32 @@ logger = logging.getLogger(__name__)
 
 
 def _generate_dna(source: Source, company):
-    """Shared DNA generation logic — called by view or pipeline task."""
-    prompt_path = Path(__file__).parent / "prompts" / "dna_aziendale_v0.1.md"
+    """Shared DNA generation logic — called by view or pipeline task.
+
+    Reads 3 separate sources: scraped website, client notes, and company documents.
+    The client notes (saved as 'note-azienda.txt') are separated from real documents
+    so the LLM sees them as distinct context blocks.
+    """
+    prompt_path = Path(__file__).parent / "prompts" / "dna_generale_v1.md"
     prompt_template = prompt_path.read_text(encoding="utf-8")
-    documents = []
+
+    notes_parts = []
+    docs_parts = []
     for company_file in company.company_files.all()[:10]:
-        documents.append(f"# {company_file.original_name}\n{company_file.content_text}")
+        if company_file.original_name == "note-azienda.txt":
+            notes_parts.append(company_file.content_text)
+        else:
+            docs_parts.append(f"# {company_file.original_name}\n{company_file.content_text}")
+
     prompt = prompt_template.replace(
         "{{scraped_content}}",
-        source.scraped_data.get("markdown", ""),
+        source.scraped_data.get("markdown", "") if source.scraped_data else "",
+    ).replace(
+        "{{company_notes}}",
+        "\n\n".join(notes_parts) or "Nessuna nota del cliente.",
     ).replace(
         "{{company_documents}}",
-        "\n\n".join(documents) or "Nessun documento aziendale caricato.",
+        "\n\n".join(docs_parts) or "Nessun documento aziendale caricato.",
     )
 
     client = get_llm_client()
@@ -50,7 +64,6 @@ def _generate_dna(source: Source, company):
     try:
         content = json.loads(result.text)
     except json.JSONDecodeError:
-        # Try to extract JSON from markdown code block
         match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", result.text, re.DOTALL)
         if match:
             try:
