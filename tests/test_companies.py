@@ -1072,9 +1072,12 @@ class TestDNAQuestions:
 
     def test_dna_sections_hide_nested_description_keys(self):
         sections = views._dna_sections({
-            "identita": {"descrizione": "Testo identita pulito."},
-            "modelli_mentali": [{"descrizione": "Qualita"}, {"descrizione": "Rapidita"}],
-            "nucleo_tecnico": {"testo": "Testo nucleo pulito."},
+            "identita": {"descrizione": "Testo identita pulito. [SRC:scrape]"},
+            "modelli_mentali": [
+                {"descrizione": "Qualita [SRC:answer]"},
+                {"descrizione": "Rapidita [SRC:file]"},
+            ],
+            "nucleo_tecnico": {"testo": "Testo nucleo pulito. [SRC:note]"},
             "confini": {"value": "Testo confini pulito."},
             "tono": {"description": "Testo tono pulito."},
             "logica_decisionale": {"contenuto": "Testo logica pulito."},
@@ -1089,6 +1092,7 @@ class TestDNAQuestions:
         assert values["logica_decisionale"] == "Testo logica pulito."
         assert "descrizione" not in values["identita"]
         assert "{" not in values["identita"]
+        assert "[SRC:" not in " ".join(values.values())
 
     def test_public_document_uses_sintesi_cognitiva_without_layer_titles(self):
         content = {

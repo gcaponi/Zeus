@@ -182,14 +182,16 @@ def _dna_sections(content, old_content=None):
     sections = []
     for key in LAYER_KEYS:
         label = LAYER_TITLES[key]
-        value = _as_text(content.get(key) if isinstance(content, dict) else None)
+        raw_value = _as_text(content.get(key) if isinstance(content, dict) else None)
+        value = _strip_source_markers(raw_value)
         old_value = None
         if old_content and isinstance(old_content, dict):
-            old_value = _as_text(old_content.get(key))
+            old_value = _strip_source_markers(_as_text(old_content.get(key)))
         sections.append({
             "key": key,
             "label": label,
             "value": value or "",
+            "raw_value": raw_value or "",
             "old_value": old_value or "",
             "changed": bool(old_value and old_value != value),
         })
@@ -199,7 +201,7 @@ def _dna_sections(content, old_content=None):
 def _dna_public_document(content):
     """Return the client-facing Sintesi Cognitiva, never the internal layer map."""
     if not isinstance(content, dict):
-        return _as_text(content).strip()
+        return _strip_source_markers(_as_text(content).strip())
 
     explicit = _strip_source_markers(_as_text(content.get("sintesi_cognitiva")).strip())
     if explicit:
@@ -222,7 +224,7 @@ def _dna_final_document(content):
     public synthesis with the generated layer text as paragraphs only.
     """
     if not isinstance(content, dict):
-        return _as_text(content).strip()
+        return _strip_source_markers(_as_text(content).strip())
 
     paragraphs = []
     synthesis = _strip_source_markers(_as_text(content.get("sintesi_cognitiva")).strip())
@@ -1874,14 +1876,16 @@ def _product_dna_sections(content, old_content=None):
     }
     sections = []
     for key, label in labels.items():
-        value = _as_text(content.get(key) if isinstance(content, dict) else None)
+        raw_value = _as_text(content.get(key) if isinstance(content, dict) else None)
+        value = _strip_source_markers(raw_value)
         old_value = None
         if old_content and isinstance(old_content, dict):
-            old_value = _as_text(old_content.get(key))
+            old_value = _strip_source_markers(_as_text(old_content.get(key)))
         sections.append({
             "key": key,
             "label": label,
             "value": value or "",
+            "raw_value": raw_value or "",
             "old_value": old_value or "",
             "changed": bool(old_value and old_value != value),
         })
