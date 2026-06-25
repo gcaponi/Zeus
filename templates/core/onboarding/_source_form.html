@@ -39,30 +39,23 @@
 
     <div>
         <label class="zeus-label" for="company_file">Documenti aziendali (opzionale)</label>
-        <input type="file" name="company_file" id="company_file" accept=".pdf,.txt,.md" class="zeus-input" style="padding: 0.6rem;">
-        <p class="mt-2 text-xs text-content-muted">PDF, TXT o MD — brochure, presentazioni, documenti aziendali.</p>
+        <input
+            type="file"
+            name="company_file"
+            id="company_file"
+            accept=".pdf,.txt,.md"
+            class="zeus-input"
+            style="padding: 0.6rem;"
+            hx-post="{% url 'onboarding-file-upload' %}"
+            hx-target="#company-files-list"
+            hx-swap="outerHTML"
+            hx-trigger="change"
+            hx-encoding="multipart/form-data"
+        >
+        <p class="mt-2 text-xs text-content-muted">PDF, TXT o MD — seleziona un file per caricarlo immediatamente.</p>
     </div>
 
-    {% if company_files %}
-    <div class="rounded-xl border border-gray-200 bg-gray-50/50 p-4">
-        <p class="zeus-label mb-3">File caricati</p>
-        <ul class="space-y-2">
-            {% for file in company_files %}
-            <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm">
-                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
-                    <span class="font-semibold text-content-primary truncate max-w-[200px] sm:max-w-[300px]">{{ file.original_name }}</span>
-                    <span class="text-xs text-content-muted whitespace-nowrap">{{ file.file_size|filesizeformat }}</span>
-                    <span class="text-xs text-content-muted whitespace-nowrap">{{ file.created_at|date:"d/m/Y H:i" }}</span>
-                </div>
-                <form method="post" action="{% url 'onboarding-file-delete' file.pk %}" onsubmit="return confirm('Eliminare {{ file.original_name }}?');">
-                    {% csrf_token %}
-                    <button type="submit" class="text-xs font-semibold text-red-500 hover:text-red-700">Elimina</button>
-                </form>
-            </li>
-            {% endfor %}
-        </ul>
-    </div>
-    {% endif %}
+    {% include "core/onboarding/_company_files.html" %}
 
     <div>
         <label class="zeus-label" for="company_notes">Note aggiuntive (opzionale)</label>

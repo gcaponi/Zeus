@@ -321,6 +321,18 @@ def _source_form_context(company, *, error=None, notice=None, review_mode=False)
     }
 
 
+def _company_files_response(request, company):
+    return render(
+        request,
+        "core/onboarding/_company_files.html",
+        {
+            "company_files": company.company_files.exclude(
+                original_name="note-azienda.txt",
+            ).order_by("-created_at"),
+        },
+    )
+
+
 def _initial_info_changed(company, url, notes, uploaded_file) -> bool:
     if not company.dna_versions.exists():
         return True
@@ -1045,6 +1057,34 @@ def onboarding_dna_reset(request):
 
 @login_required
 @require_http_methods(["POST"])
+@require_http_methods(["POST"])
+def onboarding_file_upload(request):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    uploaded_file = getattr(request, "FILES", {}).get("company_file")
+    block_reason = _company_file_block_reason(company)
+    if block_reason:
+        return _company_files_response(request, company)
+    if not uploaded_file:
+        return _company_files_response(request, company)
+    content_text, file_size, original_name = _extract_company_file_text(uploaded_file)
+    if not content_text.strip():
+        return _company_files_response(request, company)
+    CompanyFile.objects.create(
+        company=company,
+        original_name=original_name,
+        content_text=content_text,
+        file_size=file_size,
+        uploaded_by=request.user if request.user.is_authenticated else None,
+    )
+    subscription = _subscription_for_company(company)
+    if subscription:
+        subscription.company_files_used = company.company_files.count()
+        subscription.save(update_fields=["company_files_used"])
+    return _company_files_response(request, company)
+
+
 def onboarding_file_delete(request, pk):
     company = _tenant_company(request)
     if not company:
@@ -1056,11 +1096,7 @@ def onboarding_file_delete(request, pk):
         subscription.company_files_used = company.company_files.count()
         subscription.save(update_fields=["company_files_used"])
     if request.headers.get("HX-Request") == "true":
-        return render(
-            request,
-            "core/onboarding/_source_form.html",
-            _source_form_context(company),
-        )
+        return _company_files_response(request, company)
     return redirect("onboarding-index")
 
 
@@ -2025,6 +2061,7 @@ def _product_detail_context(product, error=None):
         "product_files": product_files,
         "product_files_count": len(product_files),
         "product_file_limit": product_file_limit,
+        "product_step": 1,
         "error": error,
     }
 
@@ -2203,6 +2240,7 @@ def product_questions(request, pk):
         "plan_label": _question_plan_label(
             questions[0].plan_slug if questions else _plan_slug_for_company(company)
         ),
+        "product_step": 2,
         "error": error,
     }, status=status_code)
 
@@ -2225,6 +2263,7 @@ def product_review(request, pk):
         "approved_keys": dna.approved_sections(),
         "missing_keys": dna.missing_sections(),
         "is_fully_approved": dna.is_fully_approved(),
+        "product_step": 3,
     })
 
 

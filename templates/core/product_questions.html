@@ -15,6 +15,8 @@
         <span class="zeus-badge zeus-badge-cyan mt-3">{{ plan_label }}</span>
     </header>
 
+    {% include "core/onboarding/_product_step_indicator.html" with product_step=product_step %}
+
     {% if complete_dna %}
         <div class="mb-6 zeus-card p-5" style="border-color: rgba(34, 197, 94, 0.3); background: rgba(34, 197, 94, 0.05);">
             <p class="zeus-label text-green-600">DNA prodotto completo generato</p>
