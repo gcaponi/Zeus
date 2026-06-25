@@ -153,7 +153,7 @@ def _onboarding_context(request):
     sections = _dna_sections(latest_dna.content) if latest_dna else []
     review_start = request.GET.get("revise") == "1"
     run_is_pending = bool(latest_run and latest_run.status in {"running", "pending"})
-    step = 2 if review_start else 4 if latest_dna else 3 if latest_run else 2
+    step = 1 if review_start else 3 if latest_dna else 2 if latest_run else 1
     return {
         "company": company,
         "source": latest_source,
@@ -161,6 +161,8 @@ def _onboarding_context(request):
         "dna": latest_dna,
         "sections": sections,
         "step": step,
+        "step_has_run": latest_run is not None,
+        "step_has_dna": latest_dna is not None,
         "show_source_form": review_start or (latest_dna is None and not run_is_pending),
         **_source_form_context(company, review_mode=review_start),
         "is_done": latest_dna is not None,
@@ -895,7 +897,7 @@ def onboarding_source_create(request):
     def _source_form_response(context, status=200):
         if is_htmx:
             return render(request, "core/onboarding/_source_form.html", context, status=status)
-        page_context = _onboarding_context(request) or {"company": company, "step": 2}
+        page_context = _onboarding_context(request) or {"company": company, "step": 1}
         page_context.update(context)
         return render(request, "core/onboarding.html", page_context, status=status)
 
@@ -1399,6 +1401,7 @@ def dna_questions(request):
             return redirect("dna-generating")
 
     status_code = 400 if error else 200
+    latest_run = company.pipeline_runs.order_by("-created_at").first()
     return render(request, "core/dna_questions.html", {
         "company": company,
         "pre_dna": pre_dna,
@@ -1409,6 +1412,9 @@ def dna_questions(request):
             questions[0].plan_slug if questions else _plan_slug_for_company(company)
         ),
         "error": error,
+        "step": 3,
+        "step_has_run": latest_run is not None,
+        "step_has_dna": True,
     }, status=status_code)
 
 
@@ -1462,6 +1468,7 @@ def _dna_review_context(company, dna):
     if not missing_keys and not dna.is_fully_approved():
         blocking_flags = _safe_mode_flags(dna)
     final_document = _dna_final_document(dna.content)
+    latest_run = company.pipeline_runs.order_by("-created_at").first()
 
     return {
         "dna": dna,
@@ -1475,6 +1482,9 @@ def _dna_review_context(company, dna):
         "is_export_ready": dna.is_export_ready(),
         "company_name": company.name,
         "blocking_flags": blocking_flags,
+        "step": 3,
+        "step_has_run": latest_run is not None,
+        "step_has_dna": True,
     }
 
 
