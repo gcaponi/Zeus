@@ -9,7 +9,7 @@ class Plan(models.Model):
 
     name = models.CharField(max_length=100)
     slug = models.SlugField(max_length=50, unique=True)
-    max_company_files = models.PositiveIntegerField(default=5)
+    max_company_files_mb = models.PositiveIntegerField(default=5)
     max_product_dnas = models.PositiveIntegerField(default=5)
     max_files_per_product = models.PositiveIntegerField(default=2)
     unlimited_company_files = models.BooleanField(default=False)
@@ -30,22 +30,21 @@ class Plan(models.Model):
         plans = {
             cls.SLUG_STARTER: {
                 "name": "Foundation",
-                "max_company_files": 5,
+                "max_company_files_mb": 5,
                 "max_product_dnas": 5,
                 "max_files_per_product": 2,
             },
             cls.SLUG_PROFESSIONAL: {
                 "name": "Professional",
-                "max_company_files": 15,
+                "max_company_files_mb": 10,
                 "max_product_dnas": 15,
                 "max_files_per_product": 5,
             },
             cls.SLUG_ENTERPRISE: {
                 "name": "Legacy",
-                "max_company_files": 0,
+                "max_company_files_mb": 15,
                 "max_product_dnas": 0,
                 "max_files_per_product": 0,
-                "unlimited_company_files": True,
                 "unlimited_product_dnas": True,
                 "unlimited_files_per_product": True,
             },
@@ -60,8 +59,8 @@ class Plan(models.Model):
         )
         return plan
 
-    def allows_company_file_count(self, current_count):
-        return self.unlimited_company_files or current_count < self.max_company_files
+    def allows_company_file_bytes(self, current_bytes):
+        return self.unlimited_company_files or current_bytes < self.max_company_files_mb * 1024 * 1024
 
     def allows_product_dna_count(self, current_count):
         return self.unlimited_product_dnas or current_count < self.max_product_dnas
@@ -114,7 +113,7 @@ class WorkspaceSubscription(models.Model):
         choices=STATUS_CHOICES,
         default=STATUS_TRIAL,
     )
-    company_files_used = models.PositiveIntegerField(default=0)
+    company_files_bytes_used = models.PositiveBigIntegerField(default=0)
     product_dnas_used = models.PositiveIntegerField(default=0)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -129,9 +128,9 @@ class WorkspaceSubscription(models.Model):
     def can_use_workspace(self):
         return self.status != self.STATUS_SUSPENDED and self.plan.is_active
 
-    def can_add_company_file(self):
-        return self.can_use_workspace() and self.plan.allows_company_file_count(
-            self.company_files_used,
+    def can_add_company_file(self, additional_bytes=0):
+        return self.can_use_workspace() and self.plan.allows_company_file_bytes(
+            self.company_files_bytes_used + additional_bytes,
         )
 
     def can_add_product_dna(self):

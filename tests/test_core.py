@@ -41,13 +41,14 @@ class TestPlans:
         plan = Plan.objects.create(
             name="Quota Test",
             slug="quota-test",
-            max_company_files=5,
+            max_company_files_mb=5,
             max_product_dnas=5,
             max_files_per_product=2,
         )
 
-        assert plan.allows_company_file_count(4) is True
-        assert plan.allows_company_file_count(5) is False
+        five_mb = 5 * 1024 * 1024
+        assert plan.allows_company_file_bytes(five_mb - 1) is True
+        assert plan.allows_company_file_bytes(five_mb) is False
         assert plan.allows_product_dna_count(4) is True
         assert plan.allows_product_dna_count(5) is False
         assert plan.allows_product_file_count(1) is True
@@ -74,7 +75,7 @@ class TestWorkspaceSubscription:
             client=tenant_client,
             plan=plan,
             status=WorkspaceSubscription.STATUS_ACTIVE,
-            company_files_used=5,
+            company_files_bytes_used=5 * 1024 * 1024,
             product_dnas_used=4,
         )
 

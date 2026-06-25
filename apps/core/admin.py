@@ -21,7 +21,7 @@ class WorkspaceSubscriptionInline(admin.StackedInline):
     fields = [
         "plan",
         "status",
-        "company_files_used",
+        "company_files_bytes_used",
         "product_dnas_used",
         "notes",
         "created_at",
@@ -212,7 +212,7 @@ class PlanAdmin(admin.ModelAdmin):
 
     @admin.display(description="Company files")
     def max_company_files_label(self, obj):
-        return "Illimitati" if obj.unlimited_company_files else obj.max_company_files
+        return "Illimitati" if obj.unlimited_company_files else f"{obj.max_company_files_mb} MB"
 
     @admin.display(description="Product DNAs")
     def max_product_dnas_label(self, obj):
@@ -239,8 +239,9 @@ class WorkspaceSubscriptionAdmin(admin.ModelAdmin):
 
     @admin.display(description="Company files")
     def company_files_usage(self, obj):
-        limit = "illimitati" if obj.plan.unlimited_company_files else obj.plan.max_company_files
-        return f"{obj.company_files_used}/{limit}"
+        limit = "illimitati" if obj.plan.unlimited_company_files else f"{obj.plan.max_company_files_mb} MB"
+        used_mb = obj.company_files_bytes_used / (1024 * 1024)
+        return f"{used_mb:.1f}/{limit}"
 
     @admin.display(description="Product DNAs")
     def product_dnas_usage(self, obj):

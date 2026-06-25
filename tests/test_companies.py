@@ -668,12 +668,13 @@ class TestOnboardingViews:
         tenant = Client.objects.create(schema_name="test-tenant", name="Test Tenant")
         WorkspaceSubscription.objects.create(client=tenant, plan=Plan.get_default())
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        for index in range(5):
-            CompanyFile.objects.create(
-                company=company,
-                original_name=f"doc-{index}.txt",
-                content_text="test",
-            )
+        five_mb = 5 * 1024 * 1024
+        CompanyFile.objects.create(
+            company=company,
+            original_name="big-doc.pdf",
+            content_text="test",
+            file_size=five_mb,
+        )
 
         req = rf_with_tenant("post", "/onboarding/source/", {
             "url": "https://rossi-metalli.it",
@@ -683,7 +684,7 @@ class TestOnboardingViews:
         resp = views.onboarding_source_create(req)
 
         assert resp.status_code == 403
-        assert b"Limite file aziendali" in resp.content
+        assert b"Limite" in resp.content
         assert Source.objects.count() == 0
 
     def test_onboarding_source_create_invalid_url(self, rf_with_tenant):

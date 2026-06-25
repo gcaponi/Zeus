@@ -462,12 +462,12 @@ def _client_rows_context(request):
     }
 
 
-def _limit_label(plan, field, unlimited_field):
+def _limit_label(plan, field, unlimited_field, suffix=""):
     if not plan:
         return "-"
     if getattr(plan, unlimited_field):
         return "Illimitati"
-    return getattr(plan, field)
+    return f"{getattr(plan, field)}{suffix}"
 
 
 def _client_admin_links(client, domain):
@@ -516,9 +516,10 @@ def _tenant_detail_data(client):
                     "zeus-admin-company-file-delete",
                     args=[client.pk, company_file.pk],
                 )
-            data["company_files_count"] = CompanyFile.objects.filter(
-                company=company,
-            ).count()
+            data["company_files_count"] = round(
+                (company.company_files.aggregate(t=Sum("file_size"))["t"] or 0) / (1024 * 1024),
+                2,
+            )
             data["current_dna"] = company.dna_versions.filter(is_current=True).first()
             data["complete_dna"] = company.dna_versions.filter(
                 dna_type=CompanyDNA.TYPE_COMPLETE,
@@ -644,11 +645,12 @@ def _client_detail_context(request, client):
         "not_deleted": request.GET.get("not_deleted") == "1",
         "limits": {
             "company_files": {
-                "used": company_files_used,
+                "used": f"{company_files_used} MB",
                 "limit": _limit_label(
                     plan,
-                    "max_company_files",
+                    "max_company_files_mb",
                     "unlimited_company_files",
+                    suffix=" MB",
                 ),
             },
             "products": {
@@ -814,16 +816,16 @@ def delete_company_file(request, client_id, file_id):
     client = get_object_or_404(_clients_queryset(), pk=client_id)
     if request.method != "POST":
         return _client_detail_redirect(client, "not_deleted")
-    current_count = 0
+    current_bytes = 0
     with _tenant_context(client.schema_name):
         company = _tenant_company_or_404(client)
         company_file = get_object_or_404(CompanyFile, pk=file_id, company=company)
         company_file.delete()
-        current_count = company.company_files.count()
+        current_bytes = company.company_files.aggregate(t=Sum("file_size"))["t"] or 0
     subscription = getattr(client, "subscription", None)
     if subscription:
-        subscription.company_files_used = current_count
-        subscription.save(update_fields=["company_files_used"])
+        subscription.company_files_bytes_used = current_bytes
+        subscription.save(update_fields=["company_files_bytes_used"])
     return _client_detail_redirect(client, "deleted")
 
 

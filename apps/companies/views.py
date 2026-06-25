@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 import fitz
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, JsonResponse
+from django.db.models import Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -128,18 +129,23 @@ def _question_plan_label(plan_slug):
     )["label"]
 
 
-def _company_file_block_reason(company):
+def _company_file_bytes_used(company):
+    return company.company_files.aggregate(t=Sum("file_size"))["t"] or 0
+
+
+def _company_file_block_reason(company, additional_bytes=0):
     subscription = _subscription_for_company(company)
     if not subscription:
         return None
-    current_count = company.company_files.count()
-    if subscription.company_files_used != current_count:
-        subscription.company_files_used = current_count
-        subscription.save(update_fields=["company_files_used"])
+    current_bytes = _company_file_bytes_used(company)
+    if subscription.company_files_bytes_used != current_bytes:
+        subscription.company_files_bytes_used = current_bytes
+        subscription.save(update_fields=["company_files_bytes_used"])
     if not subscription.can_use_workspace():
         return "Workspace sospeso. Contatta l'amministratore ZEUS."
-    if not subscription.can_add_company_file():
-        return "Limite file aziendali raggiunto per il piano attuale."
+    if not subscription.can_add_company_file(additional_bytes):
+        limit_mb = subscription.plan.max_company_files_mb
+        return f"Limite di {limit_mb} MB di documenti raggiunto per il piano attuale."
     return None
 
 
@@ -809,8 +815,8 @@ def _save_company_file_from_request(company, request, *, replace_notes=False):
 
     subscription = _subscription_for_company(company)
     if subscription:
-        subscription.company_files_used = company.company_files.count()
-        subscription.save(update_fields=["company_files_used"])
+        subscription.company_files_bytes_used = _company_file_bytes_used(company)
+        subscription.save(update_fields=["company_files_bytes_used"])
     return None
 
 
@@ -1050,26 +1056,25 @@ def onboarding_dna_reset(request):
     company.sources.all().delete()
     subscription = _subscription_for_company(company)
     if subscription:
-        subscription.company_files_used = 0
-        subscription.save(update_fields=["company_files_used"])
+        subscription.company_files_bytes_used = 0
+        subscription.save(update_fields=["company_files_bytes_used"])
     return redirect("onboarding-index")
 
 
 @login_required
-@require_http_methods(["POST"])
 @require_http_methods(["POST"])
 def onboarding_file_upload(request):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
     uploaded_file = getattr(request, "FILES", {}).get("company_file")
-    block_reason = _company_file_block_reason(company)
-    if block_reason:
-        return _company_files_response(request, company)
     if not uploaded_file:
         return _company_files_response(request, company)
     content_text, file_size, original_name = _extract_company_file_text(uploaded_file)
     if not content_text.strip():
+        return _company_files_response(request, company)
+    block_reason = _company_file_block_reason(company, additional_bytes=file_size)
+    if block_reason:
         return _company_files_response(request, company)
     CompanyFile.objects.create(
         company=company,
@@ -1080,8 +1085,8 @@ def onboarding_file_upload(request):
     )
     subscription = _subscription_for_company(company)
     if subscription:
-        subscription.company_files_used = company.company_files.count()
-        subscription.save(update_fields=["company_files_used"])
+        subscription.company_files_bytes_used = _company_file_bytes_used(company)
+        subscription.save(update_fields=["company_files_bytes_used"])
     return _company_files_response(request, company)
 
 
@@ -1093,8 +1098,8 @@ def onboarding_file_delete(request, pk):
     company_file.delete()
     subscription = _subscription_for_company(company)
     if subscription:
-        subscription.company_files_used = company.company_files.count()
-        subscription.save(update_fields=["company_files_used"])
+        subscription.company_files_bytes_used = _company_file_bytes_used(company)
+        subscription.save(update_fields=["company_files_bytes_used"])
     if request.headers.get("HX-Request") == "true":
         return _company_files_response(request, company)
     return redirect("onboarding-index")

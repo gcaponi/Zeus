@@ -441,7 +441,7 @@ class TestZeusAdminDashboard:
             client=tenant,
             plan=plan,
             status=WorkspaceSubscription.STATUS_ACTIVE,
-            company_files_used=1,
+            company_files_bytes_used=100,
         )
         company = Company.objects.create(
             schema_name="file-client",
@@ -522,7 +522,7 @@ class TestZeusAdminDashboard:
         assert product_delete_response.status_code == 302
         assert not CompanyFile.objects.filter(pk=company_file.pk).exists()
         assert not ProductFile.objects.filter(pk=product_file.pk).exists()
-        assert subscription.company_files_used == 0
+        assert subscription.company_files_bytes_used == 0
 
     def test_admin_can_open_and_delete_dna_versions(self, monkeypatch):
         monkeypatch.setattr(TenantClient, "auto_create_schema", False)
