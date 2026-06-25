@@ -1,0 +1,40 @@
+{% extends "core/base.html" %}
+
+{% block title %}DNA Generale — ZEUS{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-4xl">
+    <header class="mb-8">
+        <div class="flex flex-wrap items-center gap-3 text-sm mb-4">
+            <a href="{% url 'onboarding-index' %}" class="text-brand-cyan hover:underline">← Onboarding</a>
+            <span class="text-content-muted">·</span>
+            <a href="{% url 'dna-review' %}" class="text-brand-cyan hover:underline">← Torna alla revisione</a>
+        </div>
+        <h1 class="text-3xl font-bold tracking-tight sm:text-4xl font-display">DNA Generale</h1>
+        <p class="mt-2 text-content-secondary">Versione {{ dna.version }} · {{ company_name|default:"" }}</p>
+    </header>
+
+    {% include "core/onboarding/_step_indicator.html" with current_step=4 %}
+
+    <section class="zeus-card p-6 mb-6">
+        <p class="zeus-label text-brand-cyan">Sintesi Cognitiva</p>
+        <div class="mt-4 text-sm leading-7 text-content-primary whitespace-pre-line break-words text-justify">{{ public_document|default:"Non disponibile" }}</div>
+    </section>
+
+    <div class="space-y-4">
+        {% for section in sections %}
+            <section class="zeus-card p-5">
+                <h3 class="text-lg font-bold font-display text-brand-cyan">{{ section.label }}</h3>
+                <p class="mt-4 text-sm leading-7 text-content-primary whitespace-pre-line break-words text-justify">{{ section.value|default:"Non disponibile" }}</p>
+            </section>
+        {% endfor %}
+    </div>
+
+    <div class="mt-8 zeus-card p-6 text-center">
+        <div class="mt-4 flex flex-wrap justify-center gap-3">
+            <a href="{% url 'dna-download-pdf' %}" class="zeus-btn zeus-btn-secondary">Scarica PDF completo</a>
+            <a href="{% url 'dna-review' %}" class="zeus-btn zeus-btn-ghost">← Torna alla revisione</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

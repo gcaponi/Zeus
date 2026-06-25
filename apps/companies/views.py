@@ -154,6 +154,7 @@ def _onboarding_context(request):
     review_start = request.GET.get("revise") == "1"
     run_is_pending = bool(latest_run and latest_run.status in {"running", "pending"})
     step = 1 if review_start else 3 if latest_dna else 2 if latest_run else 1
+    has_questions = company.company_questions.exists()
     return {
         "company": company,
         "source": latest_source,
@@ -163,6 +164,7 @@ def _onboarding_context(request):
         "step": step,
         "step_has_run": latest_run is not None,
         "step_has_dna": latest_dna is not None,
+        "step_has_questions": has_questions,
         "show_source_form": review_start or (latest_dna is None and not run_is_pending),
         **_source_form_context(company, review_mode=review_start),
         "is_done": latest_dna is not None,
@@ -1412,9 +1414,10 @@ def dna_questions(request):
             questions[0].plan_slug if questions else _plan_slug_for_company(company)
         ),
         "error": error,
-        "step": 3,
+        "step": 2,
         "step_has_run": latest_run is not None,
-        "step_has_dna": True,
+        "step_has_dna": company.dna_versions.filter(is_current=True).exists(),
+        "step_has_questions": True,
     }, status=status_code)
 
 
@@ -1461,6 +1464,31 @@ def dna_review(request):
     return render(request, "core/dna_review.html", _dna_review_context(company, dna))
 
 
+@login_required
+def dna_visualize(request):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    dna = company.dna_versions.filter(is_current=True).first()
+    if not dna:
+        return HttpResponse("DNA not found", status=404)
+    latest_run = company.pipeline_runs.order_by("-created_at").first()
+    final_document = _dna_final_document(dna.content)
+    return render(request, "core/dna_visualize.html", {
+        "dna": dna,
+        "sections": _dna_sections(dna.content),
+        "public_document": _dna_public_document(dna.content),
+        "final_document": final_document,
+        "final_paragraphs": _document_paragraphs(final_document),
+        "company_name": company.name,
+        "is_fully_approved": dna.is_fully_approved(),
+        "step": 4,
+        "step_has_run": latest_run is not None,
+        "step_has_dna": True,
+        "step_has_questions": company.company_questions.exists(),
+    })
+
+
 def _dna_review_context(company, dna):
     sections = _dna_sections(dna.content)
     missing_keys = dna.missing_sections()
@@ -1485,6 +1513,7 @@ def _dna_review_context(company, dna):
         "step": 3,
         "step_has_run": latest_run is not None,
         "step_has_dna": True,
+        "step_has_questions": company.company_questions.exists(),
     }
 
 

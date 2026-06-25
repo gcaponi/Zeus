@@ -1,4 +1,4 @@
-<div class="mb-6 grid gap-2 sm:gap-3 grid-cols-3">
+<div class="mb-6 grid gap-2 sm:gap-3 grid-cols-2 sm:grid-cols-4">
     {% if current_step == 1 %}
         <div class="rounded-2xl border border-brand-cyan/40 bg-brand-cyan/10 p-3 sm:p-4 cursor-default select-none">
             <p class="text-xs font-bold uppercase tracking-wider text-brand-cyan">Passo 1</p>
@@ -6,42 +6,59 @@
         </div>
     {% else %}
         <a href="{% url 'onboarding-index' %}?revise=1" class="block rounded-2xl border border-green-400/30 bg-green-400/10 p-3 sm:p-4 transition-all hover:-translate-y-0.5 cursor-pointer">
-            <p class="text-xs font-bold uppercase tracking-wider text-green-600">Passo 1 ✓</p>
+            <p class="text-xs font-bold uppercase tracking-wider text-green-600">Passo 1{% if current_step > 1 %} ✓{% endif %}</p>
             <p class="mt-1 font-semibold text-sm sm:text-base">Dati</p>
         </a>
     {% endif %}
 
     {% if current_step == 2 %}
-        <div class="rounded-2xl border border-brand-cyan/40 bg-brand-cyan/10 p-3 sm:p-4 cursor-default">
+        <div class="rounded-2xl border border-brand-cyan/40 bg-brand-cyan/10 p-3 sm:p-4 cursor-default select-none">
             <p class="text-xs font-bold uppercase tracking-wider text-brand-cyan">Passo 2</p>
-            <p class="mt-1 font-semibold text-sm sm:text-base">Analisi</p>
+            <p class="mt-1 font-semibold text-sm sm:text-base">Domande</p>
         </div>
-    {% elif step_has_run %}
-        <a href="{% url 'onboarding-index' %}" class="block rounded-2xl border border-green-400/30 bg-green-400/10 p-3 sm:p-4 transition-all hover:-translate-y-0.5">
-            <p class="text-xs font-bold uppercase tracking-wider text-green-600">Passo 2 ✓</p>
-            <p class="mt-1 font-semibold text-sm sm:text-base">Analisi</p>
+    {% elif step_has_questions %}
+        <a href="{% url 'dna-questions' %}" class="block rounded-2xl border border-green-400/30 bg-green-400/10 p-3 sm:p-4 transition-all hover:-translate-y-0.5 cursor-pointer">
+            <p class="text-xs font-bold uppercase tracking-wider text-green-600">Passo 2{% if current_step > 2 %} ✓{% endif %}</p>
+            <p class="mt-1 font-semibold text-sm sm:text-base">Domande</p>
         </a>
     {% else %}
         <div class="rounded-2xl border border-gray-200 bg-gray-50 p-3 sm:p-4 opacity-60 cursor-not-allowed">
             <p class="text-xs font-bold uppercase tracking-wider text-content-muted">Passo 2</p>
-            <p class="mt-1 font-semibold text-sm sm:text-base">Analisi</p>
+            <p class="mt-1 font-semibold text-sm sm:text-base">Domande</p>
         </div>
     {% endif %}
 
     {% if current_step == 3 %}
-        <div class="rounded-2xl border border-brand-cyan/40 bg-brand-cyan/10 p-3 sm:p-4 cursor-default">
+        <div class="rounded-2xl border border-brand-cyan/40 bg-brand-cyan/10 p-3 sm:p-4 cursor-default select-none">
             <p class="text-xs font-bold uppercase tracking-wider text-brand-cyan">Passo 3</p>
-            <p class="mt-1 font-semibold text-sm sm:text-base">DNA</p>
+            <p class="mt-1 font-semibold text-sm sm:text-base">Revisione</p>
         </div>
     {% elif step_has_dna %}
-        <a href="{% url 'dna-questions' %}" class="block rounded-2xl border border-green-400/30 bg-green-400/10 p-3 sm:p-4 transition-all hover:-translate-y-0.5">
-            <p class="text-xs font-bold uppercase tracking-wider text-green-600">Passo 3 ✓</p>
-            <p class="mt-1 font-semibold text-sm sm:text-base">DNA</p>
+        <a href="{% url 'dna-review' %}" class="block rounded-2xl border border-green-400/30 bg-green-400/10 p-3 sm:p-4 transition-all hover:-translate-y-0.5 cursor-pointer">
+            <p class="text-xs font-bold uppercase tracking-wider text-green-600">Passo 3{% if current_step > 3 %} ✓{% endif %}</p>
+            <p class="mt-1 font-semibold text-sm sm:text-base">Revisione</p>
         </a>
     {% else %}
         <div class="rounded-2xl border border-gray-200 bg-gray-50 p-3 sm:p-4 opacity-60 cursor-not-allowed">
             <p class="text-xs font-bold uppercase tracking-wider text-content-muted">Passo 3</p>
-            <p class="mt-1 font-semibold text-sm sm:text-base">DNA</p>
+            <p class="mt-1 font-semibold text-sm sm:text-base">Revisione</p>
+        </div>
+    {% endif %}
+
+    {% if current_step == 4 %}
+        <div class="rounded-2xl border border-brand-cyan/40 bg-brand-cyan/10 p-3 sm:p-4 cursor-default select-none">
+            <p class="text-xs font-bold uppercase tracking-wider text-brand-cyan">Passo 4</p>
+            <p class="mt-1 font-semibold text-sm sm:text-base">Visualizza</p>
+        </div>
+    {% elif step_has_dna %}
+        <a href="{% url 'dna-visualize' %}" class="block rounded-2xl border border-green-400/30 bg-green-400/10 p-3 sm:p-4 transition-all hover:-translate-y-0.5 cursor-pointer">
+            <p class="text-xs font-bold uppercase tracking-wider text-green-600">Passo 4 ✓</p>
+            <p class="mt-1 font-semibold text-sm sm:text-base">Visualizza</p>
+        </a>
+    {% else %}
+        <div class="rounded-2xl border border-gray-200 bg-gray-50 p-3 sm:p-4 opacity-60 cursor-not-allowed">
+            <p class="text-xs font-bold uppercase tracking-wider text-content-muted">Passo 4</p>
+            <p class="mt-1 font-semibold text-sm sm:text-base">Visualizza</p>
         </div>
     {% endif %}
 </div>
