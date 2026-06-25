@@ -9,7 +9,7 @@
         {% for section in sections %}
             <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
                 <h4 class="text-sm font-bold uppercase tracking-wider text-brand-cyan">{{ section.label }}</h4>
-                <p class="mt-2 text-sm text-content-primary whitespace-pre-line">{{ section.value|default:"Non disponibile" }}</p>
+                <p class="mt-2 text-sm text-content-primary whitespace-pre-line break-words">{{ section.value|default:"Non disponibile" }}</p>
             </div>
         {% endfor %}
     </div>
@@ -20,10 +20,11 @@
         </div>
     {% endif %}
 
-    <div class="flex gap-3">
+    <div class="flex flex-col gap-3 sm:flex-row">
         <a href="{% url 'dna-questions' %}" class="zeus-btn zeus-btn-primary flex-1"
            onclick="showGeneratingPopup();">
             Rispondi alle domande A1-A10 →
         </a>
+        <a href="{% url 'onboarding-index' %}" class="zeus-btn zeus-btn-ghost sm:w-auto">← Indietro</a>
     </div>
 </div>

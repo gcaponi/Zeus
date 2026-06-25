@@ -1,6 +1,6 @@
 {% extends "core/base.html" %}
 
-{% block title %}Review Prodotto · {{ product.name }} — ZEUS{% endblock %}
+{% block title %}Revisione Prodotto · {{ product.name }} — ZEUS{% endblock %}
 
 {% block extra_head %}
 <script src="https://unpkg.com/htmx.org@1.9.12"></script>
@@ -10,7 +10,7 @@
 <div class="mx-auto max-w-4xl">
     <header class="mb-8">
         <a href="{% url 'product-detail' product.pk %}" class="text-sm text-brand-cyan hover:underline">← {{ product.name }}</a>
-        <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">Review DNA Prodotto</h1>
+        <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">Revisione DNA Prodotto</h1>
         <p class="mt-2 text-content-secondary">Versione {{ dna.version }} · Approva ogni sezione per completare il DNA.</p>
     </header>
 
@@ -32,7 +32,7 @@
                         <span class="zeus-badge" style="background: rgba(251, 191, 36, 0.1); color: #d97706;">Da approvare</span>
                     {% endif %}
                 </div>
-                <p class="mt-4 text-sm leading-7 text-content-primary whitespace-pre-line">{{ section.value|default:"Non disponibile" }}</p>
+                <p class="mt-4 text-sm leading-7 text-content-primary whitespace-pre-line break-words">{{ section.value|default:"Non disponibile" }}</p>
 
                 {% if section.key not in approved_keys and not is_fully_approved %}
                     <div class="mt-4 flex gap-3">

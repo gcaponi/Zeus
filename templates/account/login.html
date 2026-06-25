@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="it">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Sign in · ZEUS</title>
+    <title>Accedi · ZEUS</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -109,8 +109,8 @@
 <body>
     <div class="card">
         <div class="brand">ZEUS</div>
-        <h1>Welcome back</h1>
-        <p class="subtitle">Sign in to your workspace</p>
+        <h1>Bentornato</h1>
+        <p class="subtitle">Accedi al tuo workspace</p>
         {% if error %}
             <div class="errorlist">
                 <p>{{ error }}</p>
@@ -135,10 +135,10 @@
                     {{ form.password.errors }}
                 {% endif %}
             </div>
-            <button type="submit">Sign in</button>
+            <button type="submit">Accedi</button>
         </form>
         <div class="links">
-            <a href="{% url 'account_signup' %}">Create an account</a>
+            <a href="{% url 'account_signup' %}">Crea un account</a>
         </div>
     </div>
 </body>

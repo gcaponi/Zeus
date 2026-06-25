@@ -6,7 +6,10 @@
             </div>
             <h3 class="text-lg font-bold font-display text-white">Analisi non completata</h3>
             <p class="mt-2 text-sm text-slate-100">{{ run.error_msg|default:"Si è verificato un errore durante l'analisi." }}</p>
-            <a href="{% url 'onboarding-index' %}" class="zeus-btn zeus-btn-secondary mt-6 inline-flex">Riprova</a>
+            <div class="mt-6 flex flex-wrap justify-center gap-3">
+                <a href="{% url 'onboarding-index' %}" class="zeus-btn zeus-btn-secondary">Riprova</a>
+                <a href="{% url 'onboarding-index' %}" class="zeus-btn zeus-btn-ghost">← Indietro</a>
+            </div>
         </div>
     {% else %}
         <div class="mx-auto max-w-xl rounded-3xl p-8 text-center" style="background: rgba(15,23,42,0.88); border: 1px solid rgba(255,255,255,0.14); box-shadow: 0 32px 100px rgba(15,23,42,0.24); backdrop-filter: blur(40px) saturate(180%);">
@@ -15,7 +18,7 @@
             </div>
             <h3 class="text-lg font-bold font-display text-white">Analisi in corso...</h3>
             <p class="mt-2 text-sm text-slate-100">ZEUS sta leggendo il sito <strong class="text-white">{{ source.url }}</strong></p>
-            <p class="mt-1 text-xs text-slate-300">Step: {{ run.current_step|default:"avvio" }}</p>
+            <p class="mt-1 text-xs text-slate-300">Fase: {{ run.current_step|default:"avvio" }}</p>
 
             <div
                 class="mt-6"

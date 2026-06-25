@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="it">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -106,21 +106,21 @@
     <div class="card">
         {% if is_public %}
             <div class="brand">ZEUS</div>
-            <h1>Your workspace awaits</h1>
-            <p>Centralised management for your organisation — clients, projects, and operations, all in one place.</p>
+            <h1>Il tuo spazio di lavoro ti aspetta</h1>
+            <p>Gestione centralizzata della tua organizzazione — clienti, progetti e operazioni, tutto in un unico posto.</p>
             <div class="actions">
-                <a href="{% url 'account_signup' %}" class="btn btn-primary">Create account</a>
-                <a href="{% url 'account_login' %}" class="btn btn-outline">Sign in</a>
+                <a href="{% url 'account_signup' %}" class="btn btn-primary">Crea account</a>
+                <a href="{% url 'account_login' %}" class="btn btn-outline">Accedi</a>
             </div>
         {% else %}
             <div class="brand">{{ tenant.schema_name }}.zeus.cais.uno</div>
             <h1>{{ tenant.name }}</h1>
-            <div class="tenant-badge">Active workspace</div>
-            <p>Welcome to {{ tenant.name }}'s ZEUS workspace. Manage your projects, clients, and team from here.</p>
+            <div class="tenant-badge">Workspace attivo</div>
+            <p>Benvenuto nel workspace ZEUS di {{ tenant.name }}. Gestisci progetti, clienti e team da qui.</p>
             <div class="actions">
-                <a href="{% url 'onboarding-index' %}" class="btn btn-primary">Start onboarding</a>
-                <a href="{% url 'tenant-dashboard' %}" class="btn btn-outline">Go to dashboard</a>
-                <a href="{% url 'account_logout' %}" class="btn btn-outline">Sign out</a>
+                <a href="{% url 'onboarding-index' %}" class="btn btn-primary">Inizia onboarding</a>
+                <a href="{% url 'tenant-dashboard' %}" class="btn btn-outline">Vai alla dashboard</a>
+                <a href="{% url 'account_logout' %}" class="btn btn-outline">Esci</a>
             </div>
         {% endif %}
         <hr>

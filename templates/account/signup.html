@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="it">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Create account · ZEUS</title>
+    <title>Crea account · ZEUS</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -117,8 +117,8 @@
 <body>
     <div class="card">
         <div class="brand">ZEUS</div>
-        <h1>Create your account</h1>
-        <p class="subtitle">Start your ZEUS workspace</p>
+        <h1>Crea il tuo account</h1>
+        <p class="subtitle">Avvia il tuo workspace ZEUS</p>
         <form method="post" action="{% url 'account_signup' %}">
             {% csrf_token %}
             {{ form.non_field_errors }}
@@ -133,25 +133,25 @@
                 {{ form.password1.errors }}
             </div>
             <div>
-                <label for="{{ form.password2.id_for_label }}">Confirm password</label>
+                <label for="{{ form.password2.id_for_label }}">Conferma password</label>
                 {{ form.password2 }}
                 {{ form.password2.errors }}
             </div>
             <div>
-                <label for="{{ form.company_name.id_for_label }}">Company name</label>
+                <label for="{{ form.company_name.id_for_label }}">Nome azienda</label>
                 {{ form.company_name }}
                 {{ form.company_name.errors }}
             </div>
             <div>
-                <label for="{{ form.company_slug.id_for_label }}">Workspace URL</label>
+                <label for="{{ form.company_slug.id_for_label }}">URL workspace</label>
                 {{ form.company_slug }}
                 <span class="helptext">{{ form.company_slug.help_text }}</span>
                 {{ form.company_slug.errors }}
             </div>
-            <button type="submit">Create workspace</button>
+            <button type="submit">Crea workspace</button>
         </form>
         <div class="links">
-            <a href="{% url 'account_login' %}">Already have an account? Sign in</a>
+            <a href="{% url 'account_login' %}">Hai già un account? Accedi</a>
         </div>
     </div>
 </body>

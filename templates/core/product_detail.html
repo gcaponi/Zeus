@@ -80,7 +80,7 @@
                     {% for section in sections %}
                         <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
                             <h3 class="text-sm font-bold uppercase tracking-wider text-brand-cyan">{{ section.label }}</h3>
-                            <p class="mt-2 text-sm text-content-primary whitespace-pre-line">{{ section.value|default:"Non disponibile" }}</p>
+                            <p class="mt-2 text-sm text-content-primary whitespace-pre-line break-words">{{ section.value|default:"Non disponibile" }}</p>
                         </div>
                     {% endfor %}
                 </div>
@@ -92,7 +92,7 @@
                 </a>
             {% elif dna.dna_type == "complete" and not dna.is_approved %}
                 <a href="{% url 'product-review' product.pk %}" class="zeus-btn zeus-btn-primary w-full block text-center">
-                    Vai alla review finale →
+                    Vai alla revisione finale →
                 </a>
             {% endif %}
         </div>

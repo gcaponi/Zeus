@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 import fitz
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
@@ -310,6 +310,9 @@ def _source_form_context(company, *, error=None, notice=None, review_mode=False)
         "source_url": _latest_source_url(company),
         "company_notes": _current_company_notes(company),
         "existing_documents": _existing_company_documents(company),
+        "company_files": company.company_files.exclude(
+            original_name="note-azienda.txt",
+        ).order_by("-created_at"),
         "has_existing_dna": company.dna_versions.exists(),
     }
 
@@ -1033,6 +1036,27 @@ def onboarding_dna_reset(request):
     if subscription:
         subscription.company_files_used = 0
         subscription.save(update_fields=["company_files_used"])
+    return redirect("onboarding-index")
+
+
+@login_required
+@require_http_methods(["POST"])
+def onboarding_file_delete(request, pk):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    company_file = get_object_or_404(CompanyFile, pk=pk, company=company)
+    company_file.delete()
+    subscription = _subscription_for_company(company)
+    if subscription:
+        subscription.company_files_used = company.company_files.count()
+        subscription.save(update_fields=["company_files_used"])
+    if request.headers.get("HX-Request") == "true":
+        return render(
+            request,
+            "core/onboarding/_source_form.html",
+            _source_form_context(company),
+        )
     return redirect("onboarding-index")
 
 

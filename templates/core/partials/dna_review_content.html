@@ -1,7 +1,11 @@
 <div id="dna-review-root" class="mx-auto max-w-4xl">
     <header class="mb-8">
-        <a href="{% url 'onboarding-index' %}" class="text-sm text-brand-cyan hover:underline">← Onboarding</a>
-        <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">Review DNA Generale</h1>
+        <div class="flex flex-wrap items-center gap-3 text-sm">
+            <a href="{% url 'onboarding-index' %}" class="text-brand-cyan hover:underline">← Onboarding</a>
+            <span class="text-content-muted">·</span>
+            <a href="{% url 'dna-questions' %}" class="text-brand-cyan hover:underline">← Torna alle domande</a>
+        </div>
+        <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">Revisione DNA Generale</h1>
         <p class="mt-2 text-content-secondary">Versione {{ dna.version }} · Rivedi la sintesi cognitiva finale.</p>
     </header>
 
@@ -24,7 +28,7 @@
 
     <section class="zeus-card p-6 mb-6">
         <p class="zeus-label text-brand-cyan">Sintesi Cognitiva</p>
-        <div class="mt-4 text-sm leading-7 text-content-primary whitespace-pre-line">{{ public_document|default:"Non disponibile" }}</div>
+        <div class="mt-4 text-sm leading-7 text-content-primary whitespace-pre-line break-words">{{ public_document|default:"Non disponibile" }}</div>
     </section>
 
     <details class="zeus-card p-5 mb-6" {% if not is_fully_approved or blocking_flags %}open{% endif %}>
@@ -41,7 +45,7 @@
                         <span class="zeus-badge" style="background: rgba(251, 191, 36, 0.1); color: #d97706;">Da approvare</span>
                     {% endif %}
                 </div>
-                <p class="mt-4 text-sm leading-7 text-content-primary whitespace-pre-line">{{ section.value|default:"Non disponibile" }}</p>
+                <p class="mt-4 text-sm leading-7 text-content-primary whitespace-pre-line break-words">{{ section.value|default:"Non disponibile" }}</p>
 
                 {% if not is_fully_approved %}
                     <div class="mt-4 flex flex-wrap gap-3">
@@ -84,7 +88,7 @@
 
     <!-- Popup DNA completo -->
     <div id="dna-popup-overlay" class="fixed inset-0 z-50 hidden items-center justify-center" style="background: rgba(2,6,23,0.6); backdrop-filter: blur(8px);">
-        <div class="dna-popup-panel relative w-full max-w-2xl max-h-[85vh] overflow-hidden rounded-3xl"
+        <div class="dna-popup-panel relative w-full max-w-2xl max-h-[85vh] overflow-hidden rounded-3xl mx-4"
              style="background: rgba(255,255,255,0.06); backdrop-filter: blur(40px) saturate(180%); border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 32px 100px rgba(0,0,0,0.5);">
             <div class="sticky top-0 px-8 py-5 flex items-center justify-between"
                  style="background: rgba(2,6,23,0.4); border-bottom: 1px solid rgba(255,255,255,0.08);">
@@ -99,7 +103,7 @@
             </div>
 
             <div class="overflow-y-auto px-8 py-6" style="max-height: calc(85vh - 160px);">
-                <div class="dna-popup-section-text space-y-5 text-sm leading-7">
+                <div class="dna-popup-section-text space-y-5 text-sm leading-7 break-words">
                     {% for paragraph in final_paragraphs %}
                         <p>{{ paragraph }}</p>
                     {% empty %}

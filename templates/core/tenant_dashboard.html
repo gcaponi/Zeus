@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="it">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -100,16 +100,16 @@
         <h1>{{ tenant.name }}</h1>
         <div class="badge">Dashboard</div>
         <div class="info">
-            <p>Logged in as <strong>{{ user.email }}</strong></p>
-            <p>Workspace ready for configuration.</p>
+            <p>Accesso come <strong>{{ user.email }}</strong></p>
+            <p>Workspace pronto per la configurazione.</p>
         </div>
         <div class="actions">
-            <a href="{% url 'onboarding-index' %}" class="btn btn-outline">Start onboarding</a>
-            <a href="{% url 'account_logout' %}" class="btn btn-outline">Sign out</a>
+            <a href="{% url 'onboarding-index' %}" class="btn btn-outline">Inizia onboarding</a>
+            <a href="{% url 'account_logout' %}" class="btn btn-outline">Esci</a>
         </div>
         <hr>
         <div class="home-link">
-            <a href="{% url 'tenant-landing' %}">Back to workspace home</a>
+            <a href="{% url 'tenant-landing' %}">Torna al workspace</a>
         </div>
     </div>
 </body>
