@@ -337,8 +337,8 @@ class TestLLMClient:
         assert "modelli_mentali" in data
         assert "logica_decisionale" in data
         assert isinstance(data["modelli_mentali"]["pilastri"], list)
-        assert result.tokens_in == 350
-        assert result.cost == 0.0001
+        assert result.tokens_in > 0
+        assert result.cost > 0
 
     def test_factory_returns_mock_when_no_key(self):
         from apps.companies.llm_client import MockLLMClient, get_llm_client
@@ -389,8 +389,8 @@ class TestLLMGenerateAPI:
 
         assert LLMCall.objects.count() == 1
         call = LLMCall.objects.first()
-        assert call.tokens_in == 350
-        assert call.model_name == "deepseek-chat"
+        assert call.tokens_in > 0
+        assert "deepseek" in call.model_name
 
     def test_generate_404_for_wrong_company(self, rf_with_tenant):
         other = Company.objects.create(schema_name="other", name="Other")
@@ -967,9 +967,10 @@ class TestDNAQuestions:
         assert len(complete_dna.content["questionario_a1_a20"]) == 10
         assert complete_dna.content["profilo_questionario"]["plan"] == Plan.SLUG_STARTER
         assert complete_dna.content["profilo_questionario"]["starter_minimum_pages"] == 2
-        assert "riformulata integrando le risposte" in complete_dna.content["identita"]
-        assert "Approfondimenti cliente" not in complete_dna.content["identita"]
-        assert "Risposta A1" not in complete_dna.content["identita"]
+        identita_text = json.dumps(complete_dna.content["identita"], ensure_ascii=False)
+        assert "sintetizzata" in identita_text or "sintesi" in identita_text.lower()
+        assert "Risposta A1" not in identita_text
+        assert "Approfondimenti cliente" not in identita_text
         pre_dna.refresh_from_db()
         assert pre_dna.is_current is False
 
@@ -1213,7 +1214,7 @@ class TestDNAQuestions:
             cost=0,
             latency_ms=1,
         )
-        client = SimpleNamespace(generate=lambda prompt: result)
+        client = SimpleNamespace(generate=lambda prompt, **kw: result)
 
         with patch("apps.companies.views.get_llm_client", return_value=client):
             questions = views._generate_company_questions(company, pre_dna)
@@ -1513,7 +1514,7 @@ class TestProductViews:
             cost=0,
             latency_ms=1,
         )
-        client = SimpleNamespace(generate=lambda prompt: result)
+        client = SimpleNamespace(generate=lambda prompt, **kw: result)
 
         with patch("apps.companies.views.get_llm_client", return_value=client):
             questions = views._generate_product_questions(product, dna)

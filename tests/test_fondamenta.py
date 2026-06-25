@@ -191,7 +191,7 @@ class TestGenerateDnaNotesSeparation:
         captured_prompt = {}
 
         class FakeClient:
-            def generate(self, prompt, model=None):
+            def generate(self, prompt, *, model=None, **kw):
                 captured_prompt["prompt"] = prompt
                 from apps.companies.llm_client import LLMResult
                 return LLMResult(
@@ -207,7 +207,7 @@ class TestGenerateDnaNotesSeparation:
         tasks._generate_dna(source, company)
 
         prompt = captured_prompt["prompt"]
-        assert "=== CLIENT NOTES ===" in prompt
+        assert "=== NOTE DEL CLIENTE ===" in prompt
         assert "Note importanti del cliente" in prompt
         assert "Catalogo prodotti" in prompt
         assert "# note-azienda.txt" not in prompt
@@ -802,7 +802,7 @@ class TestSelfCritiqueLoop:
         ]
 
         class AllOkClient:
-            def generate_structured(self, prompt, response_model, model=None):
+            def generate_structured(self, prompt, response_model, *, model=None, **kw):
                 return ok_checks
 
         dna = self._good_dna()
@@ -828,12 +828,12 @@ class TestSelfCritiqueLoop:
         class TensionClient:
             def __init__(self):
                 self.calls = 0
-            def generate_structured(self, prompt, response_model, model=None):
+            def generate_structured(self, prompt, response_model, *, model=None, **kw):
                 self.calls += 1
                 if self.calls == 1:
                     return tension_checks
                 # Second call: return a refined DNA schema.
-                return MockLLMClient().generate_structured(prompt, response_model, model)
+                return MockLLMClient().generate_structured(prompt, response_model, model=model)
 
         client = TensionClient()
         result, report = self_critique_dna(self._good_dna(), client)

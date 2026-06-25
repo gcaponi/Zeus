@@ -9,7 +9,7 @@ from django.utils import timezone
 from django_tenants.utils import schema_context
 
 from apps.companies.audit import compute_audit_hash
-from apps.companies.llm_client import LLM_MODEL, get_llm_client
+from apps.companies.llm_client import LLM_MODEL, LLM_MODEL_PRO, ZEUS_SYSTEM_PROMPT, get_llm_client
 from apps.companies.models import CompanyDNA, LLMCall, PipelineRun, Product, ProductDNA, Source
 from apps.companies.scraper import get_scraper
 
@@ -83,11 +83,16 @@ def _generate_dna(source: Source, company):
     )
 
     client = get_llm_client()
-    result = client.generate(prompt)
+    result = client.generate(
+        prompt,
+        model=LLM_MODEL_PRO,
+        temperature=0.7,
+        system_prompt=ZEUS_SYSTEM_PROMPT,
+    )
 
     llm_call = LLMCall.objects.create(
         company=company,
-        model_name=LLM_MODEL,
+        model_name=LLM_MODEL_PRO,
         prompt_text=prompt,
         response_text=result.text,
         tokens_in=result.tokens_in,
@@ -230,7 +235,7 @@ def scrape_source(source_id: int, tenant_schema: str | None = None):
         _run()
 
 
-@shared_task
+@shared_task(soft_time_limit=300, time_limit=360)
 def run_pipeline(pipeline_run_id: int, tenant_schema: str | None = None):
     def _run():
         try:
@@ -279,7 +284,7 @@ def run_pipeline(pipeline_run_id: int, tenant_schema: str | None = None):
         _run()
 
 
-@shared_task
+@shared_task(soft_time_limit=600, time_limit=660)
 def generate_complete_dna(company_id, pre_dna_id, user_id, tenant_schema=None):
     def _run():
         from django.contrib.auth import get_user_model

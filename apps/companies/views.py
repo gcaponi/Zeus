@@ -14,7 +14,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from apps.companies.dna_schemas import LAYER_KEYS, LAYER_TITLES
-from apps.companies.llm_client import LLM_MODEL, get_llm_client
+from apps.companies.llm_client import LLM_MODEL, LLM_MODEL_PRO, ZEUS_SYSTEM_PROMPT, get_llm_client
 from apps.companies.models import (
     Company,
     CompanyDNA,
@@ -421,7 +421,7 @@ Regole obbligatorie:
 - Genera esattamente 10 domande originali.
 - Dividile in due pool obbligatori:
   - 5 domande `template`: assi cognitivi fondamentali che ogni DNA Generale deve chiarire.
-  - 5 domande `kb_anchored`: domande nate da una fonte reale, una lacuna, una contraddizione,
+  - 5 domande `kb_anchored`: domande nate da una lacuna, una contraddizione,
     un dubbio o una tensione nel sito, nei documenti, nelle note o nel pre-DNA.
 - Ogni domanda deve partire da una lacuna, ambiguita, affermazione o opportunita
   che noti nel pre-DNA o nei documenti.
@@ -432,7 +432,21 @@ Regole obbligatorie:
 - Non chiedere numeri, percentuali o statistiche se non sono indispensabili: chiedi
   criteri, decisioni, confini, trade-off, filosofia produttiva e verita da confermare.
 - Se ZEUS ha un dubbio, la domanda deve esplicitarlo. Non lasciare zone oscure.
-- Rispondi SOLO JSON valido, senza markdown.
+
+GAP DETECTION — dimensioni tecniche da verificare:
+Prima di generare le domande, controlla se nel pre-DNA e nei documenti sono assenti
+o deboli queste dimensioni tecniche. Se lo sono, le domande kb_anchored DEVONO
+esplorarle (non tutte, ma almeno quelle piu critiche per l'azienda):
+- Funzioni tecniche chiave del prodotto (impermeabilita, scarico, isolamento, ecc.)
+- Materiali e loro comportamento (rigido vs lavorabile, durata, compatibilita)
+- Tolleranze, precisione e modalita di assorbimento
+- Fissaggio, giunzioni e punti critici strutturali
+- Validazione prodotto (come verificano che funziona)
+- Confini produttivi (cosa non riescono a fare, soglie minime/massime)
+- Approccio al custom vs standard
+- Logica decisionale su scelte tecniche controverse
+
+Rispondi SOLO JSON valido, senza markdown.
 
 Formato JSON:
 {{
@@ -655,7 +669,12 @@ def _generate_company_questions(company, dna):
     profile = QUESTION_GENERATION_PROFILES[plan_slug]
     prompt = _question_generation_prompt(company, dna, plan_slug)
     client = get_llm_client()
-    result = client.generate(prompt)
+    result = client.generate(
+        prompt,
+        model=LLM_MODEL,
+        temperature=0.5,
+        system_prompt=ZEUS_SYSTEM_PROMPT,
+    )
     LLMCall.objects.create(
         company=company,
         model_name=LLM_MODEL,
@@ -732,23 +751,108 @@ def _safe_mode_flags(dna) -> list:
     ]
 
 
+def _format_qa_block(questions):
+    lines = []
+    for q in questions:
+        answer = (q.answer or "").strip()
+        if not answer:
+            continue
+        lines.append(f"DOMANDA {q.code} [{q.section_key}] — {q.principle}")
+        lines.append(f"D: {q.question}")
+        lines.append(f"R: {answer}")
+        lines.append("")
+    return "\n".join(lines) or "Nessuna risposta fornita."
+
+
+def _global_dna_synthesis(company, pre_dna_content, questions):
+    prev_content = dict(pre_dna_content) if isinstance(pre_dna_content, dict) else {}
+    qa_block = _format_qa_block(questions)
+    pre_dna_json = json.dumps(prev_content, ensure_ascii=False, indent=2)
+
+    prompt = f"""SINTESI_GLOBALE_DNA
+
+Hai un pre-DNA generato dalle fonti aziendali e le risposte del cliente a domande \
+di approfondimento. Il tuo compito è LEGGERE, COMPRENDERE e RIGENERARE il DNA \
+completo come documento cognitivo coerente.
+
+REGOLE FONDAMENTALI:
+
+1. LE RISPOSTE DEL CLIENTE SONO VINCOLANTI. Se il cliente chiarisce un punto, \
+CHIUDI il dubbio. Non mantenere ambiguità precedente. Non scrivere "da chiarire" \
+se il cliente ha già risposto in modo netto.
+
+2. NON FARE PATCH. Non attaccare le risposte al pre-DNA. Leggi tutto, comprendi \
+i concetti profondi, e rigenera ogni sezione come testo autonomo e coerente. \
+Il risultato deve leggere come se un esperto avesse riscritto il DNA dopo aver \
+studiato i materiali E intervistato il titolare.
+
+3. SE UNA RISPOSTA CORREGGE IL PRE-DNA, la risposta del cliente prevale sempre. \
+È la verità di chi conosce l'azienda.
+
+4. NON ASSOLUTIZZARE. Mai "garantisce", "certezza assoluta", "risolve tutto". \
+Ogni affermazione ha un confine di validità.
+
+5. NON INVENTARE. Se qualcosa non è coperto né dal pre-DNA né dalle risposte, \
+scrivi "Da chiarire in intervista: ..." in quel punto specifico.
+
+6. MARCATORI FONTE: mantieni i marcatori [SRC:...] esistenti e aggiungi \
+[SRC:answer] dove il contenuto nasce dalle risposte cliente. I marcatori \
+NON vanno nella sintesi_cognitiva (documento pulito).
+
+7. NUMERI E STATISTICHE: non inserire dati grezzi nel DNA. Se un numero \
+appare nelle risposte, trasformalo nel principio che rivela.
+
+OUTPUT: JSON completo con tutte le 6 sezioni cognitive + sintesi_cognitiva. \
+Usa la stessa struttura del pre-DNA ma con contenuto riscritto e conclusivo.
+
+PRE-DNA COMPLETO:
+{pre_dna_json}
+
+RISPOSTE CLIENTE:
+{qa_block}
+
+Rispondi con SOLO il JSON, senza markdown, senza preambolo.""".strip()
+
+    client = get_llm_client()
+    try:
+        result = client.generate(
+            prompt,
+            model=LLM_MODEL_PRO,
+            temperature=0.7,
+            system_prompt=ZEUS_SYSTEM_PROMPT,
+        )
+        LLMCall.objects.create(
+            company=company,
+            model_name=LLM_MODEL_PRO,
+            prompt_text=prompt,
+            response_text=result.text,
+            tokens_in=result.tokens_in,
+            tokens_out=result.tokens_out,
+            cost_usd=result.cost,
+            latency_ms=result.latency_ms,
+        )
+        rewritten = _parse_json_object(result.text)
+        for key in LAYER_KEYS + ["sintesi_cognitiva"]:
+            if key in rewritten:
+                prev_content[key] = rewritten[key]
+        return prev_content
+    except Exception:
+        logger.exception(
+            "Global DNA synthesis failed for %s; keeping pre-DNA",
+            company.schema_name,
+        )
+        prev_content["rewrite_warning"] = (
+            "Sintesi globale fallita; preservato il pre-DNA originale."
+        )
+        return prev_content
+
+
 def _create_complete_dna(company, pre_dna, user):
     questions = list(pre_dna.questions.all())
     plan_slug = questions[0].plan_slug if questions else _plan_slug_for_company(company)
     content = dict(pre_dna.content) if isinstance(pre_dna.content, dict) else {}
-    section_keys = list(LAYER_KEYS)
-    answers_by_section = _answers_by_section(
-        questions,
-        section_keys,
-        DNA_GENERALE_FALLBACK_LAYER,
-    )
-    content = _rewrite_sections_with_answers(
-        company,
-        content,
-        answers_by_section,
-        section_keys,
-        "RIFORMULA_DNA_CON_RISPOSTE",
-    )
+
+    content = _global_dna_synthesis(company, content, questions)
 
     content["questionario_a1_a20"] = [
         {
