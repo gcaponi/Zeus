@@ -9,7 +9,7 @@
         {% for section in sections %}
             <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
                 <h4 class="text-sm font-bold uppercase tracking-wider text-brand-cyan">{{ section.label }}</h4>
-                <p class="mt-2 text-sm text-content-primary whitespace-pre-line break-words">{{ section.value|default:"Non disponibile" }}</p>
+                <p class="mt-2 text-sm text-content-primary text-justify whitespace-pre-line break-words">{{ section.value|default:"Non disponibile" }}</p>
             </div>
         {% endfor %}
     </div>
