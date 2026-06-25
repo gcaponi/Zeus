@@ -31,49 +31,7 @@
             </div>
         </section>
 
-        <aside class="space-y-4">
-            <div class="zeus-card p-5">
-                <p class="zeus-label">Workspace</p>
-                <h2 class="mt-2 text-xl font-bold font-display truncate">{{ company.name }}</h2>
-                <p class="mt-2 text-sm text-content-muted font-mono truncate">{{ company.schema_name }}.zeus.cais.uno</p>
-            </div>
-            <div class="zeus-card p-5">
-                <p class="zeus-label">Cosa succede</p>
-                <ol class="mt-4 space-y-3 text-sm text-content-secondary">
-                    <li class="flex gap-3">
-                        <span class="mt-1.5 h-2 w-2 rounded-full bg-brand-cyan-light glow-cyan"></span>
-                        ZEUS legge il sito aziendale
-                    </li>
-                    <li class="flex gap-3">
-                        <span class="mt-1.5 h-2 w-2 rounded-full bg-brand-cyan-light glow-cyan"></span>
-                        Genera una bozza di DNA
-                    </li>
-                    <li class="flex gap-3">
-                        <span class="mt-1.5 h-2 w-2 rounded-full bg-brand-cyan-light glow-cyan"></span>
-                        Puoi rivederlo e approvarlo
-                    </li>
-                </ol>
-            </div>
-            {% if dna %}
-            <div class="zeus-card p-5 flex flex-col items-center gap-3">
-                <a href="{% url 'dna-download-pdf' %}" class="zeus-btn zeus-btn-secondary w-full">
-                    Scarica PDF
-                </a>
-                <a href="{% url 'onboarding-index' %}?revise=1" class="zeus-btn zeus-btn-ghost w-full">
-                    Rivedi dall'inizio
-                </a>
-            </div>
-            {% endif %}
-            <div class="zeus-card p-5">
-                <p class="zeus-label mb-3">Azioni</p>
-                <form method="post" action="{% url 'onboarding-dna-reset' %}" onsubmit="return confirm('Sei sicuro? Questo cancellerà DNA, domande, file e source. Dovrai ricominciare da capo.');">
-                    {% csrf_token %}
-                    <button type="submit" class="zeus-btn zeus-btn-danger w-full text-sm">
-                        Riparti da capo
-                    </button>
-                </form>
-            </div>
-        </aside>
+        {% include "core/onboarding/_step_sidebar.html" %}
     </main>
 </div>
 

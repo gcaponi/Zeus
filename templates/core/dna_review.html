@@ -36,7 +36,15 @@
 {% endblock %}
 
 {% block content %}
-{% include "core/partials/dna_review_content.html" %}
+<div class="mx-auto max-w-5xl">
+    <main class="grid gap-6 lg:grid-cols-[1fr_360px]">
+        <section>
+            {% include "core/partials/dna_review_content.html" %}
+        </section>
+
+        {% include "core/onboarding/_step_sidebar.html" %}
+    </main>
+</div>
 
 <script>
 function openDnaPopup() {

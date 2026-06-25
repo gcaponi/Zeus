@@ -1511,6 +1511,7 @@ def dna_visualize(request):
     latest_run = company.pipeline_runs.order_by("-created_at").first()
     final_document = _dna_final_document(dna.content)
     return render(request, "core/dna_visualize.html", {
+        "company": company,
         "dna": dna,
         "sections": _dna_sections(dna.content),
         "public_document": _dna_public_document(dna.content),
@@ -1535,6 +1536,7 @@ def _dna_review_context(company, dna):
     latest_run = company.pipeline_runs.order_by("-created_at").first()
 
     return {
+        "company": company,
         "dna": dna,
         "sections": sections,
         "public_document": _dna_public_document(dna.content),

@@ -1,15 +1,4 @@
-<form
-    method="post"
-    action="{% url 'onboarding-source-create' %}"
-    enctype="multipart/form-data"
-    hx-post="{% url 'onboarding-source-create' %}"
-    hx-target="#onboarding-step"
-    hx-swap="innerHTML"
-    hx-encoding="multipart/form-data"
-    class="space-y-5"
->
-    {% csrf_token %}
-
+<div class="space-y-5">
     {% if error %}
         <div class="rounded-xl border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-600">
             {{ error }}
@@ -31,43 +20,87 @@
         </div>
     {% endif %}
 
-    <div>
-        <label class="zeus-label" for="url">URL del sito aziendale</label>
-        <input type="text" name="url" id="url" inputmode="url" placeholder="cais.uno" value="{{ source_url|default:'' }}" class="zeus-input" required>
-        <p class="mt-2 text-xs text-content-muted">Puoi scrivere solo il dominio, per esempio <span class="font-semibold">cais.uno</span>.</p>
+    <form
+        hx-post="{% url 'onboarding-file-upload' %}"
+        hx-target="#company-files-list"
+        hx-swap="outerHTML"
+        hx-encoding="multipart/form-data"
+        class="space-y-4"
+    >
+        {% csrf_token %}
+        <div>
+            <label class="zeus-label" for="company_file">Documenti aziendali (opzionale)</label>
+            <input
+                type="file"
+                name="company_file"
+                id="company_file"
+                accept=".pdf,.txt,.md"
+                class="zeus-input"
+                style="padding: 0.6rem;"
+                hx-trigger="change"
+                hx-post="{% url 'onboarding-file-upload' %}"
+                hx-target="#company-files-list"
+                hx-swap="outerHTML"
+                hx-encoding="multipart/form-data"
+                multiple
+            >
+            <p class="mt-2 text-xs text-content-muted">PDF, TXT o MD — seleziona uno o più file per caricarli immediatamente.</p>
+        </div>
+    </form>
+
+    <div id="company-files-list">
+    {% if company_files %}
+    <div class="rounded-xl border border-gray-200/20 bg-white/5 p-4">
+        <p class="zeus-label mb-3">File caricati</p>
+        <ul class="space-y-2">
+            {% for file in company_files %}
+            <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200/20 bg-white/10 px-3 py-2.5 text-sm">
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
+                    <span class="font-semibold text-content-primary truncate max-w-[200px] sm:max-w-[300px]">{{ file.original_name }}</span>
+                    <span class="text-xs text-content-muted whitespace-nowrap">{{ file.file_size|filesizeformat }}</span>
+                    <span class="text-xs text-content-muted whitespace-nowrap">{{ file.created_at|date:"d/m/Y H:i" }}</span>
+                </div>
+                <form method="post" action="{% url 'onboarding-file-delete' file.pk %}" hx-post="{% url 'onboarding-file-delete' file.pk %}" hx-target="#company-files-list" hx-swap="outerHTML" onsubmit="return confirm('Eliminare {{ file.original_name }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="text-xs font-semibold text-red-400 hover:text-red-300">Elimina</button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
     </div>
 
-    <div>
-        <label class="zeus-label" for="company_file">Documenti aziendali (opzionale)</label>
-        <input
-            type="file"
-            name="company_file"
-            id="company_file"
-            accept=".pdf,.txt,.md"
-            class="zeus-input"
-            style="padding: 0.6rem;"
-            hx-post="{% url 'onboarding-file-upload' %}"
-            hx-target="#company-files-list"
-            hx-swap="outerHTML"
-            hx-trigger="change"
-            hx-encoding="multipart/form-data"
-        >
-        <p class="mt-2 text-xs text-content-muted">PDF, TXT o MD — seleziona un file per caricarlo immediatamente.</p>
-    </div>
+    <form
+        method="post"
+        action="{% url 'onboarding-source-create' %}"
+        enctype="multipart/form-data"
+        hx-post="{% url 'onboarding-source-create' %}"
+        hx-target="#onboarding-step"
+        hx-swap="innerHTML"
+        hx-encoding="multipart/form-data"
+    >
+        {% csrf_token %}
+        <div class="space-y-5">
+            <div>
+                <label class="zeus-label" for="url">URL del sito aziendale</label>
+                <input type="text" name="url" id="url" inputmode="url" placeholder="cais.uno" value="{{ source_url|default:'' }}" class="zeus-input" required>
+                <p class="mt-2 text-xs text-content-muted">Puoi scrivere solo il dominio, per esempio <span class="font-semibold">cais.uno</span>.</p>
+            </div>
 
-    {% include "core/onboarding/_company_files.html" %}
+            <div>
+                <label class="zeus-label" for="company_notes">Note aggiuntive (opzionale)</label>
+                <textarea name="company_notes" id="company_notes" rows="8" class="zeus-input" placeholder="Descrivi la tua azienda, i prodotti principali, il mercato di riferimento, i valori distintivi...">{{ company_notes|default:'' }}</textarea>
+            </div>
 
-    <div>
-        <label class="zeus-label" for="company_notes">Note aggiuntive (opzionale)</label>
-        <textarea name="company_notes" id="company_notes" rows="8" class="zeus-input" placeholder="Descrivi la tua azienda, i prodotti principali, il mercato di riferimento, i valori distintivi...">{{ company_notes|default:'' }}</textarea>
-    </div>
-
-    <div class="flex flex-col gap-3 sm:flex-row">
-        <button type="submit" class="zeus-btn zeus-btn-primary flex-1">
-            {% if review_mode %}Aggiorna dati e rigenera{% else %}Avvia analisi →{% endif %}
-        </button>
-        {% if has_existing_dna %}
-            <a href="{% url 'dna-questions' %}" class="zeus-btn zeus-btn-secondary flex-1">Continua alle risposte</a>
-        {% endif %}
-    </div>
-</form>
+            <div class="flex flex-col gap-3 sm:flex-row">
+                <button type="submit" class="zeus-btn zeus-btn-primary flex-1">
+                    {% if review_mode %}Aggiorna dati e rigenera{% else %}Avvia analisi →{% endif %}
+                </button>
+                {% if has_existing_dna %}
+                    <a href="{% url 'dna-questions' %}" class="zeus-btn zeus-btn-secondary flex-1">Continua alle risposte</a>
+                {% endif %}
+            </div>
+        </div>
+    </form>
+</div>
