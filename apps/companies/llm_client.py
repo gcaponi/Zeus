@@ -171,6 +171,7 @@ class MockLLMClient(LLMClient):
                 code = f"A{index + 1}"
                 questions.append({
                     "code": code,
+                    "pool": "template" if index < 5 else "kb_anchored",
                     "section_key": sections[index % len(sections)],
                     "principle": f"Principio {code}",
                     "question": (

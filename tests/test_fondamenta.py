@@ -1071,6 +1071,50 @@ class TestPipelineIntegration:
         assert complete._enrichment is not None
         assert "scoring" in complete._enrichment
 
+    def test_compute_enrichment_recovers_sources_when_source_is_none(self):
+        """Complete/post-edit enrichment must not lose real source availability."""
+        from apps.companies import tasks
+        from apps.companies.models import CompanyDNA, CompanyFile, CompanyQuestion
+
+        company, _source = self._company_with_source()
+        CompanyFile.objects.create(
+            company=company,
+            original_name="note-azienda.txt",
+            content_text="Nota cliente con filosofia produttiva.",
+            file_size=42,
+        )
+        CompanyFile.objects.create(
+            company=company,
+            original_name="brochure.pdf",
+            content_text="Documento aziendale tecnico.",
+            file_size=42,
+        )
+        dna = CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_PRE,
+            content=MockLLMClient().generate_structured(
+                prompt="GENERA DNA GENERALE",
+                response_model=DNAGeneraleSchema,
+            ).model_dump(),
+        )
+        CompanyQuestion.objects.create(
+            company=company,
+            dna=dna,
+            code="A1",
+            section_key="identita",
+            principle="Principio",
+            answer="Risposta cliente",
+        )
+        content = dict(dna.content)
+        content["identita"]["postura"] = (
+            "Postura fondata sulle fonti [SRC:scrape] [SRC:file] [SRC:note] [SRC:answer]"
+        )
+
+        bundle = tasks._compute_enrichment(content, company, source=None)
+
+        assert bundle["evidence"]["has_mismatch"] is False
+
     def test_safe_mode_blocks_final_approval(self, rf_with_tenant):
         """A DNA in safe_mode (CRITICAL flag) cannot be approved even when
         all sections are marked as approved."""

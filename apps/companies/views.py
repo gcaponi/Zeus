@@ -38,6 +38,7 @@ from apps.core.views import redirect_to_workspace_or_login
 logger = logging.getLogger(__name__)
 
 DNA_GENERALE_FALLBACK_LAYER = "logica_decisionale"
+SOURCE_MARKER_RE = re.compile(r"\s*\[SRC:[^\]]+\]", re.IGNORECASE)
 
 QUESTION_GENERATION_PROFILES = {
     Plan.SLUG_STARTER: {
@@ -200,7 +201,7 @@ def _dna_public_document(content):
     if not isinstance(content, dict):
         return _as_text(content).strip()
 
-    explicit = _as_text(content.get("sintesi_cognitiva")).strip()
+    explicit = _strip_source_markers(_as_text(content.get("sintesi_cognitiva")).strip())
     if explicit:
         return explicit
 
@@ -208,7 +209,7 @@ def _dna_public_document(content):
     # internal order but hide layer labels so the client sees a continuous text.
     paragraphs = []
     for key in LAYER_KEYS:
-        text = _as_text(content.get(key)).strip()
+        text = _strip_source_markers(_as_text(content.get(key)).strip())
         if text:
             paragraphs.append(text)
     return "\n\n".join(paragraphs)
@@ -224,12 +225,12 @@ def _dna_final_document(content):
         return _as_text(content).strip()
 
     paragraphs = []
-    synthesis = _as_text(content.get("sintesi_cognitiva")).strip()
+    synthesis = _strip_source_markers(_as_text(content.get("sintesi_cognitiva")).strip())
     if synthesis:
         paragraphs.append(synthesis)
 
     for key in LAYER_KEYS:
-        text = _as_text(content.get(key)).strip()
+        text = _strip_source_markers(_as_text(content.get(key)).strip())
         if text and text not in paragraphs:
             paragraphs.append(text)
 
@@ -274,6 +275,10 @@ def _as_text(value):
     return str(value or "")
 
 
+def _strip_source_markers(text):
+    return SOURCE_MARKER_RE.sub("", str(text or "")).strip()
+
+
 def _section_context(content, section_key):
     if not isinstance(content, dict):
         return "Non disponibile"
@@ -283,13 +288,50 @@ def _section_context(content, section_key):
     return text[:240]
 
 
+def _compact_context_text(text, limit):
+    compact = " ".join(str(text or "").split())
+    return compact[:limit]
+
+
 def _company_document_context(company):
-    snippets = []
-    for company_file in company.company_files.all()[:3]:
-        text = " ".join(company_file.content_text.split())[:220]
-        if text:
-            snippets.append(f"{company_file.original_name}: {text}")
-    return " | ".join(snippets) or "Nessun documento aziendale caricato"
+    """Build a richer source context for question generation.
+
+    The DNA question stage should not see only filenames or tiny snippets: it needs
+    enough source material to detect doubts, contradictions and missing philosophy.
+    We still cap the total prompt payload to keep latency and cost predictable.
+    """
+    max_total_chars = 14000
+    blocks = []
+    remaining = max_total_chars
+
+    def add_block(title, text, per_block_limit):
+        nonlocal remaining
+        if remaining <= 0:
+            return
+        chunk = _compact_context_text(text, min(per_block_limit, remaining))
+        if not chunk:
+            return
+        blocks.append(f"## {title}\n{chunk}")
+        remaining -= len(chunk)
+
+    source = company.sources.filter(status=Source.STATUS_SCRAPED).order_by(
+        "-created_at",
+    ).first()
+    if source and source.scraped_data:
+        add_block("Sito web scrapato", source.scraped_data.get("markdown", ""), 3500)
+
+    note = company.company_files.filter(original_name="note-azienda.txt").order_by(
+        "-created_at",
+    ).first()
+    if note:
+        add_block("Note dirette del cliente", note.content_text, 3000)
+
+    for company_file in company.company_files.exclude(
+        original_name="note-azienda.txt",
+    ).order_by("-created_at"):
+        add_block(f"Documento: {company_file.original_name}", company_file.content_text, 1800)
+
+    return "\n\n".join(blocks) or "Nessun documento aziendale caricato"
 
 
 def _latest_source_url(company):
@@ -375,12 +417,19 @@ ISTRUZIONE DI PROFONDITA: {profile["instruction"]}
 
 Regole obbligatorie:
 - Genera esattamente 10 domande originali.
+- Dividile in due pool obbligatori:
+  - 5 domande `template`: assi cognitivi fondamentali che ogni DNA Generale deve chiarire.
+  - 5 domande `kb_anchored`: domande nate da una fonte reale, una lacuna, una contraddizione,
+    un dubbio o una tensione nel sito, nei documenti, nelle note o nel pre-DNA.
 - Ogni domanda deve partire da una lacuna, ambiguita, affermazione o opportunita
   che noti nel pre-DNA o nei documenti.
 - Non fare domande generiche se il piano e Professional o Legacy.
 - Per Legacy comportati da vero analista professionale: devi estrarre
   mentalita aziendale, filosofia decisionale e anti-deriva.
 - Usa i principi A1-A10 come assi di analisi, ma scegli tu i 10 piu utili.
+- Non chiedere numeri, percentuali o statistiche se non sono indispensabili: chiedi
+  criteri, decisioni, confini, trade-off, filosofia produttiva e verita da confermare.
+- Se ZEUS ha un dubbio, la domanda deve esplicitarlo. Non lasciare zone oscure.
 - Rispondi SOLO JSON valido, senza markdown.
 
 Formato JSON:
@@ -388,6 +437,7 @@ Formato JSON:
   "questions": [
     {{
       "code": "A1",
+      "pool": "template|kb_anchored",
       "section_key": "identita|modelli_mentali|nucleo_tecnico|confini|tono|logica_decisionale",
       "principle": "nome breve del principio usato",
       "question": "domanda al cliente",
@@ -400,7 +450,7 @@ Formato JSON:
 PRE-DNA:
 {content}
 
-DOCUMENTI / NOTE AZIENDALI:
+CONTESTO ORIGINALE (SITO + NOTE + DOCUMENTI):
 {documents}
 """.strip()
 
@@ -418,6 +468,14 @@ def _parse_question_generation(text):
     if not isinstance(questions, list) or len(questions) != 10:
         raise ValueError("LLM must return exactly 10 questions")
     return questions
+
+
+def _question_pool(raw_question, index):
+    pool = str(raw_question.get("pool", "")).strip()
+    valid_pools = {CompanyQuestion.POOL_TEMPLATE, CompanyQuestion.POOL_KB_ANCHORED}
+    if pool in valid_pools:
+        return pool
+    return CompanyQuestion.POOL_TEMPLATE if index < 5 else CompanyQuestion.POOL_KB_ANCHORED
 
 
 def _parse_json_object(text):
@@ -465,15 +523,15 @@ def _rewrite_sections_with_answers(company, content, answers_by_section, section
         prompt = f"""
 RISCRIVI_SEZIONE_{section_key.upper()}_{marker}
 
-Sei ZEUS, un analista aziendale esperto nel settore manifatturiero.
+Sei ZEUS, un filosofo tecnico e analista aziendale esperto nel settore manifatturiero.
 Stai costruendo il DNA completo di un'{entity_label}. Devi riscrivere la sezione
 "{section_key}" combinando due fonti:
 1. Il pre-DNA generato dallo scraping del sito web e dei documenti
 2. Le risposte del cliente a domande di approfondimento (conoscenza tacita)
 
-Il risultato deve essere un testo professionale, narrativo e coerente, come se
-un consulente esperto avesse scritto il profilo dopo aver studiato i materiali
-e intervistato il titolare.
+Il risultato deve essere un testo interpretativo, filosofico e preciso: non una
+scheda tecnica, non un riassunto di dati, non una brochure. Devi trasformare le
+informazioni in postura, principi, confini, tensioni e logica decisionale.
 
 LINGUA: Scrivi SEMPRE in italiano. Anche se il pre-DNA o le risposte cliente
 contengono testo in inglese o altre lingue, traduci e riscrivi tutto in italiano.
@@ -486,9 +544,16 @@ ISTRUZIONI:
 - Se una risposta corregge o contraddice il pre-DNA, dai priorita alla risposta
   del cliente (e la verita di chi conosce l'{entity_type}).
 - Combina piu risposte in un unico discorso coerente.
-- Puoi fare inferenze ragionevoli e collegamenti logici tra le informazioni
-  (livello creativita 2/5: puoi aggiungere dettagli plausibili ma non inventare
-  fatti non supportati dalle fonti).
+- Puoi fare inferenze ragionevoli e collegamenti logici tra le informazioni, ma
+  non inventare fatti non supportati dalle fonti.
+- Non inserire numeri grezzi, percentuali, date, statistiche, quantita, KPI o
+  metriche operative nel DNA Generale. Se compaiono nelle fonti, trasformali nel
+  principio che rivelano.
+- Se una parte resta dubbia, incompleta o contraddittoria, scrivi esplicitamente
+  "Da chiarire in intervista: ..." invece di completare con finzione.
+- Conserva i marker fonte gia presenti e aggiungi [SRC:answer] quando il contenuto
+  nasce dalle risposte cliente. I marker servono all'enrichment interno e verranno
+  rimossi dal documento pubblico.
 - Non nominare mai le domande, i codici domanda (A1, D1, ecc.) ne usare frasi
   come "il cliente ha risposto", "secondo le risposte", "Approfondimenti cliente".
 - Scrivi in terza persona, presente indicativo, tono tecnico ma accessibile.
@@ -614,6 +679,7 @@ def _generate_company_questions(company, dna):
                 "company": company,
                 "plan_slug": plan_slug,
                 "section_key": section_key,
+                "pool": _question_pool(raw_question, index),
                 "principle": str(raw_question.get("principle", "A1-A10"))[:120],
                 "question": str(raw_question.get("question", "")).strip(),
                 "answer_depth": str(

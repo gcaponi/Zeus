@@ -24,10 +24,12 @@ def _available_sources(source, company) -> dict:
         if f.original_name != "note-azienda.txt"
     ]
     has_note = company.company_files.filter(original_name="note-azienda.txt").exists()
+    has_answer = company.company_questions.exclude(answer="").exists()
     return {
         "scrape": bool(source and source.scraped_data),
         "note": has_note,
         "files": files,
+        "answer": has_answer,
     }
 
 
@@ -40,7 +42,11 @@ def _compute_enrichment(content, company, source=None) -> dict:
     """
     from apps.companies.dna_enrichment import build_enrichment
     try:
-        available = _available_sources(source, company) if source else {}
+        if source is None:
+            source = company.sources.filter(status=Source.STATUS_SCRAPED).order_by(
+                "-created_at",
+            ).first()
+        available = _available_sources(source, company)
         return build_enrichment(content, available_sources=available)
     except Exception:
         logger.exception("Enrichment computation failed; saving DNA without full bundle")

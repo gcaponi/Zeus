@@ -53,6 +53,38 @@ class TestCompanyModel:
 
 
 @pytest.mark.django_db
+class TestQuestionContext:
+    def test_company_document_context_uses_site_notes_and_all_documents(self):
+        company = Company.objects.create(schema_name="ctxco", name="Context Co")
+        Source.objects.create(
+            company=company,
+            url="https://ctx.example",
+            status=Source.STATUS_SCRAPED,
+            scraped_data={"markdown": "Sito: filosofia produttiva e valore tecnico."},
+        )
+        CompanyFile.objects.create(
+            company=company,
+            original_name="note-azienda.txt",
+            content_text="Nota cliente: non vendiamo cataloghi, decidiamo con metodo.",
+            file_size=64,
+        )
+        for index in range(5):
+            CompanyFile.objects.create(
+                company=company,
+                original_name=f"documento-{index}.txt",
+                content_text=f"Documento {index}: processo, confini e cultura produttiva.",
+                file_size=64,
+            )
+
+        context = views._company_document_context(company)
+
+        assert "Sito web scrapato" in context
+        assert "Note dirette del cliente" in context
+        assert "Documento: documento-0.txt" in context
+        assert "Documento: documento-4.txt" in context
+
+
+@pytest.mark.django_db
 class TestCompanyDNAModel:
     def test_dna_creation(self, django_user_model):
         user = django_user_model.objects.create_user(username="t", email="test@x.it", password="pw")
@@ -1060,7 +1092,7 @@ class TestDNAQuestions:
 
     def test_public_document_uses_sintesi_cognitiva_without_layer_titles(self):
         content = {
-            "sintesi_cognitiva": "CAIS integra l'intelligenza artificiale nei processi operativi.",
+            "sintesi_cognitiva": "CAIS integra l'intelligenza artificiale nei processi operativi. [SRC:scrape]",
             "identita": {"postura": "Test identita"},
             "modelli_mentali": {"pilastri": ["Test pilastro"]},
         }
@@ -1068,6 +1100,7 @@ class TestDNAQuestions:
         public_document = views._dna_public_document(content)
 
         assert public_document == "CAIS integra l'intelligenza artificiale nei processi operativi."
+        assert "[SRC:" not in public_document
         assert "Test identita" not in public_document
         assert "modelli_mentali" not in public_document
 
@@ -1086,9 +1119,9 @@ class TestDNAQuestions:
 
     def test_final_document_combines_synthesis_and_layers_without_labels(self):
         content = {
-            "sintesi_cognitiva": "Sintesi finale per il cliente.",
-            "identita": "Identita narrativa completa.",
-            "modelli_mentali": "Metodo decisionale completo.",
+            "sintesi_cognitiva": "Sintesi finale per il cliente. [SRC:scrape]",
+            "identita": "Identita narrativa completa. [SRC:file]",
+            "modelli_mentali": "Metodo decisionale completo. [SRC:note]",
         }
 
         final_document = views._dna_final_document(content)
@@ -1096,6 +1129,7 @@ class TestDNAQuestions:
         assert "Sintesi finale per il cliente." in final_document
         assert "Identita narrativa completa." in final_document
         assert "Metodo decisionale completo." in final_document
+        assert "[SRC:" not in final_document
         assert "Chi siamo" not in final_document
         assert "Come ragioniamo" not in final_document
 
@@ -1182,6 +1216,8 @@ class TestDNAQuestions:
 
         assert len(questions) == 10
         assert len({question.code for question in questions}) == 10
+        assert [question.pool for question in questions[:5]] == ["template"] * 5
+        assert [question.pool for question in questions[5:]] == ["kb_anchored"] * 5
 
 
 @pytest.mark.django_db
