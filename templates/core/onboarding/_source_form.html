@@ -25,26 +25,26 @@
         hx-target="#company-files-list"
         hx-swap="outerHTML"
         hx-encoding="multipart/form-data"
-        class="space-y-4"
+        class="space-y-3"
     >
         {% csrf_token %}
         <div>
             <label class="zeus-label" for="company_file">Documenti aziendali (opzionale)</label>
-            <input
-                type="file"
-                name="company_file"
-                id="company_file"
-                accept=".pdf,.txt,.md"
-                class="zeus-input"
-                style="padding: 0.6rem;"
-                hx-trigger="change"
-                hx-post="{% url 'onboarding-file-upload' %}"
-                hx-target="#company-files-list"
-                hx-swap="outerHTML"
-                hx-encoding="multipart/form-data"
-                multiple
-            >
-            <p class="mt-2 text-xs text-content-muted">PDF, TXT o MD — seleziona uno o più file per caricarli immediatamente.</p>
+            <div class="flex gap-2">
+                <input
+                    type="file"
+                    name="company_file"
+                    id="company_file"
+                    accept=".pdf,.txt,.md"
+                    class="zeus-input flex-1"
+                    style="padding: 0.6rem;"
+                    multiple
+                >
+                <button type="submit" class="zeus-btn zeus-btn-secondary whitespace-nowrap">
+                    Carica
+                </button>
+            </div>
+            <p class="mt-2 text-xs text-content-muted">PDF, TXT o MD — seleziona uno o più file e premi "Carica".</p>
         </div>
     </form>
 
