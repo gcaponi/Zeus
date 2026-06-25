@@ -48,28 +48,7 @@
         </div>
     </form>
 
-    <div id="company-files-list">
-    {% if company_files %}
-    <div class="rounded-xl border border-gray-200/20 bg-white/5 p-4">
-        <p class="zeus-label mb-3">File caricati</p>
-        <ul class="space-y-2">
-            {% for file in company_files %}
-            <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200/20 bg-white/10 px-3 py-2.5 text-sm">
-                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
-                    <span class="font-semibold text-content-primary truncate max-w-[200px] sm:max-w-[300px]">{{ file.original_name }}</span>
-                    <span class="text-xs text-content-muted whitespace-nowrap">{{ file.file_size|filesizeformat }}</span>
-                    <span class="text-xs text-content-muted whitespace-nowrap">{{ file.created_at|date:"d/m/Y H:i" }}</span>
-                </div>
-                <form method="post" action="{% url 'onboarding-file-delete' file.pk %}" hx-post="{% url 'onboarding-file-delete' file.pk %}" hx-target="#company-files-list" hx-swap="outerHTML" onsubmit="return confirm('Eliminare {{ file.original_name }}?');">
-                    {% csrf_token %}
-                    <button type="submit" class="text-xs font-semibold text-red-400 hover:text-red-300">Elimina</button>
-                </form>
-            </li>
-            {% endfor %}
-        </ul>
-    </div>
-    {% endif %}
-    </div>
+    {% include "core/onboarding/_company_files.html" %}
 
     <form
         method="post"

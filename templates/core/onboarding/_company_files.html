@@ -1,4 +1,9 @@
 <div id="company-files-list">
+{% if upload_error %}
+<div class="rounded-xl border border-red-400/30 bg-red-400/10 p-3 mb-3 text-sm text-red-400">
+    {{ upload_error }}
+</div>
+{% endif %}
 {% if company_files %}
 <div class="rounded-xl border border-gray-200/20 bg-white/5 p-4">
     <p class="zeus-label mb-3">File caricati</p>

@@ -327,7 +327,7 @@ def _source_form_context(company, *, error=None, notice=None, review_mode=False)
     }
 
 
-def _company_files_response(request, company):
+def _company_files_response(request, company, error=None):
     return render(
         request,
         "core/onboarding/_company_files.html",
@@ -335,6 +335,7 @@ def _company_files_response(request, company):
             "company_files": company.company_files.exclude(
                 original_name="note-azienda.txt",
             ).order_by("-created_at"),
+            "upload_error": error,
         },
     )
 
@@ -1070,12 +1071,20 @@ def onboarding_file_upload(request):
     uploaded_file = getattr(request, "FILES", {}).get("company_file")
     if not uploaded_file:
         return _company_files_response(request, company)
-    content_text, file_size, original_name = _extract_company_file_text(uploaded_file)
-    if not content_text.strip():
-        return _company_files_response(request, company)
+
+    file_size = uploaded_file.size
+
     block_reason = _company_file_block_reason(company, additional_bytes=file_size)
     if block_reason:
-        return _company_files_response(request, company)
+        return _company_files_response(request, company, error=block_reason)
+
+    content_text, extracted_size, original_name = _extract_company_file_text(uploaded_file)
+    if not content_text.strip():
+        return _company_files_response(
+            request, company,
+            error="Il documento non contiene testo leggibile.",
+        )
+
     CompanyFile.objects.create(
         company=company,
         original_name=original_name,
