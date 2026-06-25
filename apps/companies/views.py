@@ -313,6 +313,11 @@ def _existing_company_documents(company):
 
 
 def _source_form_context(company, *, error=None, notice=None, review_mode=False):
+    subscription = _subscription_for_company(company)
+    plan = subscription.plan if subscription else None
+    max_mb = plan.max_company_files_mb if plan else 5
+    unlimited = plan.unlimited_company_files if plan else False
+    bytes_used = _company_file_bytes_used(company)
     return {
         "error": error,
         "notice": notice,
@@ -324,6 +329,9 @@ def _source_form_context(company, *, error=None, notice=None, review_mode=False)
             original_name="note-azienda.txt",
         ).order_by("-created_at"),
         "has_existing_dna": company.dna_versions.exists(),
+        "max_company_files_mb": max_mb,
+        "unlimited_company_files": unlimited,
+        "company_files_bytes_used": bytes_used,
     }
 
 
