@@ -102,7 +102,13 @@ class TestCompanyDNAModel:
     def test_unique_current_constraint(self, django_user_model):
         user = django_user_model.objects.create_user(username="t", email="test@x.it", password="pw")
         company = Company.objects.create(schema_name="testco", name="TestCo")
-        dna1 = CompanyDNA.objects.create(company=company, version=1, content={"v": 1}, is_current=False, created_by=user)
+        CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            content={"v": 1},
+            is_current=False,
+            created_by=user,
+        )
         dna2 = CompanyDNA.objects.create(company=company, version=2, content={"v": 2}, created_by=user)
         assert dna2.is_current is True
         # only 1 current per company
@@ -187,7 +193,7 @@ class TestCompanyViews:
         assert len(versions) == 3
 
     def test_dna_current_404_no_dna(self, rf_with_tenant):
-        company = Company.objects.create(schema_name="test-tenant", name="Naked")
+        Company.objects.create(schema_name="test-tenant", name="Naked")
         request = rf_with_tenant("get", reverse("dna-current"))
         response = views.dna_current(request)
         assert response.status_code == 404
@@ -235,9 +241,7 @@ class TestScraperClient:
             assert isinstance(client, MockScraperClient)
 
     def test_retry_on_failure(self):
-        from httpx import RequestError
-
-        from apps.companies.scraper import RETRY_MAX, FireCrawlClient
+        from apps.companies.scraper import FireCrawlClient
 
         client = FireCrawlClient(api_key="test-key", base_url="http://localhost:1")
         with pytest.raises(RuntimeError, match="after 3 attempts"):
@@ -339,6 +343,39 @@ class TestLLMClient:
         assert isinstance(data["modelli_mentali"]["pilastri"], list)
         assert result.tokens_in > 0
         assert result.cost > 0
+
+    def test_parse_llm_json_extracts_balanced_object(self):
+        from apps.companies.llm_client import _parse_llm_json
+
+        text = 'Ecco il JSON richiesto:\n{"outer": {"inner": 1}}\nFine.'
+
+        assert _parse_llm_json(text, context="test") == {"outer": {"inner": 1}}
+
+    def test_generate_with_retry_retries_only_after_parse_failure(self):
+        from apps.companies.llm_client import LLMResult, _generate_with_retry
+
+        class BadThenGoodClient:
+            def __init__(self):
+                self.temperatures = []
+
+            def generate(self, prompt, *, model=None, temperature=None, system_prompt=None):
+                self.temperatures.append(temperature)
+                if len(self.temperatures) == 1:
+                    return LLMResult("not json", 1, 1, 0, 1)
+                return LLMResult('{"ok": true}', 1, 1, 0, 1)
+
+        client = BadThenGoodClient()
+
+        result, payload = _generate_with_retry(
+            client,
+            "prompt",
+            temperatures=(0.5, 0.3, 0.2),
+            context="test-retry",
+        )
+
+        assert payload == {"ok": True}
+        assert result.text == '{"ok": true}'
+        assert client.temperatures == [0.5, 0.3]
 
     def test_factory_returns_mock_when_no_key(self):
         from apps.companies.llm_client import MockLLMClient, get_llm_client
@@ -1086,7 +1123,7 @@ class TestDNAQuestions:
 
         values = {section["key"]: section["value"] for section in sections}
         assert values["identita"] == "Testo identita pulito."
-        assert values["modelli_mentali"] == "Qualita, Rapidita"
+        assert values["modelli_mentali"] == "Qualita\n\nRapidita"
         assert values["nucleo_tecnico"] == "Testo nucleo pulito."
         assert values["confini"] == "Testo confini pulito."
         assert values["tono"] == "Testo tono pulito."
@@ -1147,6 +1184,22 @@ class TestDNAQuestions:
             "Prima parte.",
             "Seconda parte con linea interna.",
             "Terza parte.",
+        ]
+
+    def test_public_document_preserves_structured_paragraphs(self):
+        content = {
+            "sintesi_cognitiva": [
+                "Primo principio operativo. [SRC:scrape]",
+                {"testo": "Secondo principio operativo. [SRC:file]"},
+            ],
+        }
+
+        public_document = views._dna_public_document(content)
+
+        assert public_document == "Primo principio operativo.\n\nSecondo principio operativo."
+        assert views._document_paragraphs(public_document) == [
+            "Primo principio operativo.",
+            "Secondo principio operativo.",
         ]
 
     def test_render_dna_pdf_uses_continuous_final_document_without_layer_titles(self):

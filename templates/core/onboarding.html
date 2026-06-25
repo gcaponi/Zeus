@@ -16,7 +16,7 @@
 
     <main class="grid gap-6 lg:grid-cols-[1fr_360px]">
         <section class="zeus-card p-6 sm:p-8">
-            {% include "core/onboarding/_step_indicator.html" with current_step=1 %}
+            {% include "core/onboarding/_step_indicator.html" with current_step=step|default:1 %}
 
             <div id="onboarding-step">
                 {% if show_source_form %}

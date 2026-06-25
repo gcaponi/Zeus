@@ -16,11 +16,10 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any
 
 from pydantic import BaseModel, Field
 
-from apps.companies.dna_schemas import DNAGeneraleSchema, LAYER_KEYS
+from apps.companies.dna_schemas import DNAGeneraleSchema
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +142,9 @@ def run_cross_layer_check(dna: DNAGeneraleSchema, client) -> list[CrossLayerChec
     """
     prompt = _build_challenge_prompt(dna)
     result = client.generate_structured(
-        prompt=prompt, response_model=CrossLayerCheckResult,
+        prompt=prompt,
+        response_model=CrossLayerCheckResult,
+        temperature=0.2,
     )
     # Instructor returns a CrossLayerCheckResult instance.
     if isinstance(result, CrossLayerCheckResult):
@@ -170,7 +171,9 @@ def self_critique_dna(dna: DNAGeneraleSchema, client) -> tuple[DNAGeneraleSchema
     # Pass 2 — refine.
     refine_prompt = _build_refine_prompt(dna, checks)
     refined = client.generate_structured(
-        prompt=refine_prompt, response_model=DNAGeneraleSchema,
+        prompt=refine_prompt,
+        response_model=DNAGeneraleSchema,
+        temperature=0.2,
     )
     # Ensure the refined output is a proper schema instance.
     if not isinstance(refined, DNAGeneraleSchema):

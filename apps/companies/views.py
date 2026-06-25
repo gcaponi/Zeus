@@ -6,15 +6,22 @@ from urllib.parse import urlparse
 
 import fitz
 from django.contrib.auth.decorators import login_required
-from django.http import HttpResponse, JsonResponse
 from django.db.models import Sum
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from apps.companies.dna_schemas import LAYER_KEYS, LAYER_TITLES
-from apps.companies.llm_client import LLM_MODEL, LLM_MODEL_PRO, ZEUS_SYSTEM_PROMPT, get_llm_client
+from apps.companies.llm_client import (
+    LLM_MODEL,
+    LLM_MODEL_PRO,
+    ZEUS_SYSTEM_PROMPT,
+    _generate_with_retry,
+    _parse_llm_json,
+    get_llm_client,
+)
 from apps.companies.models import (
     Company,
     CompanyDNA,
@@ -160,9 +167,16 @@ def _onboarding_context(request):
     sections = _dna_sections(latest_dna.content) if latest_dna else []
     review_start = request.GET.get("revise") == "1"
     run_is_pending = bool(latest_run and latest_run.status in {"running", "pending"})
-    step = 1 if review_start else 3 if latest_dna else 2 if latest_run else 1
+    if review_start:
+        step = 1
+    elif latest_dna and latest_dna.dna_type == CompanyDNA.TYPE_COMPLETE:
+        step = 3
+    elif latest_dna:
+        step = 2
+    else:
+        step = 1
     has_questions = company.company_questions.exists()
-    return {
+    context = {
         "company": company,
         "source": latest_source,
         "run": latest_run,
@@ -176,6 +190,9 @@ def _onboarding_context(request):
         **_source_form_context(company, review_mode=review_start),
         "is_done": latest_dna is not None,
     }
+    if latest_dna:
+        context.update(_onboarding_dna_context(company, latest_dna))
+    return context
 
 
 def _dna_sections(content, old_content=None):
@@ -192,6 +209,7 @@ def _dna_sections(content, old_content=None):
             "label": label,
             "value": value or "",
             "raw_value": raw_value or "",
+            "paragraphs": _document_paragraphs(value),
             "old_value": old_value or "",
             "changed": bool(old_value and old_value != value),
         })
@@ -253,10 +271,70 @@ def _document_paragraphs(document):
     return [" ".join(paragraph.split()) for paragraph in paragraphs if paragraph.strip()]
 
 
+def _compact_display_excerpt(text, limit=900):
+    text = str(text or "")
+    text = re.sub(r"^\s{0,3}#{1,6}\s*", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*[-*]\s+", "", text, flags=re.MULTILINE)
+    text = " ".join(text.split())
+    if len(text) <= limit:
+        return text
+    clipped = text[:limit].rsplit(" ", 1)[0].strip()
+    return f"{clipped}..." if clipped else text[:limit]
+
+
+def _source_extract_context(source):
+    if not source or not isinstance(source.scraped_data, dict):
+        return {
+            "analyzed_source": source,
+            "source_title": "",
+            "source_description": "",
+            "source_excerpt": "",
+        }
+
+    data = source.scraped_data
+    return {
+        "analyzed_source": source,
+        "source_title": _strip_source_markers(_as_text(data.get("title")).strip()),
+        "source_description": _strip_source_markers(
+            _as_text(data.get("description")).strip(),
+        ),
+        "source_excerpt": _compact_display_excerpt(data.get("markdown", "")),
+    }
+
+
+def _onboarding_dna_context(company, dna):
+    sections = _dna_sections(dna.content)
+    public_document = _dna_public_document(dna.content)
+    source = company.sources.filter(status=Source.STATUS_SCRAPED).order_by(
+        "-created_at",
+    ).first() or company.sources.order_by("-created_at").first()
+    note = company.company_files.filter(original_name="note-azienda.txt").order_by(
+        "-created_at",
+    ).first()
+    documents = list(
+        company.company_files.exclude(original_name="note-azienda.txt").order_by(
+            "-created_at",
+        )[:8],
+    )
+    context = {
+        "dna": dna,
+        "sections": sections,
+        "has_section_values": any(section["value"] for section in sections),
+        "public_document": public_document,
+        "public_paragraphs": _document_paragraphs(public_document),
+        "customer_notes_excerpt": (
+            _compact_display_excerpt(note.content_text, 700) if note else ""
+        ),
+        "analyzed_documents": documents,
+    }
+    context.update(_source_extract_context(source))
+    return context
+
+
 def _as_text(value):
     if isinstance(value, list):
         parts = [_as_text(item).strip() for item in value]
-        return ", ".join(part for part in parts if part)
+        return "\n\n".join(part for part in parts if part)
     if isinstance(value, dict):
         preferred_keys = (
             "descrizione",
@@ -273,7 +351,7 @@ def _as_text(value):
         if len(value) == 1:
             return _as_text(next(iter(value.values())))
         parts = [_as_text(item).strip() for item in value.values()]
-        return "\n".join(part for part in parts if part)
+        return "\n\n".join(part for part in parts if part)
     return str(value or "")
 
 
@@ -472,14 +550,7 @@ CONTESTO ORIGINALE (SITO + NOTE + DOCUMENTI):
 
 
 def _parse_question_generation(text):
-    try:
-        payload = json.loads(text)
-    except json.JSONDecodeError:
-        match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
-        if not match:
-            raise ValueError("LLM did not return JSON") from None
-        payload = json.loads(match.group(1))
-
+    payload = _parse_llm_json(text, context="question-generation")
     questions = payload.get("questions") if isinstance(payload, dict) else payload
     if not isinstance(questions, list) or len(questions) != 10:
         raise ValueError("LLM must return exactly 10 questions")
@@ -495,13 +566,7 @@ def _question_pool(raw_question, index):
 
 
 def _parse_json_object(text):
-    try:
-        payload = json.loads(text)
-    except json.JSONDecodeError:
-        match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
-        if not match:
-            raise ValueError("LLM did not return JSON object") from None
-        payload = json.loads(match.group(1))
+    payload = _parse_llm_json(text, context="dna-json-object")
     if not isinstance(payload, dict):
         raise ValueError("LLM JSON response must be an object")
     return payload
@@ -593,7 +658,21 @@ RISPOSTE_CLIENTE:
 """.strip()
 
         try:
-            result = client.generate(prompt)
+            def parse_rewrite(text, key=section_key):
+                value = _parse_rewrite_response(text, key)
+                if value is None:
+                    raise ValueError(f"LLM rewrite response invalid for {key}")
+                return value
+
+            result, rewritten_value = _generate_with_retry(
+                client,
+                prompt,
+                model=LLM_MODEL,
+                system_prompt=ZEUS_SYSTEM_PROMPT,
+                temperatures=(0.5, 0.3, 0.2),
+                parse=parse_rewrite,
+                context=f"rewrite-{section_key}",
+            )
             LLMCall.objects.create(
                 company=company,
                 model_name=LLM_MODEL,
@@ -604,7 +683,6 @@ RISPOSTE_CLIENTE:
                 cost_usd=result.cost,
                 latency_ms=result.latency_ms,
             )
-            rewritten_value = _parse_rewrite_response(result.text, section_key)
             if rewritten_value:
                 updated[section_key] = rewritten_value
                 any_rewrite_done = True
@@ -625,39 +703,26 @@ def _parse_rewrite_response(text, section_key):
     text = text.strip()
     if section_key in ("modelli_mentali", "valore"):
         try:
-            payload = json.loads(text)
-        except json.JSONDecodeError:
-            match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
-            if not match:
-                return None
-            try:
-                payload = json.loads(match.group(1))
-            except json.JSONDecodeError:
-                return None
+            payload = _parse_llm_json(text, context=f"rewrite-{section_key}")
+        except ValueError:
+            return None
         if isinstance(payload, list):
             return [str(item).strip() for item in payload if str(item).strip()]
         if isinstance(payload, str):
             return [s.strip() for s in payload.split(",") if s.strip()]
         return None
-    else:
-        try:
-            payload = json.loads(text)
-        except json.JSONDecodeError:
-            match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
-            if not match:
-                cleaned = text.strip().strip('"').strip()
-                return cleaned if cleaned else None
-            try:
-                payload = json.loads(match.group(1))
-            except json.JSONDecodeError:
-                return None
-        if isinstance(payload, str):
-            return payload.strip()
-        if isinstance(payload, dict):
-            for v in payload.values():
-                if isinstance(v, str) and v.strip():
-                    return v.strip()
-        return None
+    try:
+        payload = _parse_llm_json(text, context=f"rewrite-{section_key}")
+    except ValueError:
+        cleaned = text.strip().strip('"').strip()
+        return cleaned if cleaned else None
+    if isinstance(payload, str):
+        return payload.strip()
+    if isinstance(payload, dict):
+        for v in payload.values():
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+    return None
 
 
 def _generate_company_questions(company, dna):
@@ -669,11 +734,14 @@ def _generate_company_questions(company, dna):
     profile = QUESTION_GENERATION_PROFILES[plan_slug]
     prompt = _question_generation_prompt(company, dna, plan_slug)
     client = get_llm_client()
-    result = client.generate(
+    result, questions_data = _generate_with_retry(
+        client,
         prompt,
         model=LLM_MODEL,
-        temperature=0.5,
         system_prompt=ZEUS_SYSTEM_PROMPT,
+        temperatures=(0.5, 0.3, 0.2),
+        parse=_parse_question_generation,
+        context="company-questions",
     )
     LLMCall.objects.create(
         company=company,
@@ -687,7 +755,6 @@ def _generate_company_questions(company, dna):
     )
 
     section_keys = set(LAYER_KEYS)
-    questions_data = _parse_question_generation(result.text)
     for index, raw_question in enumerate(questions_data):
         section_key = raw_question.get("section_key", DNA_GENERALE_FALLBACK_LAYER)
         if section_key not in section_keys:
@@ -805,6 +872,9 @@ appare nelle risposte, trasformalo nel principio che rivela.
 OUTPUT: JSON completo con tutte le 6 sezioni cognitive + sintesi_cognitiva. \
 Usa la stessa struttura del pre-DNA ma con contenuto riscritto e conclusivo.
 
+REGOLA ASSOLUTA: il tuo output inizia con {{ e finisce con }}. Nessun preambolo, \
+nessuna spiegazione, nessun markdown, nessun blocco ```json.
+
 PRE-DNA COMPLETO:
 {pre_dna_json}
 
@@ -815,11 +885,14 @@ Rispondi con SOLO il JSON, senza markdown, senza preambolo.""".strip()
 
     client = get_llm_client()
     try:
-        result = client.generate(
+        result, rewritten = _generate_with_retry(
+            client,
             prompt,
             model=LLM_MODEL_PRO,
-            temperature=0.7,
             system_prompt=ZEUS_SYSTEM_PROMPT,
+            temperatures=(0.4, 0.3, 0.2),
+            parse=_parse_json_object,
+            context="global-synthesis",
         )
         LLMCall.objects.create(
             company=company,
@@ -831,11 +904,7 @@ Rispondi con SOLO il JSON, senza markdown, senza preambolo.""".strip()
             cost_usd=result.cost,
             latency_ms=result.latency_ms,
         )
-        rewritten = _parse_json_object(result.text)
-        for key in LAYER_KEYS + ["sintesi_cognitiva"]:
-            if key in rewritten:
-                prev_content[key] = rewritten[key]
-        return prev_content
+        return _safe_merge_synthesis(prev_content, rewritten)
     except Exception:
         logger.exception(
             "Global DNA synthesis failed for %s; keeping pre-DNA",
@@ -845,6 +914,26 @@ Rispondi con SOLO il JSON, senza markdown, senza preambolo.""".strip()
             "Sintesi globale fallita; preservato il pre-DNA originale."
         )
         return prev_content
+
+
+def _safe_merge_synthesis(original: dict, synthesis: dict) -> dict:
+    """P5 — merge synthesis output without clobbering layers on partial output.
+
+    Only updates a layer if the synthesis provides a non-empty value for it,
+    so a partial LLM response cannot silently erase existing cognitive layers.
+    """
+    merged = dict(original)
+    missing = [key for key in LAYER_KEYS if not synthesis.get(key)]
+    if missing:
+        logger.warning(
+            "Sintesi globale incompleta, sezioni mancanti o vuote: %s", missing,
+        )
+    for key in LAYER_KEYS:
+        if synthesis.get(key):
+            merged[key] = synthesis[key]
+    if synthesis.get("sintesi_cognitiva"):
+        merged["sintesi_cognitiva"] = synthesis["sintesi_cognitiva"]
+    return merged
 
 
 def _create_complete_dna(company, pre_dna, user):
@@ -1165,10 +1254,11 @@ def onboarding_source_create(request):
 
     dna = company.dna_versions.filter(is_current=True).order_by("-version").first()
     if run.status == PipelineRun.STATUS_COMPLETED and dna:
-        return render(request, "core/onboarding/_dna.html", {
-            "dna": dna,
-            "sections": _dna_sections(dna.content),
-        })
+        return render(
+            request,
+            "core/onboarding/_dna.html",
+            _onboarding_dna_context(company, dna),
+        )
 
     return render(request, "core/onboarding/_progress.html", {
         "run": run,
@@ -1189,10 +1279,11 @@ def onboarding_status(request, pk):
     dna = company.dna_versions.filter(is_current=True).order_by("-version").first()
     if request.headers.get("HX-Request") == "true":
         if run.status == PipelineRun.STATUS_COMPLETED and dna:
-            return render(request, "core/onboarding/_dna.html", {
-                "dna": dna,
-                "sections": _dna_sections(dna.content),
-            })
+            return render(
+                request,
+                "core/onboarding/_dna.html",
+                _onboarding_dna_context(company, dna),
+            )
         return render(request, "core/onboarding/_progress.html", {
             "run": run,
             "source": run.source,
@@ -1217,10 +1308,11 @@ def onboarding_dna(request, pk):
     ).first()
     if not dna:
         return HttpResponse("DNA not found", status=404)
-    return render(request, "core/onboarding/_dna.html", {
-        "dna": dna,
-        "sections": _dna_sections(dna.content),
-    })
+    return render(
+        request,
+        "core/onboarding/_dna.html",
+        _onboarding_dna_context(company, dna),
+    )
 
 
 @login_required
@@ -1734,6 +1826,7 @@ def _dna_review_context(company, dna):
         "dna": dna,
         "sections": sections,
         "public_document": _dna_public_document(dna.content),
+        "public_paragraphs": _document_paragraphs(_dna_public_document(dna.content)),
         "final_document": final_document,
         "final_paragraphs": _document_paragraphs(final_document),
         "approved_keys": dna.approved_sections(),
@@ -2063,14 +2156,7 @@ DNA AZIENDALE (se disponibile):
 
 
 def _parse_product_question_generation(text):
-    try:
-        payload = json.loads(text)
-    except json.JSONDecodeError:
-        match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
-        if not match:
-            raise ValueError("LLM did not return JSON") from None
-        payload = json.loads(match.group(1))
-
+    payload = _parse_llm_json(text, context="product-question-generation")
     questions = payload.get("questions") if isinstance(payload, dict) else payload
     if not isinstance(questions, list) or len(questions) != 10:
         raise ValueError("LLM must return exactly 10 questions")
@@ -2086,7 +2172,15 @@ def _generate_product_questions(product, dna):
     profile = QUESTION_GENERATION_PROFILES[plan_slug]
     prompt = _product_question_generation_prompt(product, dna, plan_slug)
     client = get_llm_client()
-    result = client.generate(prompt)
+    result, product_questions = _generate_with_retry(
+        client,
+        prompt,
+        model=LLM_MODEL,
+        system_prompt=ZEUS_SYSTEM_PROMPT,
+        temperatures=(0.5, 0.3, 0.2),
+        parse=_parse_product_question_generation,
+        context="product-questions",
+    )
     LLMCall.objects.create(
         company=product.company,
         model_name=LLM_MODEL,
@@ -2100,7 +2194,7 @@ def _generate_product_questions(product, dna):
 
     section_keys = {"descrizione", "applicazione", "specifiche", "vincoli", "valore"}
     used_codes = set(dna.questions.values_list("code", flat=True))
-    for raw_question in _parse_product_question_generation(result.text):
+    for raw_question in product_questions:
         section_key = raw_question.get("section_key", "valore")
         if section_key not in section_keys:
             section_key = "valore"

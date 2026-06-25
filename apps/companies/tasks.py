@@ -1,6 +1,5 @@
 import json
 import logging
-import re
 from pathlib import Path
 
 from celery import shared_task
@@ -9,7 +8,13 @@ from django.utils import timezone
 from django_tenants.utils import schema_context
 
 from apps.companies.audit import compute_audit_hash
-from apps.companies.llm_client import LLM_MODEL, LLM_MODEL_PRO, ZEUS_SYSTEM_PROMPT, get_llm_client
+from apps.companies.llm_client import (
+    LLM_MODEL,
+    LLM_MODEL_PRO,
+    ZEUS_SYSTEM_PROMPT,
+    _generate_with_retry,
+    get_llm_client,
+)
 from apps.companies.models import CompanyDNA, LLMCall, PipelineRun, Product, ProductDNA, Source
 from apps.companies.scraper import get_scraper
 
@@ -53,6 +58,43 @@ def _compute_enrichment(content, company, source=None) -> dict:
         return {"error": "enrichment_computation_failed"}
 
 
+def _validate_dna_content(content, company, *, stage="pre-dna"):
+    """P4 — validate the 6-layer schema before saving.
+
+    Non-blocking: logs a warning if the DNA is in safe_mode or structurally
+    invalid, but never raises. Enrichment/validation are diagnostics; the
+    pre-DNA stage still saves so the client can proceed to questions.
+    """
+    try:
+        from pydantic import ValidationError
+
+        from apps.companies.dna_schemas import coerce_dna_generale_content
+        from apps.companies.dna_validator import validate_dna
+
+        coerce_dna_generale_content(content)
+        result = validate_dna(content)
+        if result.safe_mode:
+            logger.warning(
+                "DNA %s in safe_mode for company %s: %s",
+                stage,
+                company.schema_name,
+                [f.message for f in result.flags],
+            )
+    except ValidationError:
+        logger.error(
+            "DNA %s strutturalmente invalido per %s, contenuto: %s",
+            stage,
+            getattr(company, "schema_name", "?"),
+            str(content)[:500],
+        )
+    except Exception:
+        logger.exception(
+            "DNA %s schema validation failed (non-blocking) for %s",
+            stage,
+            getattr(company, "schema_name", "?"),
+        )
+
+
 def _generate_dna(source: Source, company):
     """Shared DNA generation logic — called by view or pipeline task.
 
@@ -83,11 +125,13 @@ def _generate_dna(source: Source, company):
     )
 
     client = get_llm_client()
-    result = client.generate(
+    result, content = _generate_with_retry(
+        client,
         prompt,
         model=LLM_MODEL_PRO,
-        temperature=0.7,
         system_prompt=ZEUS_SYSTEM_PROMPT,
+        temperatures=(0.5, 0.3, 0.2),
+        context="pre-dna",
     )
 
     llm_call = LLMCall.objects.create(
@@ -102,20 +146,10 @@ def _generate_dna(source: Source, company):
         source=source,
     )
 
+    _validate_dna_content(content, company, stage="pre-dna")
+
     last_version = company.dna_versions.order_by("-version").first()
     next_version = (last_version.version + 1) if last_version else 1
-    try:
-        content = json.loads(result.text)
-    except json.JSONDecodeError:
-        match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", result.text, re.DOTALL)
-        if match:
-            try:
-                content = json.loads(match.group(1))
-            except json.JSONDecodeError:
-                content = {"raw": result.text}
-        else:
-            content = {"raw": result.text}
-
     company.dna_versions.filter(is_current=True).update(is_current=False)
     dna = CompanyDNA.objects.create(
         company=company,
@@ -166,7 +200,14 @@ Rispondi SOLO JSON valido, senza markdown.
 """.strip()
 
     client = get_llm_client()
-    result = client.generate(prompt)
+    result, content = _generate_with_retry(
+        client,
+        prompt,
+        model=LLM_MODEL,
+        system_prompt=ZEUS_SYSTEM_PROMPT,
+        temperatures=(0.5, 0.3, 0.2),
+        context="product-pre-dna",
+    )
 
     llm_call = LLMCall.objects.create(
         company=company,
@@ -179,20 +220,19 @@ Rispondi SOLO JSON valido, senza markdown.
         latency_ms=result.latency_ms,
     )
 
+    product_section_keys = {
+        "descrizione", "applicazione", "specifiche", "vincoli", "valore",
+    }
+    missing = [k for k in product_section_keys if not content.get(k)]
+    if missing:
+        logger.warning(
+            "Product pre-DNA incompleto per %s, sezioni mancanti: %s",
+            company.schema_name,
+            missing,
+        )
+
     last_version = product.dna_versions.order_by("-version").first()
     next_version = (last_version.version + 1) if last_version else 1
-    try:
-        content = json.loads(result.text)
-    except json.JSONDecodeError:
-        match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", result.text, re.DOTALL)
-        if match:
-            try:
-                content = json.loads(match.group(1))
-            except json.JSONDecodeError:
-                content = {"raw": result.text}
-        else:
-            content = {"raw": result.text}
-
     product.dna_versions.filter(is_current=True).update(is_current=False)
     dna = ProductDNA.objects.create(
         product=product,

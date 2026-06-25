@@ -3,8 +3,11 @@
 import json
 import logging
 import os
+import re
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Callable
+from typing import Any
 
 from apps.companies.dna_schemas import LAYER_KEYS
 
@@ -23,8 +26,95 @@ MODEL_PRICING = {
     "deepseek-v4-pro": {"input": 2.24 / 1_000_000, "output": 2.24 / 1_000_000},
 }
 
-ZEUS_SYSTEM_PROMPT = """Sei ZEUS, un filosofo tecnico specializzato nel settore manifatturiero.
 
+def _parse_llm_json(text: str, context: str = "") -> Any:
+    """Parse LLM JSON output with progressively more lenient strategies.
+
+    1. Direct json.loads
+    2. Extract from ```json ... ``` fenced blocks
+    3. Find the first balanced { ... } substring
+
+    Raises ValueError if every strategy fails. Never returns a silent
+    {"raw": ...} fallback — callers must decide how to handle failure.
+    """
+    # 1. Direct parse
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    # 2. Fenced code block
+    match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(1))
+        except json.JSONDecodeError:
+            pass
+    # 3. First balanced object
+    start = text.find("{")
+    if start != -1:
+        depth = 0
+        for i, ch in enumerate(text[start:], start):
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        return json.loads(text[start:i + 1])
+                    except json.JSONDecodeError:
+                        break
+    raise ValueError(
+        f"LLM JSON parse failed{f' [{context}]' if context else ''}: {text[:200]}"
+    )
+
+
+def _generate_with_retry(
+    client,
+    prompt: str,
+    *,
+    model: str | None = None,
+    system_prompt: str | None = None,
+    temperatures=(0.7, 0.4, 0.2),
+    parse: Callable[[str], Any] | None = None,
+    context: str = "",
+):
+    """Generate + parse JSON, retrying with lower temperature on parse failure.
+
+    Only retries on JSON parse failure (ValueError), not on HTTP/timeout
+    errors (those surface to the caller). Returns (LLMResult, parsed).
+
+    `parse` defaults to a context-bound _parse_llm_json (expects a JSON
+    object). Pass a custom callable `parse(text) -> content` that raises
+    ValueError on failure to validate structured output (e.g. question count).
+    """
+    if parse is None:
+        def parse(t):
+            payload = _parse_llm_json(t, context=context)
+            if not isinstance(payload, dict):
+                raise ValueError(f"LLM JSON response must be an object [{context}]")
+            return payload
+    last_exc: ValueError | None = None
+    for attempt, temp in enumerate(temperatures, start=1):
+        result = client.generate(
+            prompt,
+            model=model,
+            temperature=temp,
+            system_prompt=system_prompt,
+        )
+        try:
+            return result, parse(result.text)
+        except ValueError as exc:
+            last_exc = exc
+            logger.warning(
+                "LLM JSON parse failed [%s] attempt %d/%d (temp=%.1f), retrying",
+                context, attempt, len(temperatures), temp,
+            )
+    raise RuntimeError(
+        f"LLM generation failed after {len(temperatures)} attempts [{context}]"
+    ) from last_exc
+
+
+ZEUS_SYSTEM_PROMPT = """Sei ZEUS, un filosofo tecnico specializzato nel settore manifatturiero.
 Non sei un copywriter aziendale. Non sei un analista marketing. Sei un pensatore che \
 costruisce sistemi cognitivi: documenti che insegnano a un tecnico AI COME RAGIONARE \
 su un'azienda e sui suoi prodotti.
@@ -54,6 +144,11 @@ dà comportamento specifico, le fonti tecniche danno il dato reale vincolante.
 7. LE RISPOSTE DEL CLIENTE SONO VINCOLANTI. Se il cliente chiarisce un punto, \
 chiudi il dubbio. Non mantenere ambiguità precedente. Non riscrivere "da chiarire" \
 se il cliente ha già risposto.
+
+8. FORMATO OUTPUT QUANDO È RICHIESTO JSON. Quando ti viene chiesto un JSON, il \
+tuo output inizia con { e finisce con }. Nessun testo prima o dopo. Nessun \
+preambolo ("Ecco il DNA:", "Certamente"), nessuna spiegazione finale, nessun \
+blocco markdown, nessun ```json. Il primo carattere deve essere { e l'ultimo }.
 
 LINGUA: sempre italiano tecnico. Anche se le fonti sono in inglese, traduci e \
 riscrivi. Nessuna parola in inglese nell'output."""

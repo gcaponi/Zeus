@@ -30,7 +30,13 @@
 
     <section class="zeus-card p-6 mb-6">
         <p class="zeus-label text-brand-cyan">Sintesi Cognitiva</p>
-        <div class="mt-4 text-sm leading-7 text-content-primary whitespace-pre-line break-words">{{ public_document|default:"Non disponibile" }}</div>
+        <div class="mt-4 space-y-4 text-sm leading-7 text-content-primary text-justify break-words">
+            {% for paragraph in public_paragraphs %}
+                <p>{{ paragraph }}</p>
+            {% empty %}
+                <p>Non disponibile</p>
+            {% endfor %}
+        </div>
     </section>
 
     <details class="zeus-card p-5 mb-6" {% if not is_fully_approved or blocking_flags %}open{% endif %}>
@@ -47,7 +53,13 @@
                         <span class="zeus-badge" style="background: rgba(251, 191, 36, 0.1); color: #d97706;">Da approvare</span>
                     {% endif %}
                 </div>
-                <p class="mt-4 text-sm leading-7 text-content-primary whitespace-pre-line break-words">{{ section.value|default:"Non disponibile" }}</p>
+                <div class="mt-4 space-y-3 text-sm leading-7 text-content-primary text-justify break-words">
+                    {% for paragraph in section.paragraphs %}
+                        <p>{{ paragraph }}</p>
+                    {% empty %}
+                        <p>Non disponibile</p>
+                    {% endfor %}
+                </div>
 
                 {% if not is_fully_approved %}
                     <div class="mt-4 flex flex-wrap gap-3">

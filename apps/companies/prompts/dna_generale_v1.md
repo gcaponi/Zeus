@@ -152,7 +152,14 @@ Le 6 sezioni interne devono essere oggetti strutturati conforme allo schema. \
 Possono contenere evidenza concisa, ma devono trasformare i dati grezzi \
 in principi. Niente markdown dentro il JSON.
 
-Rispondi con SOLO il JSON, senza preambolo, senza spiegazioni.
+# OUTPUT — REGOLA ASSOLUTA
+
+Rispondi ESCLUSIVAMENTE con il JSON grezzo.
+- Prima del JSON: nessun carattere.
+- Dopo il JSON: nessun carattere.
+- Nessun preambolo. Nessuna spiegazione. Nessun markdown. Nessun ```json.
+- Il primo carattere del tuo output deve essere `{`.
+- L'ultimo carattere del tuo output deve essere `}`.
 
 === SITO WEB AZIENDALE (scraped) ===
 
