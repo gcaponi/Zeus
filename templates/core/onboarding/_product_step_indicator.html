@@ -3,7 +3,7 @@
         <li class="flex items-center gap-1 sm:gap-2">
             <a href="{% url 'product-detail' product.pk %}"
                class="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-xs font-bold transition-all duration-200
-                      {% if product_step == 1 %}bg-brand-cyan text-white shadow-lg shadow-brand-cyan/30{% else %}bg-white/10 text-content-muted hover:bg-white/20 hover:text-content-primary{% endif %}">
+                       {% if product_step == 1 %}bg-brand-cyan text-white shadow-lg shadow-brand-cyan/30{% else %}bg-surface-input text-content-muted hover:bg-surface-secondary hover:text-content-primary{% endif %}">
                 1
             </a>
             <span class="{% if product_step == 1 %}text-content-primary{% else %}text-content-muted{% endif %} hidden sm:inline">Dettaglio</span>
@@ -12,7 +12,7 @@
         <li class="flex items-center gap-1 sm:gap-2">
             <a href="{% url 'product-questions' product.pk %}"
                class="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-xs font-bold transition-all duration-200
-                      {% if product_step == 2 %}bg-brand-cyan text-white shadow-lg shadow-brand-cyan/30{% else %}bg-white/10 text-content-muted hover:bg-white/20 hover:text-content-primary{% endif %}">
+                       {% if product_step == 2 %}bg-brand-cyan text-white shadow-lg shadow-brand-cyan/30{% else %}bg-surface-input text-content-muted hover:bg-surface-secondary hover:text-content-primary{% endif %}">
                 2
             </a>
             <span class="{% if product_step == 2 %}text-content-primary{% else %}text-content-muted{% endif %} hidden sm:inline">Domande</span>
@@ -21,7 +21,7 @@
         <li class="flex items-center gap-1 sm:gap-2">
             <a href="{% url 'product-review' product.pk %}"
                class="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-xs font-bold transition-all duration-200
-                      {% if product_step == 3 %}bg-brand-cyan text-white shadow-lg shadow-brand-cyan/30{% else %}bg-white/10 text-content-muted hover:bg-white/20 hover:text-content-primary{% endif %}">
+                       {% if product_step == 3 %}bg-brand-cyan text-white shadow-lg shadow-brand-cyan/30{% else %}bg-surface-input text-content-muted hover:bg-surface-secondary hover:text-content-primary{% endif %}">
                 3
             </a>
             <span class="{% if product_step == 3 %}text-content-primary{% else %}text-content-muted{% endif %} hidden sm:inline">Revisione</span>

@@ -1,23 +1,23 @@
 <div class="mb-6 grid gap-2 sm:gap-3 grid-cols-2 sm:grid-cols-4">
     {% if current_step == 1 %}
-        <div class="rounded-2xl border border-white/10 bg-brand-cyan/10 p-3 sm:p-4 cursor-default select-none">
+        <div class="rounded-2xl border border-brand-cyan/30 bg-brand-cyan/10 p-3 sm:p-4 cursor-default select-none">
             <p class="text-xs font-bold uppercase tracking-wider text-brand-cyan">Passo 1</p>
             <p class="mt-1 font-semibold text-sm sm:text-base">Dati</p>
         </div>
     {% else %}
-        <a href="{% url 'onboarding-index' %}?revise=1" class="block rounded-2xl border border-white/10 bg-green-400/10 p-3 sm:p-4 transition-all hover:-translate-y-0.5 cursor-pointer">
+        <a href="{% url 'onboarding-index' %}?revise=1" class="block rounded-2xl border border-green-500/30 bg-green-500/10 p-3 sm:p-4 transition-all hover:-translate-y-0.5 cursor-pointer">
             <p class="text-xs font-bold uppercase tracking-wider text-brand-lime">Passo 1{% if current_step > 1 %} ✓{% endif %}</p>
             <p class="mt-1 font-semibold text-sm sm:text-base">Dati</p>
         </a>
     {% endif %}
 
     {% if current_step == 2 %}
-        <div class="rounded-2xl border border-white/10 bg-brand-cyan/10 p-3 sm:p-4 cursor-default select-none">
+        <div class="rounded-2xl border border-brand-cyan/30 bg-brand-cyan/10 p-3 sm:p-4 cursor-default select-none">
             <p class="text-xs font-bold uppercase tracking-wider text-brand-cyan">Passo 2</p>
             <p class="mt-1 font-semibold text-sm sm:text-base">Domande</p>
         </div>
     {% elif step_has_questions %}
-        <a href="{% url 'dna-questions' %}" class="block rounded-2xl border border-white/10 bg-green-400/10 p-3 sm:p-4 transition-all hover:-translate-y-0.5 cursor-pointer">
+        <a href="{% url 'dna-questions' %}" class="block rounded-2xl border border-green-500/30 bg-green-500/10 p-3 sm:p-4 transition-all hover:-translate-y-0.5 cursor-pointer">
             <p class="text-xs font-bold uppercase tracking-wider text-brand-lime">Passo 2{% if current_step > 2 %} ✓{% endif %}</p>
             <p class="mt-1 font-semibold text-sm sm:text-base">Domande</p>
         </a>
@@ -29,12 +29,12 @@
     {% endif %}
 
     {% if current_step == 3 %}
-        <div class="rounded-2xl border border-white/10 bg-brand-cyan/10 p-3 sm:p-4 cursor-default select-none">
+        <div class="rounded-2xl border border-brand-cyan/30 bg-brand-cyan/10 p-3 sm:p-4 cursor-default select-none">
             <p class="text-xs font-bold uppercase tracking-wider text-brand-cyan">Passo 3</p>
             <p class="mt-1 font-semibold text-sm sm:text-base">Revisione</p>
         </div>
     {% elif step_has_dna %}
-        <a href="{% url 'dna-review' %}" class="block rounded-2xl border border-white/10 bg-green-400/10 p-3 sm:p-4 transition-all hover:-translate-y-0.5 cursor-pointer">
+        <a href="{% url 'dna-review' %}" class="block rounded-2xl border border-green-500/30 bg-green-500/10 p-3 sm:p-4 transition-all hover:-translate-y-0.5 cursor-pointer">
             <p class="text-xs font-bold uppercase tracking-wider text-brand-lime">Passo 3{% if current_step > 3 %} ✓{% endif %}</p>
             <p class="mt-1 font-semibold text-sm sm:text-base">Revisione</p>
         </a>
@@ -46,12 +46,12 @@
     {% endif %}
 
     {% if current_step == 4 %}
-        <div class="rounded-2xl border border-white/10 bg-brand-cyan/10 p-3 sm:p-4 cursor-default select-none">
+        <div class="rounded-2xl border border-brand-cyan/30 bg-brand-cyan/10 p-3 sm:p-4 cursor-default select-none">
             <p class="text-xs font-bold uppercase tracking-wider text-brand-cyan">Passo 4</p>
             <p class="mt-1 font-semibold text-sm sm:text-base">Visualizza</p>
         </div>
     {% elif step_has_dna %}
-        <a href="{% url 'dna-visualize' %}" class="block rounded-2xl border border-white/10 bg-green-400/10 p-3 sm:p-4 transition-all hover:-translate-y-0.5 cursor-pointer">
+        <a href="{% url 'dna-visualize' %}" class="block rounded-2xl border border-green-500/30 bg-green-500/10 p-3 sm:p-4 transition-all hover:-translate-y-0.5 cursor-pointer">
             <p class="text-xs font-bold uppercase tracking-wider text-brand-lime">Passo 4 ✓</p>
             <p class="mt-1 font-semibold text-sm sm:text-base">Visualizza</p>
         </a>

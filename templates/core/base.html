@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="it" class="dark">
+<html lang="it">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -44,6 +44,16 @@
                 },
             },
         }
+    </script>
+    <script>
+        (function() {
+            var saved = localStorage.getItem('zeus-theme');
+            if (saved === 'light') {
+                document.documentElement.classList.remove('dark');
+            } else {
+                document.documentElement.classList.add('dark');
+            }
+        })();
     </script>
     <style>
         :root {
@@ -718,6 +728,10 @@
             <a href="{% url 'onboarding-index' %}">Onboarding</a>
             <a href="{% url 'product-list-create' %}">Prodotti</a>
         </div>
+        <button type="button" id="theme-toggle" class="zeus-btn zeus-btn-ghost" style="padding: 0.5rem 0.75rem; font-size: 0.82rem; min-height: 2.2rem;" aria-label="Cambia tema">
+            <i data-lucide="sun" class="hidden dark:block" style="width:16px;height:16px;"></i>
+            <i data-lucide="moon" class="block dark:hidden" style="width:16px;height:16px;"></i>
+        </button>
         <a href="{% url 'account_logout' %}" class="zeus-btn zeus-btn-ghost" style="padding: 0.5rem 1rem; font-size: 0.82rem;">
             Esci
         </a>
@@ -727,6 +741,7 @@
         <div id="zeus-mobile-menu" class="zeus-mobile-menu">
             <a href="{% url 'onboarding-index' %}">Onboarding</a>
             <a href="{% url 'product-list-create' %}">Prodotti</a>
+            <button type="button" onclick="document.getElementById('theme-toggle').click()" class="text-left">Tema chiaro/scuro</button>
             <a href="{% url 'account_logout' %}">Esci</a>
         </div>
     </nav>
@@ -764,6 +779,21 @@
 
         if (window.lucide) {
             window.lucide.createIcons();
+        }
+
+        var themeToggle = document.getElementById('theme-toggle');
+        if (themeToggle) {
+            themeToggle.addEventListener('click', function() {
+                var isDark = document.documentElement.classList.contains('dark');
+                if (isDark) {
+                    document.documentElement.classList.remove('dark');
+                    localStorage.setItem('zeus-theme', 'light');
+                } else {
+                    document.documentElement.classList.add('dark');
+                    localStorage.setItem('zeus-theme', 'dark');
+                }
+                if (window.lucide) window.lucide.createIcons();
+            });
         }
     </script>
     {% block extra_scripts %}{% endblock %}
