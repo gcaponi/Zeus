@@ -44,7 +44,7 @@
 
     <section class="rounded-xl border border-white/10 bg-white/5 p-4">
         <p class="zeus-label text-brand-cyan">Sintesi estratta da ZEUS</p>
-        <div class="mt-3 space-y-4 text-sm leading-7 text-content-primary text-justify break-words">
+        <div class="zeus-prose mt-4">
             {% for paragraph in public_paragraphs %}
                 <p>{{ paragraph }}</p>
             {% empty %}
@@ -59,7 +59,7 @@
             {% for section in sections %}
                 <div class="rounded-xl border border-white/10 bg-white/5 p-4">
                     <h4 class="text-sm font-bold uppercase tracking-wider text-brand-cyan">{{ section.label }}</h4>
-                    <div class="mt-2 space-y-3 text-sm text-content-primary text-justify break-words">
+                    <div class="zeus-prose mt-3">
                         {% for paragraph in section.paragraphs %}
                             <p>{{ paragraph }}</p>
                         {% empty %}
