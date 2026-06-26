@@ -1,116 +1,29 @@
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ tenant.name }} · Dashboard</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #f8f9fb;
-            color: #1a1a2e;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 2rem;
-        }
-        .card {
-            background: #fff;
-            border-radius: 1.25rem;
-            box-shadow: 0 1px 3px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04);
-            padding: 3rem 3.5rem;
-            max-width: 480px;
-            width: 100%;
-            text-align: center;
-        }
-        .brand {
-            font-size: .75rem;
-            letter-spacing: .12em;
-            text-transform: uppercase;
-            color: #8b8fa3;
-            margin-bottom: .25rem;
-        }
-        h1 {
-            font-size: 1.75rem;
-            font-weight: 600;
-            letter-spacing: -.02em;
-            margin-bottom: .5rem;
-        }
-        .info {
-            color: #5b5f7a;
-            line-height: 1.6;
-            font-size: .9375rem;
-            margin-bottom: 2rem;
-        }
-        .badge {
-            display: inline-block;
-            background: #eef0f5;
-            border-radius: .375rem;
-            padding: .25rem .75rem;
-            font-size: .8125rem;
-            color: #5b5f7a;
-            margin-bottom: 1rem;
-        }
-        .btn {
-            display: inline-block;
-            padding: .75rem 2rem;
-            border-radius: .625rem;
-            font-size: .9375rem;
-            font-weight: 500;
-            text-decoration: none;
-            transition: background .15s;
-        }
-        .btn-outline {
-            background: transparent;
-            color: #1a1a2e;
-            border: 1px solid #e2e4ea;
-        }
-        .btn-outline:hover {
-            border-color: #c4c7d2;
-        }
-        hr {
-            border: none;
-            border-top: 1px solid #eef0f5;
-            margin: 2rem 0 1.5rem;
-        }
-        .home-link {
-            font-size: .8125rem;
-        }
-        .home-link a {
-            color: #8b8fa3;
-            text-decoration: none;
-        }
-        .home-link a:hover { color: #1a1a2e; }
-        .actions { display: flex; gap: .75rem; justify-content: center; flex-wrap: wrap; }
-        @media (max-width: 480px) {
-            body { padding: 1.25rem; }
-            .card { padding: 2rem 1.5rem; }
-            h1 { font-size: 1.5rem; }
-        }
-    </style>
-</head>
-<body>
-    <div class="card">
-        <div class="brand">{{ tenant.schema_name }}.zeus.cais.uno</div>
-        <h1>{{ tenant.name }}</h1>
-        <div class="badge">Dashboard</div>
-        <div class="info">
-            <p>Accesso come <strong>{{ user.email }}</strong></p>
-            <p>Workspace pronto per la configurazione.</p>
+{% extends "core/base.html" %}
+
+{% block title %}{{ tenant.name }} · Dashboard{% endblock %}
+
+{% block nav %}{% endblock %}
+
+{% block content %}
+<section class="zeus-centered-page">
+    <div class="zeus-card zeus-auth-card text-center" style="width: min(100%, 38rem);">
+        <span class="hero-kicker"><span class="pulse-dot"></span> {{ tenant.schema_name }}.zeus.cais.uno</span>
+        <h1 class="mt-5 text-3xl font-bold tracking-tight sm:text-5xl">{{ tenant.name }}</h1>
+        <div class="mt-4 inline-flex rounded-full border border-brand-cyan/30 bg-brand-cyan/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-brand-cyan-light">Dashboard</div>
+
+        <div class="mx-auto mt-6 max-w-lg space-y-2 text-sm leading-7 text-content-secondary">
+            <p>Accesso come <strong class="text-content-primary">{{ user.email }}</strong></p>
+            <p>Workspace pronto per la configurazione del DNA aziendale.</p>
         </div>
-        <div class="actions">
-            <a href="{% url 'onboarding-index' %}" class="btn btn-outline">Inizia onboarding</a>
-            <a href="{% url 'account_logout' %}" class="btn btn-outline">Esci</a>
+
+        <div class="mt-8 flex flex-wrap justify-center gap-3">
+            <a href="{% url 'onboarding-index' %}" class="zeus-btn zeus-btn-primary">Inizia onboarding</a>
+            <a href="{% url 'account_logout' %}" class="zeus-btn zeus-btn-ghost">Esci</a>
         </div>
-        <hr>
-        <div class="home-link">
-            <a href="{% url 'tenant-landing' %}">Torna al workspace</a>
-        </div>
+
+        <hr class="zeus-divider">
+
+        <a href="{% url 'tenant-landing' %}" class="text-sm font-bold text-content-muted hover:text-brand-cyan-light">Torna al workspace</a>
     </div>
-</body>
-</html>
+</section>
+{% endblock %}

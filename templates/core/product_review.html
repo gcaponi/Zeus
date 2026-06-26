@@ -18,7 +18,7 @@
 
     {% if is_fully_approved %}
         <div class="mb-6 zeus-card p-5" style="border-color: rgba(34, 197, 94, 0.3); background: rgba(34, 197, 94, 0.05);">
-            <p class="zeus-label text-green-600">DNA prodotto approvato</p>
+            <p class="zeus-label text-brand-lime">DNA prodotto approvato</p>
             <p class="mt-2 text-lg font-bold font-display">Tutte le sezioni sono state approvate.</p>
         </div>
     {% endif %}
@@ -31,7 +31,7 @@
                     {% if section.key in approved_keys %}
                         <span class="zeus-badge zeus-badge-lime">Approvato</span>
                     {% elif section.key in missing_keys %}
-                        <span class="zeus-badge" style="background: rgba(251, 191, 36, 0.1); color: #d97706;">Da approvare</span>
+                        <span class="zeus-badge" style="background: rgba(251, 191, 36, 0.1); color: #fcd34d;">Da approvare</span>
                     {% endif %}
                 </div>
                 <p class="mt-4 text-sm leading-7 text-content-primary whitespace-pre-line break-words">{{ section.value|default:"Non disponibile" }}</p>

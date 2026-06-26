@@ -5,11 +5,11 @@
 </div>
 {% endif %}
 {% if company_files %}
-<div class="rounded-xl border border-gray-200/20 bg-white/5 p-4">
+<div class="rounded-xl border border-white/10 bg-white/5 p-4">
     <p class="zeus-label mb-3">File caricati</p>
     <ul class="space-y-2">
         {% for file in company_files %}
-        <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200/20 bg-white/10 px-3 py-2.5 text-sm">
+        <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/10 px-3 py-2.5 text-sm">
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
                 <span class="font-semibold text-content-primary truncate max-w-[200px] sm:max-w-[300px]">{{ file.original_name }}</span>
                 <span class="text-xs text-content-muted whitespace-nowrap">{{ file.file_size|filesizeformat }}</span>
