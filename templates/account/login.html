@@ -2,7 +2,22 @@
 
 {% block title %}Accedi · ZEUS{% endblock %}
 
-{% block nav %}{% endblock %}
+{% block nav %}
+<nav class="zeus-nav">
+    <a href="{% url 'tenant-landing' %}" class="zeus-brand">
+        <span class="zeus-brand-dot">⚡</span>
+        ZEUS
+    </a>
+    <div class="zeus-nav-links"></div>
+    <button type="button" id="theme-toggle" class="zeus-btn zeus-btn-ghost" style="padding: 0.5rem 0.75rem; font-size: 0.82rem; min-height: 2.2rem;" aria-label="Cambia tema">
+        <i data-lucide="sun" class="hidden dark:inline" style="width:16px;height:16px;"></i>
+        <i data-lucide="moon" class="inline dark:hidden" style="width:16px;height:16px;"></i>
+    </button>
+    <a href="{% url 'account_signup' %}" class="zeus-btn zeus-btn-ghost" style="padding: 0.5rem 1rem; font-size: 0.82rem;">
+        Crea account
+    </a>
+</nav>
+{% endblock %}
 
 {% block content %}
 <section class="zeus-centered-page">

@@ -3,7 +3,7 @@
 {% block title %}{{ product.name }} — ZEUS{% endblock %}
 
 {% block content %}
-<div class="mx-auto max-w-4xl">
+<div class="zeus-page-wrap">
     <header class="mb-8">
         <a href="{% url 'product-list-create' %}" class="text-sm text-brand-cyan hover:underline">← Prodotti</a>
         <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">{{ product.name }}</h1>

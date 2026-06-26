@@ -7,14 +7,14 @@
 {% endblock %}
 
 {% block content %}
-<div class="mx-auto max-w-5xl">
+<div class="zeus-page-wrap">
     <header class="mb-8">
         <p class="zeus-badge zeus-badge-cyan mb-3">ZEUS</p>
         <h1 class="text-3xl font-bold tracking-tight sm:text-4xl">Onboarding</h1>
         <p class="mt-2 text-content-secondary">Costruisci il DNA della tua azienda in 4 passaggi.</p>
     </header>
 
-    <main class="grid gap-6 lg:grid-cols-[1fr_360px]">
+    <div class="zeus-page-grid">
         <section class="zeus-card p-6 sm:p-8">
             {% include "core/onboarding/_step_indicator.html" with current_step=step|default:1 %}
 
@@ -31,8 +31,10 @@
             </div>
         </section>
 
-        {% include "core/onboarding/_step_sidebar.html" %}
-    </main>
+        <div class="zeus-page-sidebar">
+            {% include "core/onboarding/_step_sidebar.html" %}
+        </div>
+    </div>
 </div>
 
 <!-- Popup glass "Stiamo generando le domande..." -->

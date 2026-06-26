@@ -36,14 +36,16 @@
 {% endblock %}
 
 {% block content %}
-<div class="mx-auto max-w-5xl">
-    <main class="grid gap-6 lg:grid-cols-[1fr_360px]">
+<div class="zeus-page-wrap">
+    <div class="zeus-page-grid">
         <section class="zeus-card p-6 sm:p-8">
             {% include "core/partials/dna_review_content.html" %}
         </section>
 
-        {% include "core/onboarding/_step_sidebar.html" %}
-    </main>
+        <div class="zeus-page-sidebar">
+            {% include "core/onboarding/_step_sidebar.html" %}
+        </div>
+    </div>
 </div>
 
 <script>

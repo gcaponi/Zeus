@@ -30,7 +30,7 @@
 
     <section class="mb-6">
         <p class="zeus-label text-brand-cyan">Sintesi Cognitiva</p>
-        <div class="mt-4 space-y-4 text-sm leading-7 text-content-primary break-words" style="max-width: 72ch; text-wrap: pretty;">
+        <div class="zeus-prose mt-4 break-words">
             {% for paragraph in public_paragraphs %}
                 <p>{{ paragraph }}</p>
             {% empty %}
@@ -53,7 +53,7 @@
                         <span class="zeus-badge" style="background: rgba(251, 191, 36, 0.1); color: #fcd34d;">Da approvare</span>
                     {% endif %}
                 </div>
-                <div class="mt-4 space-y-3 text-sm leading-7 text-content-primary break-words" style="max-width: 72ch; text-wrap: pretty;">
+                <div class="zeus-prose mt-4 break-words">
                     {% for paragraph in section.paragraphs %}
                         <p>{{ paragraph }}</p>
                     {% empty %}

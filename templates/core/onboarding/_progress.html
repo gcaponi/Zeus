@@ -1,23 +1,23 @@
 <div class="py-6">
     {% if run.status == "failed" %}
-        <div class="mx-auto max-w-xl rounded-3xl p-8 text-center" style="background: rgba(15,23,42,0.88); border: 1px solid rgba(248,113,113,0.28); box-shadow: 0 32px 100px rgba(15,23,42,0.24); backdrop-filter: blur(40px) saturate(180%);">
+        <div class="mx-auto max-w-xl rounded-3xl p-8 text-center" style="background: var(--glass-strong); border: 1px solid rgba(248,113,113,0.28); box-shadow: 0 32px 100px rgba(0,0,0,0.24); backdrop-filter: blur(40px) saturate(180%);">
             <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-red-400/15">
                 <span class="text-2xl text-red-300">!</span>
             </div>
-            <h3 class="text-lg font-bold font-display text-white">Analisi non completata</h3>
-            <p class="mt-2 text-sm text-slate-100">{{ run.error_msg|default:"Si è verificato un errore durante l'analisi." }}</p>
+            <h3 class="text-lg font-bold font-display text-content-primary">Analisi non completata</h3>
+            <p class="mt-2 text-sm text-content-secondary">{{ run.error_msg|default:"Si è verificato un errore durante l'analisi." }}</p>
             <div class="mt-6 flex flex-wrap justify-center gap-3">
                 <a href="{% url 'onboarding-index' %}" class="zeus-btn zeus-btn-secondary">Riprova</a>
             </div>
         </div>
     {% else %}
-        <div class="mx-auto max-w-xl rounded-3xl p-8 text-center" style="background: rgba(15,23,42,0.88); border: 1px solid rgba(255,255,255,0.14); box-shadow: 0 32px 100px rgba(15,23,42,0.24); backdrop-filter: blur(40px) saturate(180%);">
+        <div class="mx-auto max-w-xl rounded-3xl p-8 text-center" style="background: var(--glass-strong); border: 1px solid var(--border-color); box-shadow: 0 32px 100px rgba(0,0,0,0.24); backdrop-filter: blur(40px) saturate(180%);">
             <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-brand-cyan/10">
                 <div class="w-8 h-8 rounded-full border-[3px] border-brand-cyan-light border-t-transparent animate-spin"></div>
             </div>
-            <h3 class="text-lg font-bold font-display text-white">Analisi in corso...</h3>
-            <p class="mt-2 text-sm text-slate-100">ZEUS sta leggendo il sito <strong class="text-white">{{ source.url }}</strong></p>
-            <p class="mt-1 text-xs text-slate-300">Fase: {{ run.current_step|default:"avvio" }}</p>
+            <h3 class="text-lg font-bold font-display text-content-primary">Analisi in corso...</h3>
+            <p class="mt-2 text-sm text-content-secondary">ZEUS sta leggendo il sito <strong class="text-content-primary">{{ source.url }}</strong></p>
+            <p class="mt-1 text-xs text-content-muted">Fase: {{ run.current_step|default:"avvio" }}</p>
 
             <div
                 class="mt-6"
@@ -27,7 +27,7 @@
                 hx-swap="innerHTML"
             >
                 <div class="rounded-2xl border border-white/10 bg-white/10 p-4">
-                    <p class="text-sm text-slate-100">Aggiornamento automatico ogni 3 secondi...</p>
+                    <p class="text-sm text-content-secondary">Aggiornamento automatico ogni 3 secondi...</p>
                 </div>
             </div>
         </div>
