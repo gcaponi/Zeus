@@ -55,6 +55,17 @@ GAP_ENGINE_LIMITS = {
     Plan.SLUG_ENTERPRISE: {"max_rounds": 3, "max_followups": 20},
 }
 SOURCE_MARKER_RE = re.compile(r"\s*\[SRC:[^\]]+\]", re.IGNORECASE)
+SYNTHESIS_LAYER_ALIASES = {
+    "identita_e_promessa": "identita",
+    "identita_funzionale": "identita",
+    "postura_aziendale": "identita",
+    "confini_produttivi": "confini",
+    "confini_materiali": "confini",
+    "limiti_operativi": "confini",
+    "tono_comunicativo": "tono",
+    "tono_di_voce": "tono",
+    "registro_comunicativo": "tono",
+}
 
 QUESTION_GENERATION_PROFILES = {
     Plan.SLUG_STARTER: {
@@ -1119,7 +1130,21 @@ NON vanno nella sintesi_cognitiva (documento pulito).
 appare nelle risposte, trasformalo nel principio che rivela.
 
 OUTPUT: JSON completo con tutte le 6 sezioni cognitive + sintesi_cognitiva. \
-Usa la stessa struttura del pre-DNA ma con contenuto riscritto e conclusivo.
+Il formato target NON dipende dalla struttura del pre-DNA: anche se il pre-DNA \
+contiene solo sintesi_cognitiva, devi produrre SEMPRE tutte le chiavi canoniche.
+
+CHIAVI TOP-LEVEL OBBLIGATORIE, ESATTE E UNICHE:
+1. sintesi_cognitiva
+2. identita
+3. modelli_mentali
+4. nucleo_tecnico
+5. confini
+6. tono
+7. logica_decisionale
+
+VIETATI alias o nomi creativi: non usare identita_e_promessa, confini_produttivi, \
+innovazione_e_sostenibilita, tono_comunicativo o altre varianti. Ogni sezione \
+interna deve essere una stringa narrativa completa e autonoma.
 
 REGOLA ASSOLUTA: il tuo output inizia con {{ e finisce con }}. Nessun preambolo, \
 nessuna spiegazione, nessun markdown, nessun blocco ```json.
@@ -1165,12 +1190,31 @@ Rispondi con SOLO il JSON, senza markdown, senza preambolo.""".strip()
         return prev_content
 
 
+def _normalize_synthesis_layers(synthesis: dict) -> dict:
+    """Map known LLM layer aliases to canonical 6-layer DNA keys."""
+    if not isinstance(synthesis, dict):
+        return {}
+    normalized = dict(synthesis)
+    for alias, canonical in SYNTHESIS_LAYER_ALIASES.items():
+        if normalized.get(canonical):
+            continue
+        if normalized.get(alias):
+            normalized[canonical] = normalized[alias]
+            logger.warning(
+                "Sintesi globale: alias '%s' normalizzato in '%s'.",
+                alias,
+                canonical,
+            )
+    return normalized
+
+
 def _safe_merge_synthesis(original: dict, synthesis: dict) -> dict:
     """P5 — merge synthesis output without clobbering layers on partial output.
 
     Only updates a layer if the synthesis provides a non-empty value for it,
     so a partial LLM response cannot silently erase existing cognitive layers.
     """
+    synthesis = _normalize_synthesis_layers(synthesis)
     merged = dict(original)
     missing = [key for key in LAYER_KEYS if not synthesis.get(key)]
     if missing:

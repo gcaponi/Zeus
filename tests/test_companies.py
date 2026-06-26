@@ -1011,6 +1011,23 @@ class TestDNAQuestions:
         pre_dna.refresh_from_db()
         assert pre_dna.is_current is False
 
+    def test_safe_merge_synthesis_normalizes_legacy_layer_aliases(self):
+        original = {"sintesi_cognitiva": "Sintesi precedente"}
+        synthesis = {
+            "sintesi_cognitiva": "Sintesi aggiornata",
+            "identita_e_promessa": "Identita generata",
+            "confini_produttivi": "Confini generati",
+            "tono_comunicativo": "Tono generato",
+        }
+
+        merged = views._safe_merge_synthesis(original, synthesis)
+
+        assert merged["sintesi_cognitiva"] == "Sintesi aggiornata"
+        assert merged["identita"] == "Identita generata"
+        assert merged["confini"] == "Confini generati"
+        assert merged["tono"] == "Tono generato"
+        assert "identita_e_promessa" not in merged
+
     def test_submit_same_answers_does_not_regenerate_complete_dna(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
         pre_dna = self._make_pre_dna(company)
