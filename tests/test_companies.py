@@ -1186,6 +1186,16 @@ class TestDNAQuestions:
             "Terza parte.",
         ]
 
+    def test_document_paragraphs_split_long_blocks_on_sentence_boundaries(self):
+        sentence = "Questo principio operativo deve restare leggibile anche dentro la visualizzazione finale."
+        document = " ".join([sentence] * 12)
+
+        paragraphs = views._document_paragraphs(document)
+
+        assert len(paragraphs) > 1
+        assert all(paragraph.endswith(".") for paragraph in paragraphs)
+        assert " ".join(paragraphs) == document
+
     def test_public_document_preserves_structured_paragraphs(self):
         content = {
             "sintesi_cognitiva": [

@@ -2,10 +2,71 @@
 
 {% block title %}Visualizzazione finale — ZEUS{% endblock %}
 
+{% block extra_head %}
+<style>
+    .dna-visualize-wrap {
+        width: min(100%, 82rem);
+    }
+
+    .dna-visualize-grid {
+        display: grid;
+        gap: clamp(1rem, 2vw, 1.5rem);
+    }
+
+    .dna-visualize-main {
+        min-width: 0;
+    }
+
+    .dna-document-card {
+        border-color: rgba(148, 163, 184, 0.1);
+        background:
+            radial-gradient(circle at 50% 0%, rgba(34, 211, 238, 0.08), transparent 24rem),
+            rgba(2, 6, 23, 0.72);
+    }
+
+    .dna-document-body {
+        max-width: 82ch;
+        margin: 0 auto;
+        color: rgb(var(--text-primary-rgb) / 0.92);
+        font-size: clamp(1rem, 0.35vw + 0.93rem, 1.08rem);
+        line-height: 1.85;
+        letter-spacing: -0.01em;
+    }
+
+    .dna-document-body p {
+        margin: 0;
+        text-align: left;
+        text-wrap: pretty;
+    }
+
+    .dna-document-body p + p {
+        margin-top: 1.25rem;
+    }
+
+    @media (min-width: 1180px) {
+        .dna-visualize-grid {
+            grid-template-columns: minmax(0, 1fr) 18rem;
+            align-items: start;
+        }
+
+        .dna-visualize-sidebar {
+            position: sticky;
+            top: 7rem;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .dna-document-body {
+            line-height: 1.75;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="mx-auto max-w-5xl">
-    <main class="grid gap-6 lg:grid-cols-[1fr_360px]">
-        <section>
+<div class="dna-visualize-wrap mx-auto">
+    <div class="dna-visualize-grid">
+        <section class="dna-visualize-main">
             <div class="mb-8">
                 {% include "core/onboarding/_step_indicator.html" with current_step=4 %}
             </div>
@@ -19,8 +80,8 @@
             </div>
             {% endif %}
 
-            <article class="zeus-card p-8 sm:p-12 md:p-16">
-                <header class="mb-12 text-center">
+            <article class="zeus-card dna-document-card p-6 sm:p-8 lg:p-10 xl:p-12">
+                <header class="mb-10 text-center">
                     <h1 class="text-3xl sm:text-4xl font-bold tracking-tight font-display text-white">DNA Generale</h1>
                     <p class="mt-3 text-content-secondary text-sm tracking-wide uppercase">
                         {{ company_name|default:"" }} · Versione {{ dna.version }}
@@ -33,9 +94,9 @@
                     <div class="mt-6 mx-auto w-16 h-px bg-gradient-to-r from-transparent via-brand-cyan/50 to-transparent"></div>
                 </header>
 
-                <div class="space-y-6 text-sm sm:text-base leading-8 text-content-primary break-words">
+                <div class="dna-document-body break-words">
                     {% for paragraph in final_paragraphs %}
-                        <p class="text-justify indent-6 first:indent-0">{{ paragraph }}</p>
+                        <p>{{ paragraph }}</p>
                     {% empty %}
                         <p class="text-content-muted italic text-center">Documento non disponibile.</p>
                     {% endfor %}
@@ -53,7 +114,9 @@
             </div>
         </section>
 
-        {% include "core/onboarding/_step_sidebar.html" %}
-    </main>
+        <div class="dna-visualize-sidebar">
+            {% include "core/onboarding/_step_sidebar.html" %}
+        </div>
+    </div>
 </div>
 {% endblock %}

@@ -268,7 +268,28 @@ def _document_paragraphs(document):
     if not text:
         return []
     paragraphs = re.split(r"\n\s*\n+", text)
-    return [" ".join(paragraph.split()) for paragraph in paragraphs if paragraph.strip()]
+    formatted = []
+    for paragraph in paragraphs:
+        paragraph = " ".join(paragraph.split())
+        if not paragraph:
+            continue
+        if len(paragraph) <= 760:
+            formatted.append(paragraph)
+            continue
+
+        chunk = ""
+        for sentence in re.split(r"(?<=[.!?])\s+", paragraph):
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+            if chunk and len(chunk) + len(sentence) + 1 > 620:
+                formatted.append(chunk)
+                chunk = sentence
+            else:
+                chunk = f"{chunk} {sentence}".strip()
+        if chunk:
+            formatted.append(chunk)
+    return formatted
 
 
 def _compact_display_excerpt(text, limit=900):
