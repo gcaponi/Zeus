@@ -731,13 +731,14 @@
 
         /* Long-form prose rendering for DNA documents and review sections */
         .zeus-prose {
-            max-width: 68ch;
+            max-width: 72ch;
             margin-left: auto;
             margin-right: auto;
             color: var(--text-primary);
-            font-size: clamp(0.95rem, 0.3vw + 0.9rem, 1.05rem);
-            line-height: 1.8;
-            letter-spacing: -0.005em;
+            font-family: 'Georgia', 'Cambria', 'Times New Roman', serif;
+            font-size: clamp(1.05rem, 0.35vw + 1rem, 1.2rem);
+            line-height: 1.9;
+            letter-spacing: 0;
         }
 
         .zeus-prose p {
@@ -748,12 +749,16 @@
         }
 
         .zeus-prose p + p {
-            margin-top: 1.15rem;
+            margin-top: 1.5rem;
         }
 
         .zeus-prose strong {
             color: var(--text-primary);
             font-weight: 700;
+        }
+
+        .zeus-prose em {
+            font-style: italic;
         }
 
         .text-gradient {
