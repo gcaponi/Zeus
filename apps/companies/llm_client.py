@@ -373,6 +373,19 @@ class MockLLMClient(LLMClient):
                 latency_ms=1200,
             )
 
+        if "GAP_ENGINE_EVAL" in prompt:
+            return LLMResult(
+                text=json.dumps({
+                    "evaluations": [],
+                    "overall_sufficient": True,
+                    "follow_ups": [],
+                }, ensure_ascii=False),
+                tokens_in=600,
+                tokens_out=150,
+                cost=0.0002,
+                latency_ms=700,
+            )
+
         if "GENERA_DOMANDE_A1_A20" in prompt:
             plan_slug = "starter"
             answer_depth = "generica"

@@ -45,6 +45,15 @@ from apps.core.views import redirect_to_workspace_or_login
 logger = logging.getLogger(__name__)
 
 DNA_GENERALE_FALLBACK_LAYER = "logica_decisionale"
+
+# Tier limits for the Gap Engine (Motore A). The first 10 questions are round 1;
+# follow-up rounds start at 2 and are capped both in number of rounds and in
+# follow-up questions per round.
+GAP_ENGINE_LIMITS = {
+    Plan.SLUG_STARTER: {"max_rounds": 1, "max_followups": 3},
+    Plan.SLUG_PROFESSIONAL: {"max_rounds": 2, "max_followups": 5},
+    Plan.SLUG_ENTERPRISE: {"max_rounds": 3, "max_followups": 20},
+}
 SOURCE_MARKER_RE = re.compile(r"\s*\[SRC:[^\]]+\]", re.IGNORECASE)
 
 QUESTION_GENERATION_PROFILES = {
@@ -590,6 +599,220 @@ def _question_pool(raw_question, index):
     return CompanyQuestion.POOL_TEMPLATE if index < 5 else CompanyQuestion.POOL_KB_ANCHORED
 
 
+def _gap_engine_limits(plan_slug):
+    return GAP_ENGINE_LIMITS.get(plan_slug, GAP_ENGINE_LIMITS[Plan.SLUG_STARTER])
+
+
+def _gap_engine_prompt(company, pre_dna, questions, plan_slug):
+    """Build the Gap Engine prompt to evaluate answer sufficiency in batch."""
+    limits = _gap_engine_limits(plan_slug)
+    content = json.dumps(pre_dna.content, ensure_ascii=False, indent=2)
+    qa_lines = []
+    for question in questions:
+        answer = (question.answer or "").strip()
+        qa_lines.append(
+            f"DOMANDA {question.code} [{question.section_key}] — {question.principle}\n"
+            f"Q: {question.question}\n"
+            f"A: {answer if answer else '[nessuna risposta]'}"
+        )
+    qa_block = "\n\n".join(qa_lines)
+
+    return f"""
+GAP_ENGINE_EVAL
+
+Sei ZEUS. Hai appena ricevuto le risposte del cliente alle domande di approfondimento
+per il DNA Generale. Il tuo compito è valutare la QUALITA cognitiva di ogni risposta,
+non la sua lunghezza.
+
+PIANO: {plan_slug}
+LIMITE FOLLOW-UP: massimo {limits['max_followups']} domande in questa tornata.
+
+Valuta ogni risposta secondo questi criteri:
+- sufficiente: la risposta chiarisce il punto e aggiunge giudizio, confini, logica
+  decisionale o contesto reale all'azienda.
+- insufficiente: la risposta è troppo generica, vaga, puramente descrittiva o evita
+  il punto. Serve un approfondimento mirato.
+- contradicts: la risposta contradice il pre-DNA, un'altra risposta o un documento.
+  Segnala il conflitto e chiedi chiarimento.
+
+Regole per i follow-up:
+- Genera SOLO domande che valgono davvero la pena. Meglio zero follow-up che domande
+  inutili.
+- Le domande follow-up devono essere nate da lacune, contraddizioni o ambiguita reali.
+- Non ripetere domande gia poste.
+- Massimo {limits['max_followups']} follow-up in questa tornata.
+
+Output JSON esatto:
+{{
+  "evaluations": [
+    {{
+      "question_code": "A1",
+      "status": "sufficiente|insufficiente|contradicts",
+      "rationale": "1 frase di motivazione"
+    }}
+  ],
+  "overall_sufficient": true|false,
+  "follow_ups": [
+    {{
+      "target_question_code": "A1",
+      "section_key": "identita|modelli_mentali|nucleo_tecnico|confini|tono|logica_decisionale",
+      "principle": "nome breve del principio",
+      "question": "domanda follow-up mirata",
+      "answer_depth": "generica|mirata|analitica",
+      "answer_guidance": "che tipo di risposta ti aspetti"
+    }}
+  ]
+}}
+
+Se tutte le risposte sono sufficienti, "follow_ups" deve essere un array vuoto e
+"overall_sufficient" true.
+
+Rispondi SOLO con il JSON richiesto. Nessun preambolo, nessun markdown.
+
+PRE-DNA:
+{content}
+
+DOMANDE E RISPOSTE CLIENTE:
+{qa_block}
+""".strip()
+
+
+def _parse_gap_evaluation(text):
+    payload = _parse_llm_json(text, context="gap-engine")
+    if not isinstance(payload, dict):
+        raise ValueError("Gap engine response must be a JSON object")
+    evaluations = payload.get("evaluations") or []
+    follow_ups = payload.get("follow_ups") or []
+    if not isinstance(evaluations, list) or not isinstance(follow_ups, list):
+        raise ValueError("Gap engine evaluations and follow_ups must be arrays")
+    for evaluation in evaluations:
+        if evaluation.get("status") not in {"sufficiente", "insufficiente", "contradicts"}:
+            raise ValueError(f"Invalid gap evaluation status: {evaluation.get('status')}")
+    return {
+        "overall_sufficient": bool(payload.get("overall_sufficient")),
+        "evaluations": evaluations,
+        "follow_ups": follow_ups,
+    }
+
+
+def _evaluate_answer_sufficiency(company, pre_dna, questions, plan_slug):
+    """Run the Gap Engine over all answered questions."""
+    prompt = _gap_engine_prompt(company, pre_dna, questions, plan_slug)
+    client = get_llm_client()
+    result, evaluation = _generate_with_retry(
+        client,
+        prompt,
+        model=LLM_MODEL,
+        system_prompt=ZEUS_SYSTEM_PROMPT,
+        temperatures=(0.4, 0.3, 0.2),
+        parse=_parse_gap_evaluation,
+        context="gap-engine",
+    )
+    LLMCall.objects.create(
+        company=company,
+        model_name=LLM_MODEL,
+        prompt_text=prompt,
+        response_text=result.text,
+        tokens_in=result.tokens_in,
+        tokens_out=result.tokens_out,
+        cost_usd=result.cost,
+        latency_ms=result.latency_ms,
+    )
+    return evaluation
+
+
+def _create_gap_followups(company, dna, followups_data, current_round, plan_slug):
+    """Persist Gap Engine follow-up questions for the next round."""
+    profile = QUESTION_GENERATION_PROFILES.get(plan_slug, QUESTION_GENERATION_PROFILES[Plan.SLUG_STARTER])
+    existing_codes = set(dna.questions.values_list("code", flat=True))
+    section_keys = set(LAYER_KEYS)
+    created = []
+
+    parent_map = {q.code: q for q in dna.questions.all()}
+
+    for index, raw in enumerate(followups_data, start=1):
+        target_code = str(raw.get("target_question_code") or "")
+        section_key = str(raw.get("section_key") or DNA_GENERALE_FALLBACK_LAYER)
+        if section_key not in section_keys:
+            section_key = DNA_GENERALE_FALLBACK_LAYER
+        code = _unique_question_code(f"F{index}", existing_codes, "F1")
+        answer_depth = str(raw.get("answer_depth") or profile["answer_depth"])[:40]
+        question = CompanyQuestion.objects.create(
+            company=company,
+            dna=dna,
+            code=code,
+            plan_slug=plan_slug,
+            section_key=section_key,
+            pool=CompanyQuestion.POOL_KB_ANCHORED,
+            principle=str(raw.get("principle", "Approfondimento"))[:120],
+            question=str(raw.get("question", "")).strip(),
+            answer_depth=answer_depth,
+            answer_guidance=str(raw.get("answer_guidance", "")).strip(),
+            question_round=current_round + 1,
+            parent_question=parent_map.get(target_code),
+        )
+        created.append(question)
+    return created
+
+
+def _round_questions(dna, round_number):
+    return list(dna.questions.filter(question_round=round_number).order_by("id"))
+
+
+def _process_answers_after_round(request, company, pre_dna, current_round):
+    """Save answers, run Gap Engine, create follow-ups or trigger complete DNA."""
+    plan_slug = _plan_slug_for_company(company)
+    limits = _gap_engine_limits(plan_slug)
+    gap_rounds_done = current_round - 1
+
+    # Collect all answered questions across rounds for the synthesis.
+    answered_questions = list(
+        pre_dna.questions.exclude(answer="").order_by("question_round", "id")
+    )
+
+    # If we already used all allowed follow-up rounds, proceed directly.
+    if gap_rounds_done >= limits["max_rounds"]:
+        _trigger_complete_dna(request, company, pre_dna)
+        return redirect("dna-generating")
+
+    try:
+        evaluation = _evaluate_answer_sufficiency(
+            company, pre_dna, answered_questions, plan_slug
+        )
+    except Exception:
+        logger.exception("Gap Engine evaluation failed for %s", company.schema_name)
+        # Fail-safe: proceed with synthesis rather than blocking the user.
+        _trigger_complete_dna(request, company, pre_dna)
+        return redirect("dna-generating")
+
+    followups = evaluation.get("follow_ups", [])[: limits["max_followups"]]
+    if evaluation.get("overall_sufficient") or not followups:
+        _trigger_complete_dna(request, company, pre_dna)
+        return redirect("dna-generating")
+
+    _create_gap_followups(company, pre_dna, followups, current_round, plan_slug)
+    return redirect("dna-gap-questions", round_number=current_round + 1)
+
+
+def _trigger_complete_dna(request, company, pre_dna):
+    from apps.companies.tasks import generate_complete_dna
+
+    tenant_schema = getattr(request, "tenant", None)
+    latest_complete = company.dna_versions.filter(
+        dna_type=CompanyDNA.TYPE_COMPLETE,
+    ).order_by("-version").first()
+    _set_pending_complete_generation(
+        request,
+        (latest_complete.version + 1) if latest_complete else 1,
+    )
+    generate_complete_dna.delay(
+        company.id,
+        pre_dna.id,
+        request.user.id if request.user.is_authenticated else None,
+        tenant_schema=tenant_schema.schema_name if tenant_schema else None,
+    )
+
+
 def _parse_json_object(text):
     payload = _parse_llm_json(text, context="dna-json-object")
     if not isinstance(payload, dict):
@@ -799,9 +1022,10 @@ def _generate_company_questions(company, dna):
                     raw_question.get("answer_depth") or profile["answer_depth"]
                 )[:40],
                 "answer_guidance": str(raw_question.get("answer_guidance", "")).strip(),
+                "question_round": 1,
             },
         )
-    return list(dna.questions.all())
+    return list(dna.questions.filter(question_round=1).order_by("id"))
 
 
 def _dna_in_safe_mode(dna) -> bool:
@@ -1707,6 +1931,17 @@ def dna_questions(request):
     if not pre_dna:
         return HttpResponse("Pre-DNA not found", status=404)
 
+    # If follow-up questions from a previous Gap Engine round are still waiting
+    # for answers, send the user directly to the latest active round.
+    latest_unanswered_round = (
+        pre_dna.questions.filter(answer="")
+        .order_by("-question_round")
+        .values_list("question_round", flat=True)
+        .first()
+    )
+    if latest_unanswered_round and latest_unanswered_round > 1:
+        return redirect("dna-gap-questions", round_number=latest_unanswered_round)
+
     error = None
     try:
         questions = _generate_company_questions(company, pre_dna)
@@ -1732,22 +1967,7 @@ def dna_questions(request):
         elif complete_dna and not answers_changed:
             return redirect("dna-review")
         else:
-            from apps.companies.tasks import generate_complete_dna
-            tenant_schema = getattr(request, "tenant", None)
-            latest_complete = company.dna_versions.filter(
-                dna_type=CompanyDNA.TYPE_COMPLETE,
-            ).order_by("-version").first()
-            _set_pending_complete_generation(
-                request,
-                (latest_complete.version + 1) if latest_complete else 1,
-            )
-            generate_complete_dna.delay(
-                company.id,
-                pre_dna.id,
-                request.user.id if request.user.is_authenticated else None,
-                tenant_schema=tenant_schema.schema_name if tenant_schema else None,
-            )
-            return redirect("dna-generating")
+            return _process_answers_after_round(request, company, pre_dna, current_round=1)
 
     status_code = 400 if error else 200
     latest_run = company.pipeline_runs.order_by("-created_at").first()
@@ -1756,6 +1976,70 @@ def dna_questions(request):
         "pre_dna": pre_dna,
         "complete_dna": complete_dna,
         "questions": questions,
+        "plan_slug": questions[0].plan_slug if questions else _plan_slug_for_company(company),
+        "plan_label": _question_plan_label(
+            questions[0].plan_slug if questions else _plan_slug_for_company(company)
+        ),
+        "error": error,
+        "step": 2,
+        "step_has_run": latest_run is not None,
+        "step_has_dna": company.dna_versions.filter(is_current=True).exists(),
+        "step_has_questions": True,
+    }, status=status_code)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def dna_gap_questions(request, round_number):
+    """Round 2+ follow-up questions generated by the Gap Engine."""
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+
+    pre_dna = company.dna_versions.filter(dna_type=CompanyDNA.TYPE_PRE).order_by("-version").first()
+    if not pre_dna:
+        return HttpResponse("Pre-DNA not found", status=404)
+
+    questions = _round_questions(pre_dna, round_number)
+    if not questions:
+        # No follow-ups for this round; proceed to synthesis.
+        return _process_answers_after_round(request, company, pre_dna, current_round=round_number)
+
+    complete_dna = company.dna_versions.filter(
+        dna_type=CompanyDNA.TYPE_COMPLETE,
+        is_current=True,
+    ).first()
+    error = None
+
+    if request.method == "POST":
+        body = _request_data(request)
+        missing = []
+        answers_changed = False
+        for question in questions:
+            answer = body.get(f"answer_{question.id}", "").strip()
+            if not answer:
+                missing.append(question.code)
+                continue
+            if answer != question.answer:
+                answers_changed = True
+            question.answer = answer
+            question.answered_at = timezone.now()
+            question.save(update_fields=["answer", "answered_at"])
+        if missing:
+            error = "Rispondi a tutte le domande di approfondimento prima di proseguire."
+        elif complete_dna and not answers_changed:
+            return redirect("dna-review")
+        else:
+            return _process_answers_after_round(request, company, pre_dna, current_round=round_number)
+
+    status_code = 400 if error else 200
+    latest_run = company.pipeline_runs.order_by("-created_at").first()
+    return render(request, "core/dna_gap_questions.html", {
+        "company": company,
+        "pre_dna": pre_dna,
+        "complete_dna": complete_dna,
+        "questions": questions,
+        "round_number": round_number,
         "plan_slug": questions[0].plan_slug if questions else _plan_slug_for_company(company),
         "plan_label": _question_plan_label(
             questions[0].plan_slug if questions else _plan_slug_for_company(company)

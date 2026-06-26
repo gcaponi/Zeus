@@ -1298,6 +1298,108 @@ class TestDNAQuestions:
         assert [question.pool for question in questions[:5]] == ["template"] * 5
         assert [question.pool for question in questions[5:]] == ["kb_anchored"] * 5
 
+    def test_gap_engine_creates_follow_up_round(self, rf_with_tenant, monkeypatch):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        pre_dna = self._make_pre_dna(company)
+        views.dna_questions(rf_with_tenant("get", reverse("dna-questions")))
+        questions = list(pre_dna.questions.filter(question_round=1))
+        data = {f"answer_{question.id}": f"Risposta {question.code}" for question in questions}
+
+        def fake_evaluation(company, pre_dna, questions, plan_slug):
+            return {
+                "overall_sufficient": False,
+                "evaluations": [
+                    {"question_code": "A1", "status": "insufficiente", "rationale": "manca giudizio"},
+                ],
+                "follow_ups": [
+                    {
+                        "target_question_code": "A1",
+                        "section_key": "identita",
+                        "principle": "Giudizio aziendale",
+                        "question": "Quale principio non negoziabile guida questa scelta?",
+                        "answer_depth": "mirata",
+                        "answer_guidance": "Risposta breve ma specifica.",
+                    }
+                ],
+            }
+
+        monkeypatch.setattr(views, "_evaluate_answer_sufficiency", fake_evaluation)
+
+        req = rf_with_tenant("post", reverse("dna-questions"), data, form=True)
+        resp = views.dna_questions(req)
+
+        assert resp.status_code == 302
+        follow_ups = list(pre_dna.questions.filter(question_round=2))
+        assert len(follow_ups) == 1
+        assert resp["Location"] == reverse("dna-gap-questions", args=[2])
+        assert follow_ups[0].pool == CompanyQuestion.POOL_KB_ANCHORED
+        assert follow_ups[0].parent_question.code == "A1"
+
+    def test_gap_engine_proceeds_to_complete_dna_when_sufficient(self, rf_with_tenant, monkeypatch):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        pre_dna = self._make_pre_dna(company)
+        views.dna_questions(rf_with_tenant("get", reverse("dna-questions")))
+        questions = list(pre_dna.questions.filter(question_round=1))
+        data = {f"answer_{question.id}": f"Risposta {question.code}" for question in questions}
+
+        monkeypatch.setattr(
+            views,
+            "_evaluate_answer_sufficiency",
+            lambda *a, **k: {"overall_sufficient": True, "evaluations": [], "follow_ups": []},
+        )
+
+        req = rf_with_tenant("post", reverse("dna-questions"), data, form=True)
+        resp = views.dna_questions(req)
+
+        assert resp.status_code == 302
+        assert resp["Location"] == reverse("dna-generating")
+        assert CompanyDNA.objects.filter(company=company, dna_type=CompanyDNA.TYPE_COMPLETE).exists()
+
+    def test_gap_round_view_saves_answers_and_triggers_next_evaluation(
+        self, rf_with_tenant, monkeypatch
+    ):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        pre_dna = self._make_pre_dna(company)
+        q1 = CompanyQuestion.objects.create(
+            company=company,
+            dna=pre_dna,
+            code="A1",
+            section_key="identita",
+            principle="test",
+            question="test?",
+            question_round=1,
+            answer="base",
+            answered_at=timezone.now(),
+        )
+        follow_up = CompanyQuestion.objects.create(
+            company=company,
+            dna=pre_dna,
+            code="F1",
+            section_key="identita",
+            principle="Approfondimento",
+            question="Approfondimento?",
+            question_round=2,
+        )
+
+        monkeypatch.setattr(
+            views,
+            "_evaluate_answer_sufficiency",
+            lambda *a, **k: {"overall_sufficient": True, "evaluations": [], "follow_ups": []},
+        )
+
+        req = rf_with_tenant(
+            "post",
+            reverse("dna-gap-questions", args=[2]),
+            {f"answer_{follow_up.id}": "Risposta approfondita"},
+            form=True,
+        )
+        resp = views.dna_gap_questions(req, round_number=2)
+
+        assert resp.status_code == 302
+        assert resp["Location"] == reverse("dna-generating")
+        follow_up.refresh_from_db()
+        assert follow_up.answer == "Risposta approfondita"
+
 
 @pytest.mark.django_db
 class TestDNAReviewViews:

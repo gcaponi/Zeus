@@ -9,6 +9,11 @@ urlpatterns = [
     path("company/dna/create/", views.dna_create, name="dna-create"),
     path("company/dna/generate/", views.dna_generate, name="dna-generate"),
     path("company/dna/questions/", views.dna_questions, name="dna-questions"),
+    path(
+        "company/dna/gap-questions/<int:round_number>/",
+        views.dna_gap_questions,
+        name="dna-gap-questions",
+    ),
     path("company/dna/<int:pk>/feedback/", views.dna_feedback, name="dna-feedback"),
     path("company/dna/review/", views.dna_review, name="dna-review"),
     path("company/dna/visualize/", views.dna_visualize, name="dna-visualize"),
