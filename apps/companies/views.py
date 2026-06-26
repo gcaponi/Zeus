@@ -263,6 +263,8 @@ def _document_paragraphs(document):
     """Split a client document into display/PDF paragraphs.
 
     Rendering owns formatting; the stored text stays plain and title-free.
+    Keeps natural paragraph flow: only splits truly enormous blocks so the
+    browser can wrap gracefully. A professional paragraph is 6-12 lines.
     """
     text = _as_text(document).strip()
     if not text:
@@ -273,16 +275,18 @@ def _document_paragraphs(document):
         paragraph = " ".join(paragraph.split())
         if not paragraph:
             continue
-        if len(paragraph) <= 760:
+        # Paragraphs under ~1600 chars are fine as-is (6-10 lines on desktop)
+        if len(paragraph) <= 1600:
             formatted.append(paragraph)
             continue
 
+        # Only split truly huge blocks at sentence boundaries
         chunk = ""
         for sentence in re.split(r"(?<=[.!?])\s+", paragraph):
             sentence = sentence.strip()
             if not sentence:
                 continue
-            if chunk and len(chunk) + len(sentence) + 1 > 620:
+            if chunk and len(chunk) + len(sentence) + 1 > 1400:
                 formatted.append(chunk)
                 chunk = sentence
             else:

@@ -1188,13 +1188,24 @@ class TestDNAQuestions:
 
     def test_document_paragraphs_split_long_blocks_on_sentence_boundaries(self):
         sentence = "Questo principio operativo deve restare leggibile anche dentro la visualizzazione finale."
-        document = " ".join([sentence] * 12)
+        # 25 sentences -> ~1750 chars -> exceeds 1600 threshold, must split
+        document = " ".join([sentence] * 25)
 
         paragraphs = views._document_paragraphs(document)
 
         assert len(paragraphs) > 1
         assert all(paragraph.endswith(".") for paragraph in paragraphs)
         assert " ".join(paragraphs) == document
+
+    def test_document_paragraphs_keeps_medium_blocks_intact(self):
+        sentence = "Questo principio operativo deve restare leggibile anche dentro la visualizzazione finale."
+        # 12 sentences -> ~840 chars -> under 1600 threshold, kept as one paragraph
+        document = " ".join([sentence] * 12)
+
+        paragraphs = views._document_paragraphs(document)
+
+        assert len(paragraphs) == 1
+        assert paragraphs[0] == document
 
     def test_public_document_preserves_structured_paragraphs(self):
         content = {
