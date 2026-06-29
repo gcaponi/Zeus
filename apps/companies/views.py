@@ -3707,8 +3707,13 @@ def product_dna_feedback(request, pk):
     specialist_dna = product.dna_versions.filter(
         is_current=True, dna_type=ProductDNA.TYPE_COMPLETE,
     ).first()
-    if not specialist_dna or not specialist_dna.is_approved:
-        return HttpResponse("DNA specialista non approvato", status=404)
+    if not specialist_dna:
+        return HttpResponse("DNA specialista non trovato", status=404)
+    if not specialist_dna.is_approved and specialist_dna.missing_sections():
+        return HttpResponse(
+            "DNA specialista non completamente approvato.",
+            status=404,
+        )
 
     company_dna = company.dna_versions.filter(
         dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True,
@@ -3741,8 +3746,13 @@ def product_dna_feedback_apply(request, pk):
     specialist_dna = product.dna_versions.filter(
         is_current=True, dna_type=ProductDNA.TYPE_COMPLETE,
     ).first()
-    if not specialist_dna or not specialist_dna.is_approved:
-        return HttpResponse("DNA specialista non approvato", status=404)
+    if not specialist_dna:
+        return HttpResponse("DNA specialista non trovato", status=404)
+    if not specialist_dna.is_approved and specialist_dna.missing_sections():
+        return HttpResponse(
+            "DNA specialista non completamente approvato.",
+            status=404,
+        )
 
     company_dna = company.dna_versions.filter(
         dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True,
