@@ -20,32 +20,44 @@
 
     <div class="mb-6 zeus-card p-6">
         <h2 class="text-lg font-bold font-display">Carica file</h2>
-        <p class="mt-1 text-sm text-content-secondary">
-            {{ product_files_count }}{% if product_file_limit %}/{{ product_file_limit }}{% endif %} file caricati per questo specialista.
-        </p>
 
-        <form method="post" action="{% url 'product-file-upload' product.pk %}" enctype="multipart/form-data" class="mt-4 space-y-4">
+        <form method="post" action="{% url 'product-file-upload' product.pk %}" enctype="multipart/form-data" id="product-file-upload-form" class="mt-4 space-y-4">
             {% csrf_token %}
             <div>
                 <label class="zeus-label">File (PDF, TXT, MD, PNG, JPG)</label>
-                <input type="file" name="file" class="zeus-input" style="padding: 0.6rem;">
+                <div class="flex gap-2">
+                    <input type="file" name="file" id="product-file-input" class="zeus-input flex-1" style="padding: 0.6rem;">
+                    <button type="submit" class="zeus-btn zeus-btn-secondary whitespace-nowrap">Carica</button>
+                </div>
+                <p class="mt-2 text-xs text-content-muted">
+                    PDF, TXT o MD — seleziona un file e premi "Carica".
+                    {% if not unlimited_product_files %}
+                    Spazio disponibile: <span id="product-files-quota">{{ max_product_files_mb }} MB</span>.
+                    {% endif %}
+                </p>
             </div>
             <div>
                 <label class="zeus-label">Note aggiuntive</label>
                 <textarea name="notes" rows="3" class="zeus-input" placeholder="Descrizione, specifiche, ecc."></textarea>
             </div>
-            <button type="submit" class="zeus-btn zeus-btn-primary">Carica</button>
         </form>
     </div>
 
-    <div class="mb-6 zeus-card p-6">
+    <div class="mb-6 zeus-card p-6" id="product-files-list">
         <h2 class="text-lg font-bold font-display">File caricati</h2>
         {% if product_files %}
             <ul class="mt-4 space-y-2">
                 {% for file in product_files %}
-                    <li class="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-content-secondary">
-                        <span class="font-semibold text-content-primary break-all">{{ file.original_name }}</span>
-                        <span class="ml-2 text-content-muted">{{ file.created_at|date:"d/m/Y H:i" }}</span>
+                    <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/10 px-3 py-2.5 text-sm">
+                        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
+                            <span class="font-semibold text-content-primary truncate max-w-[200px] sm:max-w-[300px]">{{ file.original_name }}</span>
+                            <span class="text-xs text-content-muted whitespace-nowrap">{{ file.file_size|filesizeformat }}</span>
+                            <span class="text-xs text-content-muted whitespace-nowrap">{{ file.created_at|date:"d/m/Y H:i" }}</span>
+                        </div>
+                        <form method="post" action="{% url 'product-file-delete' product.pk file.pk %}" onsubmit="return confirm('Eliminare {{ file.original_name }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="text-xs font-semibold text-red-400 hover:text-red-300">Elimina</button>
+                        </form>
                     </li>
                 {% endfor %}
             </ul>
@@ -98,4 +110,34 @@
         </div>
     {% endif %}
 </div>
+
+<script>
+(function() {
+    var form = document.getElementById('product-file-upload-form');
+    if (!form) return;
+    var unlimited = {{ unlimited_product_files|yesno:"true,false" }};
+    var maxBytes = {{ max_product_files_mb|default:"5" }} * 1024 * 1024;
+    var usedBytes = {{ product_files_bytes_used|default:"0" }};
+    var remaining = maxBytes - usedBytes;
+
+    form.addEventListener('submit', function(evt) {
+        var input = document.getElementById('product-file-input');
+        if (!input || !input.files.length) return;
+        var totalSize = 0;
+        for (var i = 0; i < input.files.length; i++) {
+            totalSize += input.files[i].size;
+        }
+        if (!unlimited && totalSize > remaining) {
+            evt.preventDefault();
+            var remainingMB = (remaining / (1024 * 1024)).toFixed(1);
+            var fileMB = (totalSize / (1024 * 1024)).toFixed(1);
+            alert(
+                'File troppo grande (' + fileMB + ' MB).\n' +
+                'Spazio rimanente: ' + remainingMB + ' MB.\n' +
+                'Seleziona file più piccoli o elimina documenti esistenti.'
+            );
+        }
+    });
+})();
+</script>
 {% endblock %}

@@ -3003,15 +3003,19 @@ def _product_approval_block_reasons(dna):
     ]
 
 
+def _product_file_bytes_used(product):
+    return sum(f.file_size or 0 for f in product.product_files.all())
+
+
 def _product_file_block_reason(product):
     subscription = _subscription_for_company(product.company)
     if not subscription:
         return None
-    current_count = product.product_files.count()
     if not subscription.can_use_workspace():
         return "Workspace sospeso. Contatta l'amministratore ZEUS."
-    if not subscription.can_add_product_file(current_count):
-        return "Limite file per prodotto raggiunto per il piano attuale."
+    current_bytes = _product_file_bytes_used(product)
+    if not subscription.can_add_product_file_bytes():
+        return "Spazio file per specialista esaurito per il piano attuale."
     return None
 
 
@@ -3103,16 +3107,18 @@ def _product_detail_context(product, error=None):
     sections = _product_dna_sections(dna.content) if dna else []
     product_files = list(product.product_files.all())
     subscription = _subscription_for_company(product.company)
-    product_file_limit = None
-    if subscription and subscription.plan and not subscription.plan.unlimited_files_per_product:
-        product_file_limit = subscription.plan.max_files_per_product
+    bytes_used = _product_file_bytes_used(product)
+    max_mb = subscription.plan.max_product_files_mb if subscription and subscription.plan else 5
+    unlimited = subscription.plan.unlimited_product_files if subscription and subscription.plan else False
     return {
         "product": product,
         "dna": dna,
         "sections": sections,
         "product_files": product_files,
         "product_files_count": len(product_files),
-        "product_file_limit": product_file_limit,
+        "product_files_bytes_used": bytes_used,
+        "max_product_files_mb": max_mb,
+        "unlimited_product_files": unlimited,
         "product_step": 1,
         "error": error,
     }
@@ -3173,6 +3179,18 @@ def product_file_upload(request, pk):
         file_size = len(content_text.encode("utf-8"))
         original_name = "note-prodotto.txt"
 
+    subscription = _subscription_for_company(company)
+    if subscription and not subscription.can_add_product_file_bytes(file_size):
+        error = "File troppo grande. Spazio rimanente insufficiente."
+        if not _wants_json(request):
+            return render(
+                request,
+                "core/product_detail.html",
+                _product_detail_context(product, error),
+                status=400,
+            )
+        return JsonResponse({"error": error}, status=400)
+
     if not content_text.strip():
         if not _wants_json(request):
             return render(
@@ -3191,6 +3209,32 @@ def product_file_upload(request, pk):
         uploaded_by=request.user if request.user.is_authenticated else None,
     )
 
+    if subscription:
+        subscription.product_files_bytes_used = _product_file_bytes_used(product)
+        subscription.save(update_fields=["product_files_bytes_used"])
+
+    if not _wants_json(request):
+        return redirect("product-detail", pk=product.pk)
+    return JsonResponse({"status": "ok", "files_count": product.product_files.count()})
+
+
+@login_required
+@require_http_methods(["POST"])
+def product_file_delete(request, pk, file_pk):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    product = Product.objects.filter(pk=pk, company=company).first()
+    if not product:
+        return HttpResponse("Prodotto non trovato", status=404)
+    product_file = product.product_files.filter(pk=file_pk).first()
+    if not product_file:
+        return HttpResponse("File non trovato", status=404)
+    product_file.delete()
+    subscription = _subscription_for_company(company)
+    if subscription:
+        subscription.product_files_bytes_used = _product_file_bytes_used(product)
+        subscription.save(update_fields=["product_files_bytes_used"])
     if not _wants_json(request):
         return redirect("product-detail", pk=product.pk)
     return JsonResponse({"status": "ok", "files_count": product.product_files.count()})

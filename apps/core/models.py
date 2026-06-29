@@ -12,9 +12,11 @@ class Plan(models.Model):
     max_company_files_mb = models.PositiveIntegerField(default=5)
     max_product_dnas = models.PositiveIntegerField(default=5)
     max_files_per_product = models.PositiveIntegerField(default=2)
+    max_product_files_mb = models.PositiveIntegerField(default=5)
     unlimited_company_files = models.BooleanField(default=False)
     unlimited_product_dnas = models.BooleanField(default=False)
     unlimited_files_per_product = models.BooleanField(default=False)
+    unlimited_product_files = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -33,20 +35,24 @@ class Plan(models.Model):
                 "max_company_files_mb": 5,
                 "max_product_dnas": 5,
                 "max_files_per_product": 2,
+                "max_product_files_mb": 5,
             },
             cls.SLUG_PROFESSIONAL: {
                 "name": "Professional",
                 "max_company_files_mb": 10,
                 "max_product_dnas": 15,
                 "max_files_per_product": 5,
+                "max_product_files_mb": 10,
             },
             cls.SLUG_ENTERPRISE: {
                 "name": "Legacy",
                 "max_company_files_mb": 15,
                 "max_product_dnas": 0,
                 "max_files_per_product": 0,
+                "max_product_files_mb": 15,
                 "unlimited_product_dnas": True,
                 "unlimited_files_per_product": True,
+                "unlimited_product_files": True,
             },
         }
         return plans[slug]
@@ -67,6 +73,9 @@ class Plan(models.Model):
 
     def allows_product_file_count(self, current_count):
         return self.unlimited_files_per_product or current_count < self.max_files_per_product
+
+    def allows_product_file_bytes(self, current_bytes):
+        return self.unlimited_product_files or current_bytes < self.max_product_files_mb * 1024 * 1024
 
 
 class Client(TenantMixin):
@@ -114,6 +123,7 @@ class WorkspaceSubscription(models.Model):
         default=STATUS_TRIAL,
     )
     company_files_bytes_used = models.PositiveBigIntegerField(default=0)
+    product_files_bytes_used = models.PositiveBigIntegerField(default=0)
     product_dnas_used = models.PositiveIntegerField(default=0)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -141,6 +151,11 @@ class WorkspaceSubscription(models.Model):
     def can_add_product_file(self, current_product_file_count):
         return self.can_use_workspace() and self.plan.allows_product_file_count(
             current_product_file_count,
+        )
+
+    def can_add_product_file_bytes(self, additional_bytes=0):
+        return self.can_use_workspace() and self.plan.allows_product_file_bytes(
+            self.product_files_bytes_used + additional_bytes,
         )
 
 

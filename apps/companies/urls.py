@@ -32,6 +32,11 @@ urlpatterns = [
     path("products/", views.product_list_create, name="product-list-create"),
     path("products/<int:pk>/", views.product_detail, name="product-detail"),
     path("products/<int:pk>/upload/", views.product_file_upload, name="product-file-upload"),
+    path(
+        "products/<int:pk>/files/<int:file_pk>/delete/",
+        views.product_file_delete,
+        name="product-file-delete",
+    ),
     path("products/<int:pk>/generate/", views.product_dna_generate, name="product-dna-generate"),
     path("products/<int:pk>/questions/", views.product_questions, name="product-questions"),
     path(

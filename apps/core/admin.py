@@ -22,6 +22,7 @@ class WorkspaceSubscriptionInline(admin.StackedInline):
         "plan",
         "status",
         "company_files_bytes_used",
+        "product_files_bytes_used",
         "product_dnas_used",
         "notes",
         "created_at",
@@ -204,7 +205,7 @@ class PlanAdmin(admin.ModelAdmin):
         "slug",
         "max_company_files_label",
         "max_product_dnas_label",
-        "max_files_per_product_label",
+        "max_product_files_label",
         "is_active",
     ]
     list_filter = ["is_active"]
@@ -218,9 +219,9 @@ class PlanAdmin(admin.ModelAdmin):
     def max_product_dnas_label(self, obj):
         return "Illimitati" if obj.unlimited_product_dnas else obj.max_product_dnas
 
-    @admin.display(description="Files/product")
-    def max_files_per_product_label(self, obj):
-        return "Illimitati" if obj.unlimited_files_per_product else obj.max_files_per_product
+    @admin.display(description="Product files")
+    def max_product_files_label(self, obj):
+        return "Illimitati" if obj.unlimited_product_files else f"{obj.max_product_files_mb} MB"
 
 
 @admin.register(WorkspaceSubscription)
@@ -230,6 +231,7 @@ class WorkspaceSubscriptionAdmin(admin.ModelAdmin):
         "plan",
         "status",
         "company_files_usage",
+        "product_files_usage",
         "product_dnas_usage",
         "updated_at",
     ]
@@ -241,6 +243,12 @@ class WorkspaceSubscriptionAdmin(admin.ModelAdmin):
     def company_files_usage(self, obj):
         limit = "illimitati" if obj.plan.unlimited_company_files else f"{obj.plan.max_company_files_mb} MB"
         used_mb = obj.company_files_bytes_used / (1024 * 1024)
+        return f"{used_mb:.1f}/{limit}"
+
+    @admin.display(description="Product files")
+    def product_files_usage(self, obj):
+        limit = "illimitati" if obj.plan.unlimited_product_files else f"{obj.plan.max_product_files_mb} MB"
+        used_mb = obj.product_files_bytes_used / (1024 * 1024)
         return f"{used_mb:.1f}/{limit}"
 
     @admin.display(description="Product DNAs")
