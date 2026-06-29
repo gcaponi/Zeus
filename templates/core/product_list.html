@@ -32,9 +32,9 @@
     {% if products %}
         <div class="space-y-4">
             {% for product in products %}
-                <a href="{% url 'product-detail' product.pk %}" class="zeus-card block p-5 hover:translate-y-[-2px]">
-                    <div class="flex items-center justify-between">
-                        <div>
+                <div class="zeus-card p-5 hover:translate-y-[-2px] transition-transform">
+                    <div class="flex items-center justify-between gap-4">
+                        <a href="{% url 'product-detail' product.pk %}" class="flex-1 min-w-0">
                             <div class="flex items-center gap-3 flex-wrap">
                                 <h3 class="text-lg font-bold font-display text-content-primary">{{ product.name }}</h3>
                                 <span class="zeus-badge
@@ -61,10 +61,16 @@
                                     {% endif %}
                                 {% endwith %}
                             </p>
+                        </a>
+                        <div class="flex items-center gap-3">
+                            <form method="post" action="{% url 'product-delete' product.pk %}" onsubmit="return confirm('Eliminare lo specialista &quot;{{ product.name }}&quot; e tutti i suoi file e DNA? Questa azione e irreversibile.');">
+                                {% csrf_token %}
+                                <button type="submit" class="text-xs font-semibold text-red-400 hover:text-red-300">Elimina</button>
+                            </form>
+                            <a href="{% url 'product-detail' product.pk %}" class="text-content-muted text-xl">→</a>
                         </div>
-                        <span class="text-content-muted text-xl">→</span>
                     </div>
-                </a>
+                </div>
             {% endfor %}
         </div>
     {% else %}

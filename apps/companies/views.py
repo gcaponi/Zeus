@@ -3082,6 +3082,26 @@ def product_list_create(request):
     })
 
 
+@login_required
+@require_http_methods(["POST"])
+def product_delete(request, pk):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    product = Product.objects.filter(pk=pk, company=company).first()
+    if not product:
+        return HttpResponse("Specialista non trovato", status=404)
+    product_name = product.name
+    product.delete()
+    subscription = _subscription_for_company(company)
+    if subscription:
+        subscription.product_dnas_used = company.products.count()
+        subscription.save(update_fields=["product_dnas_used"])
+    if not _wants_json(request):
+        return redirect("product-list-create")
+    return JsonResponse({"status": "ok", "deleted": product_name})
+
+
 def _wants_json(request):
     accept = request.headers.get("Accept", "")
     return "application/json" in accept and "text/html" not in accept

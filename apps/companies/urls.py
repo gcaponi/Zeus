@@ -37,6 +37,7 @@ urlpatterns = [
         views.product_file_delete,
         name="product-file-delete",
     ),
+    path("products/<int:pk>/delete/", views.product_delete, name="product-delete"),
     path("products/<int:pk>/generate/", views.product_dna_generate, name="product-dna-generate"),
     path("products/<int:pk>/questions/", views.product_questions, name="product-questions"),
     path(
