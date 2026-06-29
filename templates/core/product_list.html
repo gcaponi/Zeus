@@ -1,13 +1,13 @@
 {% extends "core/base.html" %}
 
-{% block title %}Prodotti — ZEUS{% endblock %}
+{% block title %}Specialisti — ZEUS{% endblock %}
 
 {% block content %}
 <div class="zeus-page-wrap">
     <header class="mb-8">
         <p class="zeus-badge zeus-badge-cyan mb-3">ZEUS</p>
-        <h1 class="text-3xl font-bold tracking-tight sm:text-4xl font-display">Prodotti</h1>
-        <p class="mt-2 text-content-secondary">Gestisci i DNA dei tuoi prodotti.</p>
+        <h1 class="text-3xl font-bold tracking-tight sm:text-4xl font-display">Specialisti</h1>
+        <p class="mt-2 text-content-secondary">Gestisci i DNA dei tuoi specialisti di prodotto.</p>
     </header>
 
     {% if error %}
@@ -18,10 +18,14 @@
 
     <form method="post" class="mb-8 zeus-card p-6">
         {% csrf_token %}
-        <label class="zeus-label" for="name">Nuovo prodotto</label>
-        <div class="mt-2 flex flex-col sm:flex-row gap-3">
-            <input type="text" name="name" id="name" placeholder="Nome prodotto (es. Vasca BVCI 60x40)" class="zeus-input flex-1" required>
-            <button type="submit" class="zeus-btn zeus-btn-primary">Crea</button>
+        <label class="zeus-label" for="name">Nuovo specialista</label>
+        <div class="mt-2 flex flex-col gap-3">
+            <input type="text" name="name" id="name" placeholder="Nome specialista (es. Canale Ispezionabile)" class="zeus-input" required>
+            <div class="flex flex-col sm:flex-row gap-3">
+                <input type="text" name="tipologia" id="tipologia" placeholder="Tipologia (es. canale, vasca)" class="zeus-input flex-1">
+                <input type="text" name="codice" id="codice" placeholder="Codice (es. CI-001)" class="zeus-input flex-1">
+                <button type="submit" class="zeus-btn zeus-btn-primary">Crea</button>
+            </div>
         </div>
     </form>
 
@@ -31,8 +35,21 @@
                 <a href="{% url 'product-detail' product.pk %}" class="zeus-card block p-5 hover:translate-y-[-2px]">
                     <div class="flex items-center justify-between">
                         <div>
-                            <h3 class="text-lg font-bold font-display text-content-primary">{{ product.name }}</h3>
+                            <div class="flex items-center gap-3 flex-wrap">
+                                <h3 class="text-lg font-bold font-display text-content-primary">{{ product.name }}</h3>
+                                <span class="zeus-badge
+                                    {% if product.status == 'bozza' %}zeus-badge-muted
+                                    {% elif product.status == 'in_costruzione' %}zeus-badge-amber
+                                    {% elif product.status == 'in_validazione' %}zeus-badge-orange
+                                    {% elif product.status == 'attivo' %}zeus-badge-lime
+                                    {% elif product.status == 'archiviato' %}zeus-badge-red
+                                    {% endif %}">
+                                    {{ product.get_status_display }}
+                                </span>
+                            </div>
                             <p class="mt-1 text-sm text-content-muted">
+                                {% if product.codice %}{{ product.codice }} · {% endif %}
+                                {% if product.tipologia %}{{ product.tipologia }} · {% endif %}
                                 {% with dna=product.dna_versions.first %}
                                     {% if dna %}
                                         DNA v{{ dna.version }} · {{ dna.dna_type }}
@@ -52,7 +69,7 @@
         </div>
     {% else %}
         <div class="zeus-card p-8 text-center">
-            <p class="text-content-muted">Nessun prodotto ancora. Creane uno per iniziare.</p>
+            <p class="text-content-muted">Nessuno specialista ancora. Creane uno per iniziare.</p>
         </div>
     {% endif %}
 </div>

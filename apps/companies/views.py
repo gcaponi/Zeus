@@ -3063,7 +3063,23 @@ def product_list_create(request):
                 "error": "Prodotto con questo nome gia esistente.",
             }, status=400)
 
-        Product.objects.create(company=company, name=name, slug=slug)
+        tipologia = request.POST.get("tipologia", "").strip()
+        codice = request.POST.get("codice", "").strip()
+        if codice and Product.objects.filter(company=company, codice=codice).exists():
+            return render(request, "core/product_list.html", {
+                "company": company,
+                "products": products,
+                "error": "Codice gia in uso per un altro specialista.",
+            }, status=400)
+
+        Product.objects.create(
+            company=company,
+            name=name,
+            slug=slug,
+            tipologia=tipologia,
+            codice=codice,
+            status=Product.STATUS_BOZZA,
+        )
         subscription = _subscription_for_company(company)
         if subscription:
             subscription.product_dnas_used = company.products.count()
