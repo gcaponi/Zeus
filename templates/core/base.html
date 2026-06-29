@@ -737,7 +737,7 @@
             color: var(--text-primary);
             font-family: 'Georgia', 'Cambria', 'Times New Roman', serif;
             font-size: clamp(1.05rem, 0.35vw + 1rem, 1.2rem);
-            line-height: 1.9;
+            line-height: 1.75;
             letter-spacing: 0;
             text-align: justify;
         }
@@ -749,7 +749,7 @@
         }
 
         .zeus-prose p + p {
-            margin-top: 1.5rem;
+            margin-top: 1rem;
         }
 
         .zeus-prose strong {
@@ -797,7 +797,7 @@
         </a>
         <div class="zeus-nav-links">
             <a href="{% url 'onboarding-index' %}">Onboarding</a>
-            <a href="{% url 'product-list-create' %}">Prodotti</a>
+            <a href="{% url 'product-list-create' %}">Specialisti</a>
         </div>
         <button type="button" id="theme-toggle" class="zeus-btn zeus-btn-ghost" style="padding: 0.5rem 0.75rem; font-size: 0.82rem; min-height: 2.2rem;" aria-label="Cambia tema">
             <i data-lucide="sun" class="hidden dark:block" style="width:16px;height:16px;"></i>
@@ -811,7 +811,7 @@
         </button>
         <div id="zeus-mobile-menu" class="zeus-mobile-menu">
             <a href="{% url 'onboarding-index' %}">Onboarding</a>
-            <a href="{% url 'product-list-create' %}">Prodotti</a>
+            <a href="{% url 'product-list-create' %}">Specialisti</a>
             <button type="button" onclick="document.getElementById('theme-toggle').click()" class="text-left">Tema chiaro/scuro</button>
             <a href="{% url 'account_logout' %}">Esci</a>
         </div>

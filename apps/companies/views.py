@@ -2584,7 +2584,7 @@ def dna_download_pdf(request):
 
     pdf_bytes = _render_dna_pdf(company, dna, _dna_final_document(dna.content))
     response = HttpResponse(pdf_bytes, content_type="application/pdf")
-    response["Content-Disposition"] = 'attachment; filename="DNA_aziendale.pdf"'
+    response["Content-Disposition"] = 'attachment; filename="DNA_Generale.pdf"'
     return response
 
 

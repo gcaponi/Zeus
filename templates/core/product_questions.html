@@ -1,6 +1,6 @@
 {% extends "core/base.html" %}
 
-{% block title %}Domande Prodotto · {{ product.name }} — ZEUS{% endblock %}
+{% block title %}Domande Specialista · {{ product.name }} — ZEUS{% endblock %}
 
 {% block extra_head %}
 <script src="https://unpkg.com/htmx.org@1.9.12"></script>
@@ -10,7 +10,7 @@
 <div class="zeus-page-wrap">
     <header class="mb-8">
         <a href="{% url 'product-detail' product.pk %}" class="text-sm text-brand-cyan hover:underline">← {{ product.name }}</a>
-        <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">10 domande per il DNA prodotto</h1>
+        <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">10 domande per il DNA specialista</h1>
         <p class="mt-2 text-content-secondary">Generate dai principi D1-D20 sul pre-DNA v{{ pre_dna.version }}.</p>
         <span class="zeus-badge zeus-badge-cyan mt-3">{{ plan_label }}</span>
     </header>
@@ -19,7 +19,7 @@
 
     {% if complete_dna %}
         <div class="mb-6 zeus-card p-5" style="border-color: rgba(34, 197, 94, 0.3); background: rgba(34, 197, 94, 0.05);">
-            <p class="zeus-label text-brand-lime">DNA prodotto completo generato</p>
+            <p class="zeus-label text-brand-lime">DNA specialista completo generato</p>
             <p class="mt-2 text-lg font-bold font-display">Versione {{ complete_dna.version }} pronta per la revisione.</p>
             <a href="{% url 'product-review' product.pk %}" class="zeus-btn zeus-btn-primary mt-4">Vai alla revisione finale →</a>
         </div>
@@ -48,7 +48,7 @@
             </section>
         {% endfor %}
         <div class="sticky bottom-4 zeus-card p-4" style="background: var(--glass-strong); backdrop-filter: blur(20px);">
-            <button type="submit" class="zeus-btn zeus-btn-primary w-full">Genera DNA prodotto completo</button>
+            <button type="submit" class="zeus-btn zeus-btn-primary w-full">Genera DNA specialista completo</button>
         </div>
     </form>
 </div>

@@ -5,9 +5,9 @@
 {% block content %}
 <div class="zeus-page-wrap">
     <header class="mb-8">
-        <a href="{% url 'product-list-create' %}" class="text-sm text-brand-cyan hover:underline">← Prodotti</a>
+        <a href="{% url 'product-list-create' %}" class="text-sm text-brand-cyan hover:underline">← Specialisti</a>
         <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">{{ product.name }}</h1>
-        <p class="mt-2 text-content-secondary">Gestione DNA prodotto</p>
+        <p class="mt-2 text-content-secondary">Gestione DNA specialista</p>
     </header>
 
     {% include "core/onboarding/_product_step_indicator.html" with product_step=product_step %}
@@ -19,17 +19,26 @@
     {% endif %}
 
     <div class="mb-6 zeus-card p-6">
-        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <h2 class="text-lg font-bold font-display">Carica file</h2>
+        <p class="mt-1 text-sm text-content-secondary">
+            {{ product_files_count }}{% if product_file_limit %}/{{ product_file_limit }}{% endif %} file caricati per questo specialista.
+        </p>
+
+        <form method="post" action="{% url 'product-file-upload' product.pk %}" enctype="multipart/form-data" class="mt-4 space-y-4">
+            {% csrf_token %}
             <div>
-                <h2 class="text-lg font-bold font-display">File prodotto caricati</h2>
-                <p class="mt-1 text-sm text-content-secondary">
-                    {{ product_files_count }}{% if product_file_limit %}/{{ product_file_limit }}{% endif %} file usati per questo prodotto.
-                </p>
+                <label class="zeus-label">File (PDF, TXT, MD, PNG, JPG)</label>
+                <input type="file" name="file" class="zeus-input" style="padding: 0.6rem;">
             </div>
-        </div>
+            <div>
+                <label class="zeus-label">Note aggiuntive</label>
+                <textarea name="notes" rows="3" class="zeus-input" placeholder="Descrizione, specifiche, ecc."></textarea>
+            </div>
+            <button type="submit" class="zeus-btn zeus-btn-primary">Carica</button>
+        </form>
 
         {% if product_files %}
-            <ul class="mt-4 space-y-2">
+            <ul class="mt-6 space-y-2">
                 {% for file in product_files %}
                     <li class="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-content-secondary">
                         <span class="font-semibold text-content-primary break-all">{{ file.original_name }}</span>
@@ -38,29 +47,15 @@
                 {% endfor %}
             </ul>
         {% else %}
-            <p class="mt-4 text-sm text-content-muted">Nessun file o nota prodotto ancora caricata.</p>
+            <p class="mt-6 text-sm text-content-muted">Nessun file o nota ancora caricata.</p>
         {% endif %}
     </div>
 
     {% if not dna %}
         <div class="zeus-card p-6">
             <h2 class="text-lg font-bold font-display">Genera pre-DNA</h2>
-            <p class="mt-2 text-sm text-content-secondary">Carica prima dei file prodotto, poi genera il pre-DNA.</p>
-
-            <form method="post" action="{% url 'product-file-upload' product.pk %}" enctype="multipart/form-data" class="mt-6 space-y-4">
-                {% csrf_token %}
-                <div>
-                    <label class="zeus-label">File prodotto (PDF, TXT, MD, PNG, JPG)</label>
-                    <input type="file" name="file" class="zeus-input" style="padding: 0.6rem;">
-                </div>
-                <div>
-                    <label class="zeus-label">Note aggiuntive</label>
-                    <textarea name="notes" rows="3" class="zeus-input" placeholder="Descrizione, specifiche, ecc."></textarea>
-                </div>
-                <button type="submit" class="zeus-btn zeus-btn-primary">Carica</button>
-            </form>
-
-            <form method="post" action="{% url 'product-dna-generate' product.pk %}" class="mt-6">
+            <p class="mt-2 text-sm text-content-secondary">Carica almeno un file, poi genera il pre-DNA.</p>
+            <form method="post" action="{% url 'product-dna-generate' product.pk %}" class="mt-4">
                 {% csrf_token %}
                 <button type="submit" class="zeus-btn zeus-btn-primary w-full">Genera pre-DNA →</button>
             </form>
