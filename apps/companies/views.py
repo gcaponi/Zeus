@@ -13,7 +13,12 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
-from apps.companies.dna_schemas import LAYER_KEYS, LAYER_TITLES
+from apps.companies.dna_schemas import (
+    LAYER_KEYS,
+    LAYER_TITLES,
+    PRODUCT_LAYER_KEYS,
+    PRODUCT_LAYER_TITLES,
+)
 from apps.companies.llm_client import (
     LLM_MODEL,
     LLM_MODEL_PRO,
@@ -871,7 +876,7 @@ Output JSON esatto:
   "follow_ups": [
     {{
       "target_question_code": "D1",
-      "section_key": "identita|modelli_mentali|nucleo_tecnico|confini|tono|logica_decisionale",
+      "section_key": "identita_tecnica|architettura|specifiche|applicazione|vincoli|configurazione",
       "principle": "nome breve del principio",
       "question": "domanda follow-up mirata",
       "answer_depth": "generica|mirata|analitica",
@@ -2638,8 +2643,8 @@ def _render_dna_pdf(company, dna, final_document):
 
 def _product_dna_sections(content, old_content=None):
     sections = []
-    for key in LAYER_KEYS:
-        label = LAYER_TITLES[key]
+    for key in PRODUCT_LAYER_KEYS:
+        label = PRODUCT_LAYER_TITLES[key]
         raw_value = _as_text(content.get(key) if isinstance(content, dict) else None)
         value = _strip_source_markers(raw_value)
         old_value = None
@@ -2694,10 +2699,10 @@ Regole obbligatorie:
 - Non fare domande generiche se il piano e Professional o Legacy.
 - Per Legacy comportati da vero analista professionale: devi estrarre
   logica applicativa, vincoli tecnici, valore differenziante.
-- Usa i 6 strati cognitivi come assi di analisi (identita, modelli_mentali,
-  nucleo_tecnico, confini, tono, logica_decisionale), ma scegli tu i 10 piu utili.
+- Usa i 6 layer tecnici come assi di analisi (identita_tecnica, architettura,
+  specifiche, applicazione, vincoli, configurazione), ma scegli tu i 10 piu utili.
 - DUE POOL DI DOMANDE:
-  - Pool "template": 7 domande ancorate ai 6 strati cognitivi + 1 war story.
+  - Pool "template": 7 domande ancorate ai 6 layer tecnici + 1 war story.
     Nascono dal pre-DNA e dal DNA Generale, non dai file specifici.
   - Pool "kb_anchored": 3 domande che nascono leggendo i file specifici
     della famiglia prodotto (brochure, disegni, manuali). Queste sono le
@@ -2710,7 +2715,7 @@ Formato JSON:
     {{
       "code": "D1",
       "pool": "template|kb_anchored",
-      "section_key": "identita|modelli_mentali|nucleo_tecnico|confini|tono|logica_decisionale",
+      "section_key": "identita_tecnica|architettura|specifiche|applicazione|vincoli|configurazione",
       "principle": "nome breve del principio usato",
       "question": "domanda al cliente",
       "answer_depth": "generica|mirata|analitica",
@@ -2767,12 +2772,12 @@ def _generate_product_questions(product, dna):
         latency_ms=result.latency_ms,
     )
 
-    section_keys = set(LAYER_KEYS)
+    section_keys = set(PRODUCT_LAYER_KEYS)
     used_codes = set(dna.questions.values_list("code", flat=True))
     for raw_question in product_questions:
-        section_key = raw_question.get("section_key", "logica_decisionale")
+        section_key = raw_question.get("section_key", "identita_tecnica")
         if section_key not in section_keys:
-            section_key = "logica_decisionale"
+            section_key = "identita_tecnica"
         code = _unique_question_code(raw_question.get("code"), used_codes, "D?")
         pool = raw_question.get("pool", ProductQuestion.POOL_TEMPLATE)
         if pool not in (ProductQuestion.POOL_TEMPLATE, ProductQuestion.POOL_KB_ANCHORED):
@@ -2814,7 +2819,7 @@ def _global_product_dna_synthesis(product, pre_dna_content, questions):
 
 Hai un pre-DNA specialista generato dalle fonti prodotto e le risposte del cliente.
 Il tuo compito e LEGGERE, COMPRENDERE e RIGENERARE il DNA Specialista completo come
-documento cognitivo coerente per la famiglia prodotto "{product.name}".
+documento tecnico coerente per il prodotto "{product.name}".
 
 REGOLE FONDAMENTALI:
 
@@ -2824,27 +2829,23 @@ REGOLE FONDAMENTALI:
 3. SE UNA RISPOSTA CORREGGE IL PRE-DNA, la risposta prevale sempre.
 4. NON ASSOLUTIZZARE. Mai "garantisce", "certezza assoluta".
 5. NON INVENTARE. Se qualcosa non e coperto, scrivi "Da chiarire in intervista: ...".
-6. MARCATORI FONTE: mantieni [SRC:...] esistenti e aggiungi [SRC:answer].
-   I marcatori NON vanno nella sintesi_cognitiva.
-7. EREDITA DAL DNA GENERALE: non ripetere principi gia stabiliti nel DNA Generale.
-   Aggiungi SOLO specificita della famiglia prodotto.
+6. EREDITA DAL DNA GENERALE: non ripetere principi gia stabiliti nel DNA Generale.
+   Aggiungi SOLO specificita tecniche del prodotto.
 
-OUTPUT: JSON completo con tutte le 6 sezioni cognitive + sintesi_cognitiva.
+OUTPUT: JSON completo con ESATTAMENTE queste 6 chiavi tecniche.
 Il formato target NON dipende dalla struttura del pre-DNA: devi produrre SEMPRE
 tutte le chiavi canoniche.
 
 CHIAVI TOP-LEVEL OBBLIGATORIE, ESATTE E UNICHE:
-1. sintesi_cognitiva
-2. identita
-3. modelli_mentali
-4. nucleo_tecnico
-5. confini
-6. tono
-7. logica_decisionale
+1. identita_tecnica
+2. architettura
+3. specifiche
+4. applicazione
+5. vincoli
+6. configurazione
 
-VIETATI alias o nomi creativi: non usare identita_e_promessa, confini_produttivi,
-innovazione_e_sostenibilita, tono_comunicativo o altre varianti. Ogni sezione
-interna deve essere una stringa narrativa completa e autonoma.
+VIETATI alias o nomi creativi. Ogni sezione deve essere una stringa narrativa
+tecnica completa e autonoma.
 
 REGOLA ASSOLUTA: il tuo output inizia con {{ e finisce con }}. Nessun preambolo,
 nessuna spiegazione, nessun markdown, nessun blocco ```json.
@@ -2894,24 +2895,8 @@ Rispondi con SOLO il JSON, senza markdown, senza preambolo.""".strip()
 
 
 def _apply_product_self_critique(dna, product):
-    """Run 2-pass self-critique on specialist DNA layers (duplicato temporaneo)."""
-    try:
-        from apps.companies.dna_critique import self_critique_dna
-        from apps.companies.dna_schemas import LAYER_KEYS as LK
-        from apps.companies.dna_schemas import DNAGeneraleSchema
-        from apps.companies.dna_enrichment import compute_enrichment
-
-        layer_content = {k: dna.content.get(k) for k in LK if k in dna.content}
-        schema = DNAGeneraleSchema.model_validate(layer_content)
-        refined, _report = self_critique_dna(schema, get_llm_client())
-        new_content = dict(dna.content)
-        new_content.update(refined.model_dump())
-        dna.content = new_content
-
-        dna._enrichment = compute_enrichment(dna.content)
-        dna.save(update_fields=["content", "_enrichment"])
-    except Exception:
-        logger.exception("Self-critique failed for product DNA %s", dna.id)
+    """Self-critique disabled for product technical layers (will be reimplemented in PIANO 5)."""
+    pass
 
 
 def _finalize_complete_product_dna(dna, pre_dna, product):
@@ -3458,7 +3443,7 @@ def product_section_approve(request, pk, section_key):
     dna = ProductDNA.objects.filter(product=product, is_current=True).first()
     if not dna:
         return JsonResponse({"error": "dna not found"}, status=404)
-    if section_key not in set(LAYER_KEYS):
+    if section_key not in set(PRODUCT_LAYER_KEYS):
         return JsonResponse({"error": "invalid section_key"}, status=400)
 
     body = _request_data(request)
@@ -3530,7 +3515,7 @@ def product_section_edit(request, pk, section_key):
     old_dna = ProductDNA.objects.filter(product=product, is_current=True).first()
     if not old_dna:
         return JsonResponse({"error": "dna not found"}, status=404)
-    if section_key not in set(LAYER_KEYS):
+    if section_key not in set(PRODUCT_LAYER_KEYS):
         return JsonResponse({"error": "invalid section_key"}, status=400)
 
     body = _request_data(request)

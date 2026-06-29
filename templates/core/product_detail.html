@@ -70,7 +70,7 @@
         <div class="zeus-card p-6">
             <h2 class="text-lg font-bold font-display">Genera pre-DNA</h2>
             <p class="mt-2 text-sm text-content-secondary">Carica almeno un file, poi genera il pre-DNA.</p>
-            <form method="post" action="{% url 'product-dna-generate' product.pk %}" class="mt-4">
+            <form method="post" action="{% url 'product-dna-generate' product.pk %}" class="mt-4" onsubmit="showNeuralPopup();">
                 {% csrf_token %}
                 <button type="submit" class="zeus-btn zeus-btn-primary w-full">Genera pre-DNA →</button>
             </form>
@@ -139,5 +139,60 @@
         }
     });
 })();
+
+function showNeuralPopup() {
+    var popup = document.getElementById('neural-popup');
+    if (!popup) return;
+    popup.classList.remove('hidden');
+    popup.classList.add('flex');
+    var steps = document.querySelectorAll('.neural-step');
+    var current = 0;
+    function activateStep() {
+        if (current > 0) {
+            steps[current - 1].classList.remove('active');
+            steps[current - 1].classList.add('done');
+        }
+        if (current < steps.length) {
+            steps[current].classList.add('active');
+            current++;
+            setTimeout(activateStep, 1200);
+        }
+    }
+    activateStep();
+}
 </script>
+
+<div id="neural-popup" class="fixed inset-0 z-50 hidden items-center justify-center" style="background: rgba(2,6,23,0.6); backdrop-filter: blur(8px);">
+    <div class="zeus-card p-8 text-center mx-4" style="max-width: min(420px, calc(100vw - 2rem));">
+        <h3 class="text-lg font-bold font-display text-white mb-2">Analisi Neurale</h3>
+        <p class="text-sm text-white/60 mb-6">ZEUS sta elaborando i documenti</p>
+        <div class="space-y-3 text-left">
+            <div class="neural-step flex items-center gap-3 opacity-30 transition-all duration-500">
+                <div class="w-6 h-6 rounded-full border-2 border-brand-cyan flex items-center justify-center text-xs"></div>
+                <span class="text-sm text-white">Layer 1: Lettura documenti</span>
+            </div>
+            <div class="neural-step flex items-center gap-3 opacity-30 transition-all duration-500">
+                <div class="w-6 h-6 rounded-full border-2 border-brand-cyan flex items-center justify-center text-xs"></div>
+                <span class="text-sm text-white">Layer 2: Estrazione fatti tecnici</span>
+            </div>
+            <div class="neural-step flex items-center gap-3 opacity-30 transition-all duration-500">
+                <div class="w-6 h-6 rounded-full border-2 border-brand-cyan flex items-center justify-center text-xs"></div>
+                <span class="text-sm text-white">Layer 3: Analisi pattern e principi</span>
+            </div>
+            <div class="neural-step flex items-center gap-3 opacity-30 transition-all duration-500">
+                <div class="w-6 h-6 rounded-full border-2 border-brand-cyan flex items-center justify-center text-xs"></div>
+                <span class="text-sm text-white">Layer 4: Sintesi DNA Specialista</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.neural-step.active { opacity: 1; }
+.neural-step.active > div:first-child { border-color: #22d3ee; background: rgba(34,211,238,0.1); animation: pulse-neural 1s infinite; }
+.neural-step.done { opacity: 0.6; }
+.neural-step.done > div:first-child { border-color: #22c55e; background: rgba(34,197,94,0.1); }
+.neural-step.done > div:first-child::after { content: '✓'; color: #22c55e; font-size: 12px; }
+@keyframes pulse-neural { 0%, 100% { box-shadow: 0 0 0 0 rgba(34,211,238,0.3); } 50% { box-shadow: 0 0 0 6px rgba(34,211,238,0); } }
+</style>
 {% endblock %}

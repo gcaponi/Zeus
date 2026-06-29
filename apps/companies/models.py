@@ -1,7 +1,13 @@
 from django.conf import settings
 from django.db import models
 
-from apps.companies.dna_schemas import LAYER_KEYS, LAYER_TITLES
+from apps.companies.dna_schemas import (
+    LAYER_KEYS,
+    LAYER_TITLES,
+    PRODUCT_LAYER_KEYS,
+    PRODUCT_LAYER_TITLES,
+    PRODUCT_DNA_SECTION_CHOICES,
+)
 
 DNA_GENERALE_SECTION_CHOICES = [(key, LAYER_TITLES[key]) for key in LAYER_KEYS]
 
@@ -447,7 +453,7 @@ class ProductDNA(models.Model):
         return {s.section_key for s in self.section_approvals.filter(is_clarification=False)}
 
     def missing_sections(self):
-        all_keys = set(LAYER_KEYS)
+        all_keys = set(PRODUCT_LAYER_KEYS)
         return sorted(all_keys - self.approved_sections())
 
 
@@ -495,7 +501,7 @@ class ProductQuestion(models.Model):
     )
     code = models.CharField(max_length=4)
     plan_slug = models.CharField(max_length=20, default="starter")
-    section_key = models.CharField(max_length=20, default="logica_decisionale")
+    section_key = models.CharField(max_length=20, default="identita_tecnica")
     principle = models.CharField(max_length=120)
     question = models.TextField()
     answer_depth = models.CharField(max_length=40, default="generica")
@@ -531,7 +537,7 @@ class ProductQuestion(models.Model):
 
 
 class ProductSectionApproval(models.Model):
-    SECTION_KEYS = DNA_GENERALE_SECTION_CHOICES
+    SECTION_KEYS = PRODUCT_DNA_SECTION_CHOICES
 
     dna = models.ForeignKey(
         ProductDNA,

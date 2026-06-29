@@ -30,6 +30,33 @@ LAYER_TITLES = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Product / Specialist DNA — 6 technical layers (hierarchical extraction)
+# ---------------------------------------------------------------------------
+
+PRODUCT_LAYER_KEYS = [
+    "identita_tecnica",
+    "architettura",
+    "specifiche",
+    "applicazione",
+    "vincoli",
+    "configurazione",
+]
+
+PRODUCT_LAYER_TITLES = {
+    "identita_tecnica": "Identità del prodotto",
+    "architettura": "Architettura & componenti",
+    "specifiche": "Specifiche & parametri",
+    "applicazione": "Processo & installazione",
+    "vincoli": "Vincoli & limiti operativi",
+    "configurazione": "Logica di configurazione",
+}
+
+PRODUCT_DNA_SECTION_CHOICES = [
+    (key, PRODUCT_LAYER_TITLES[key]) for key in PRODUCT_LAYER_KEYS
+]
+
+
 class Identita(BaseModel):
     """Layer 1 — WHO the agent is and HOW it positions itself."""
     postura: str = Field(description="How the agent positions itself: side-by-side or leading")

@@ -166,7 +166,7 @@ def _generate_dna(source: Source, company):
 
 
 def _generate_product_dna(product: Product, company):
-    """Generate ProductDNA from product files and company DNA."""
+    """Generate ProductDNA from product files and company DNA using multi-layer analysis."""
     documents = []
     for product_file in product.product_files.all()[:10]:
         documents.append(f"# {product_file.original_name}\n{product_file.content_text}")
@@ -179,24 +179,47 @@ def _generate_product_dna(product: Product, company):
         company_context = json.dumps(company_dna.content, ensure_ascii=False, indent=2)
 
     prompt = f"""
-Sei ZEUS. Genera un pre-DNA per il prodotto "{product.name}" dell'azienda {company.name}.
+ANALISI_NEURALE_SPECIALISTA
 
-DNA AZIENDALE:
+Sei ZEUS. Analizza i documenti tecnici del prodotto "{product.name}" dell'azienda {company.name}.
+Elabora i documenti come una rete neurale a 4 layer di feature extraction gerarchica.
+
+LAYER 1 — FATTI GREZZI: Estrai tutti i fatti tecnici dai documenti
+(materiali, dimensioni, standard, processi, certificazioni, tolleranze).
+
+LAYER 2 — PATTERN: Identifica relazioni e dipendenze tra i fatti
+(materiale + spessore → proprieta, dimensione → vincolo installazione).
+
+LAYER 3 — SEMANTICA: Sintetizza principi guida e vincoli semantici
+(scopo del prodotto, confini operativi, logica di configurazione).
+
+LAYER 4 — DNA: Mappa tutto su 6 sezioni tecniche strutturate.
+
+DNA AZIENDALE (contesto — eredita, non ripetere):
 {company_context or "Non disponibile"}
 
 DOCUMENTI PRODOTTO:
 {chr(10).join(documents) or "Nessun documento prodotto caricato."}
 
-Genera un JSON con queste sezioni:
+Output JSON con ESATTAMENTE queste 6 chiavi (ogni valore e una stringa
+narrativa tecnica completa e autonoma):
+
 {{
-  "descrizione": "Descrizione sintetica del prodotto",
-  "applicazione": "Come e dove si usa il prodotto",
-  "specifiche": "Specifiche tecniche principali",
-  "vincoli": "Vincoli tecnici, produttivi o applicativi",
-  "valore": "Valore differenziante del prodotto"
+  "identita_tecnica": "Cosa e il prodotto, che problema risolve, categoria tecnica di appartenenza",
+  "architettura": "Materiali, struttura, componenti, come e costruito fisicamente",
+  "specifiche": "Dimensioni, tolleranze, standard di riferimento, certificazioni, parametri numerici",
+  "applicazione": "Come si monta, si usa, si mantiene, workflow di installazione e ispezione",
+  "vincoli": "Cosa NON fa, limiti ambientali, incompatibilita, controindicazioni tecniche",
+  "configurazione": "Varianti disponibili, personalizzazioni accettate, quando dire no a richieste custom"
 }}
 
-Rispondi SOLO JSON valido, senza markdown.
+REGOLE:
+- Ogni sezione deve contenere informazioni tecniche specifiche estratte dai documenti.
+- Se un'informazione non e presente nei documenti, scrivi "Da chiarire in intervista".
+- Non inventare dati tecnici non presenti nei documenti.
+- Il tono e tecnico-preciso, non commerciale.
+
+Rispondi SOLO JSON valido, senza markdown, senza preambolo.
 """.strip()
 
     client = get_llm_client()
@@ -220,10 +243,8 @@ Rispondi SOLO JSON valido, senza markdown.
         latency_ms=result.latency_ms,
     )
 
-    product_section_keys = {
-        "descrizione", "applicazione", "specifiche", "vincoli", "valore",
-    }
-    missing = [k for k in product_section_keys if not content.get(k)]
+    from apps.companies.dna_schemas import PRODUCT_LAYER_KEYS as PLK
+    missing = [k for k in PLK if not content.get(k)]
     if missing:
         logger.warning(
             "Product pre-DNA incompleto per %s, sezioni mancanti: %s",

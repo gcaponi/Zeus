@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Any
 
-from apps.companies.dna_schemas import LAYER_KEYS
+from apps.companies.dna_schemas import LAYER_KEYS, PRODUCT_LAYER_KEYS
 
 logger = logging.getLogger(__name__)
 
@@ -446,7 +446,7 @@ class MockLLMClient(LLMClient):
                 "enterprise": "Risposta analitica sulla logica della famiglia prodotto.",
             }[plan_slug]
             questions = []
-            sections = list(LAYER_KEYS)
+            sections = list(PRODUCT_LAYER_KEYS)
             for index in range(10):
                 code = f"D{index + 1}"
                 questions.append({
@@ -467,6 +467,45 @@ class MockLLMClient(LLMClient):
                 tokens_out=300,
                 cost=0.0002,
                 latency_ms=900,
+            )
+
+        if "ANALISI_NEURALE_SPECIALISTA" in prompt or "SINTESI_GLOBALE_DNA_SPECIALISTA" in prompt:
+            return LLMResult(
+                text=json.dumps({
+                    "identita_tecnica": (
+                        "Sistema di scarico integrato in vasca, progettato per garantire "
+                        "ispezionabilita senza smontaggio. Appartiene alla categoria dei "
+                        "canali di drenaggio tecnico per edilizia residenziale e commerciale."
+                    ),
+                    "architettura": (
+                        "Canale in acciaio INOX AISI 304 spessore 2mm, giunzioni saldate TIG. "
+                        "Copricanale removibile con sistema di scorrimento laterale. "
+                        "Piastrino di ispezione integrato per accesso diretto."
+                    ),
+                    "specifiche": (
+                        "Sezione 90x90mm, lunghezza modulare 100cm, tolleranza +-0.5mm. "
+                        "Conforme EN 1123. Portata nominale 12 l/s. Peso 3.2 kg/m lineare."
+                    ),
+                    "applicazione": (
+                        "Installazione su letto di malta, stuccaggio perimetrale con sigillante "
+                        "epossidico. Ispezione tramite sfila-copricanale senza attrezzi. "
+                        "Manutenzione consigliata ogni 6 mesi per rimozione residui."
+                    ),
+                    "vincoli": (
+                        "Non per carichi verticali superiori a 200kg. Non compatibile con vasche "
+                        "in resina. Temperatura massima 80C. Non installare in presenza di "
+                        "agenti chimici corrosivi forti."
+                    ),
+                    "configurazione": (
+                        "Sezione geometrica fissa, modificabile solo in lunghezza (moduli da 50-100cm). "
+                        "Custom accettati su lotti superiori a 50pz. Non si realizzano varianti "
+                        "di forma per richieste singole."
+                    ),
+                }, ensure_ascii=False),
+                tokens_in=600,
+                tokens_out=400,
+                cost=0.0004,
+                latency_ms=800,
             )
 
         return LLMResult(
