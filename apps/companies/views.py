@@ -1313,7 +1313,23 @@ def _extract_company_file_text(uploaded_file):
     name = uploaded_file.name or "documento-azienda.txt"
     if name.lower().endswith(".pdf"):
         doc = fitz.open(stream=raw, filetype="pdf")
-        return "\n".join(page.get_text() for page in doc)[:30000], len(raw), name
+        text = "\n".join(page.get_text() for page in doc)
+        # Fallback OCR per PDF scannerizzati
+        if not text.strip():
+            has_images = any(page.get_images() for page in doc)
+            if has_images:
+                try:
+                    from pdf2image import convert_from_bytes
+                    import pytesseract
+                    images = convert_from_bytes(raw, dpi=200, first_page=1, last_page=min(3, doc.page_count))
+                    ocr_texts = []
+                    for img in images:
+                        ocr_texts.append(pytesseract.image_to_string(img, lang="ita+eng"))
+                    text = "\n\n".join(ocr_texts)
+                except Exception:
+                    text = ""
+        doc.close()
+        return text[:30000], len(raw), name
     if name.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
         return (
             f"Immagine caricata: {name}. Estrazione OCR/vision non ancora attiva in questo MVP.",
