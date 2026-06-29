@@ -1321,7 +1321,11 @@ def _extract_company_file_text(uploaded_file):
                 try:
                     from pdf2image import convert_from_bytes
                     import pytesseract
-                    images = convert_from_bytes(raw, dpi=200, first_page=1, last_page=min(3, doc.page_count))
+                    pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
+                    images = convert_from_bytes(
+                        raw, dpi=200, poppler_path="/usr/bin",
+                        first_page=1, last_page=min(3, doc.page_count),
+                    )
                     ocr_texts = []
                     for img in images:
                         ocr_texts.append(pytesseract.image_to_string(img, lang="ita+eng"))
