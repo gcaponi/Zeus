@@ -57,6 +57,7 @@
             <div class="mt-4 flex flex-wrap justify-center gap-3">
                 <a href="{% url 'product-dna-visualize' product.pk %}" class="zeus-btn zeus-btn-primary">Visualizza DNA completo →</a>
                 <a href="{% url 'product-dna-download-pdf' product.pk %}" class="zeus-btn zeus-btn-secondary">Scarica PDF completo</a>
+                <a href="{% url 'product-dna-feedback' product.pk %}" class="zeus-btn zeus-btn-secondary" style="background: rgba(167, 139, 250, 0.15); border-color: rgba(167, 139, 250, 0.3);">Aggiorna DNA Generale</a>
                 <a href="{% url 'product-list-create' %}" class="zeus-btn zeus-btn-ghost">Torna agli specialisti</a>
             </div>
         </div>

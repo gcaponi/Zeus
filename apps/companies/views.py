@@ -3600,3 +3600,172 @@ def product_dna_download_pdf(request, pk):
     response = HttpResponse(pdf_bytes, content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="DNA_{product.name.replace(" ", "_")}.pdf"'
     return response
+
+
+def _generate_specialist_feedback_proposals(product, specialist_dna, company_dna):
+    """Ask LLM: what does this Specialist DNA reveal that the Company DNA doesn't capture yet?"""
+    specialist_json = json.dumps(
+        {k: specialist_dna.content.get(k, "") for k in PRODUCT_LAYER_KEYS},
+        ensure_ascii=False,
+        indent=2,
+    )
+    company_json = json.dumps(company_dna.content, ensure_ascii=False, indent=2)
+
+    prompt = f"""
+FEEDBACK_SPECIALISTA_GENERALE
+
+Sei ZEUS. Hai un DNA Specialista approvato per "{product.name}" e il DNA Generale dell'azienda.
+Il tuo compito e identificare cosa il DNA Specialista rivela che il DNA Generale NON cattura ancora.
+
+Per ogni proposta, indica:
+- quale sezione del DNA Generale aggiornare (identita, modelli_mentali, nucleo_tecnico, confini, tono, logica_decisionale)
+- il valore attuale
+- il valore proposto (integra, non sostituire)
+- la motivazione (cosa ha rivelato lo specialista)
+
+Regole:
+- Proponi SOLO aggiornamenti che aggiungono informazione nuova.
+- Non ripetere cio che il DNA Generale contiene gia.
+- Massimo 5 proposte.
+- Se non c'è nulla di nuovo da aggiungere, ritorna un array vuoto.
+
+DNA SPECIALISTA ({product.name}):
+{specialist_json}
+
+DNA GENERALE:
+{company_json}
+
+Output JSON:
+{{
+  "proposals": [
+    {{
+      "target_layer": "nucleo_tecnico|confini|logica_decisionale|identita|modelli_mentali|tono",
+      "current_value": "riassunto del valore attuale",
+      "proposed_value": "nuovo valore integrato (testo completo)",
+      "rationale": "perche questa proposta nasce dal DNA Specialista"
+    }}
+  ]
+}}
+
+Rispondi SOLO JSON, senza markdown.
+""".strip()
+
+    client = get_llm_client()
+    result, content = _generate_with_retry(
+        client,
+        prompt,
+        model=LLM_MODEL,
+        system_prompt=ZEUS_SYSTEM_PROMPT,
+        temperatures=(0.4, 0.3, 0.2),
+        context="specialist-feedback",
+    )
+
+    LLMCall.objects.create(
+        company=product.company,
+        model_name=LLM_MODEL,
+        prompt_text=prompt,
+        response_text=result.text,
+        tokens_in=result.tokens_in,
+        tokens_out=result.tokens_out,
+        cost_usd=result.cost,
+        latency_ms=result.latency_ms,
+    )
+
+    return content.get("proposals", [])
+
+
+@login_required
+def product_dna_feedback(request, pk):
+    """Show proposals to update Company DNA based on approved Specialist DNA."""
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    product = Product.objects.filter(pk=pk, company=company).first()
+    if not product:
+        return HttpResponse("Prodotto non trovato", status=404)
+
+    specialist_dna = product.dna_versions.filter(
+        is_current=True, dna_type=ProductDNA.TYPE_COMPLETE,
+    ).first()
+    if not specialist_dna or not specialist_dna.is_approved:
+        return HttpResponse("DNA specialista non approvato", status=404)
+
+    company_dna = company.dna_versions.filter(
+        dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True,
+    ).first()
+    if not company_dna:
+        return HttpResponse("DNA Generale non trovato", status=404)
+
+    proposals = _generate_specialist_feedback_proposals(product, specialist_dna, company_dna)
+
+    return render(request, "core/product_dna_feedback.html", {
+        "product": product,
+        "specialist_dna": specialist_dna,
+        "company_dna": company_dna,
+        "proposals": proposals,
+        "product_step": 5,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def product_dna_feedback_apply(request, pk):
+    """Apply selected proposals to Company DNA, creating a new version."""
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    product = Product.objects.filter(pk=pk, company=company).first()
+    if not product:
+        return HttpResponse("Prodotto non trovato", status=404)
+
+    specialist_dna = product.dna_versions.filter(
+        is_current=True, dna_type=ProductDNA.TYPE_COMPLETE,
+    ).first()
+    if not specialist_dna or not specialist_dna.is_approved:
+        return HttpResponse("DNA specialista non approvato", status=404)
+
+    company_dna = company.dna_versions.filter(
+        dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True,
+    ).first()
+    if not company_dna:
+        return HttpResponse("DNA Generale non trovato", status=404)
+
+    selected_indices = request.POST.getlist("selected_proposals")
+    proposals = _generate_specialist_feedback_proposals(product, specialist_dna, company_dna)
+
+    new_content = dict(company_dna.content)
+    applied = []
+    for idx in selected_indices:
+        try:
+            proposal = proposals[int(idx)]
+        except (ValueError, IndexError):
+            continue
+        target = proposal.get("target_layer", "")
+        if target in LAYER_KEYS:
+            current = _as_text(new_content.get(target))
+            proposed = proposal.get("proposed_value", "")
+            if proposed:
+                new_content[target] = f"{current}\n\n{proposed}".strip() if current else proposed
+                applied.append({
+                    "layer": target,
+                    "rationale": proposal.get("rationale", ""),
+                })
+
+    last_version = company.dna_versions.order_by("-version").first()
+    next_version = (last_version.version + 1) if last_version else 1
+    company.dna_versions.filter(is_current=True).update(is_current=False)
+
+    from apps.companies.audit import compute_audit_hash
+    new_dna = CompanyDNA.objects.create(
+        company=company,
+        version=next_version,
+        dna_type=CompanyDNA.TYPE_COMPLETE,
+        content=new_content,
+        is_current=True,
+        created_by=request.user if request.user.is_authenticated else None,
+        previous_hash=company_dna.audit_hash or "",
+    )
+    new_dna.audit_hash = compute_audit_hash(new_content, new_dna.previous_hash or "")
+    new_dna.save(update_fields=["audit_hash"])
+
+    return redirect("dna-review")

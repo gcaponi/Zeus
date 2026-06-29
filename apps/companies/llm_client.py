@@ -508,6 +508,36 @@ class MockLLMClient(LLMClient):
                 latency_ms=800,
             )
 
+        if "FEEDBACK_SPECIALISTA_GENERALE" in prompt:
+            return LLMResult(
+                text=json.dumps({
+                    "proposals": [
+                        {
+                            "target_layer": "nucleo_tecnico",
+                            "current_value": "Acciai speciali per edilizia e industria",
+                            "proposed_value": "Acciai speciali per edilizia e industria. Sistema di canali ispezionabili in INOX AISI 304 come famiglia prodotto distintiva.",
+                            "rationale": "Il DNA Specialista rivela 'Canale Ispezionabile' come famiglia prodotto tecnico non ancora catturata nel DNA Generale.",
+                        },
+                        {
+                            "target_layer": "confini",
+                            "current_value": "Richieste incompatibili con qualita e tracciabilita",
+                            "proposed_value": "Richieste incompatibili con qualita e tracciabilita. Non si realizzano varianti di forma per richieste singole: custom solo su lotti superiori a 50pz.",
+                            "rationale": "Il DNA Specialista definisce un confine operativo chiaro sulle personalizzazioni che arricchisce i confini aziendali.",
+                        },
+                        {
+                            "target_layer": "logica_decisionale",
+                            "current_value": "Il fuori standard deve produrre valore tecnico reale",
+                            "proposed_value": "Il fuori standard deve produrre valore tecnico reale. La sezione geometrica dei prodotti e fissa: la personalizzazione avviene solo in lunghezza modulare, mai nella forma.",
+                            "rationale": "La logica di configurazione del specialista definisce un principio decisionale aziendale sull'adattabilita dei prodotti.",
+                        },
+                    ]
+                }, ensure_ascii=False),
+                tokens_in=700,
+                tokens_out=400,
+                cost=0.0004,
+                latency_ms=900,
+            )
+
         return LLMResult(
             text=json.dumps({
                 "identita": {

@@ -34,6 +34,15 @@
                 4
             </a>
             <span class="{% if product_step == 4 %}text-content-primary{% else %}text-content-muted{% endif %} hidden sm:inline">Visualizza</span>
+            <svg class="w-3 h-3 sm:w-4 sm:h-4 text-content-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        </li>
+        <li class="flex items-center gap-1 sm:gap-2">
+            <a href="{% url 'product-dna-feedback' product.pk %}"
+               class="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-xs font-bold transition-all duration-200
+                       {% if product_step == 5 %}bg-brand-cyan text-white shadow-lg shadow-brand-cyan/30{% else %}bg-surface-input text-content-muted hover:bg-surface-secondary hover:text-content-primary{% endif %}">
+                5
+            </a>
+            <span class="{% if product_step == 5 %}text-content-primary{% else %}text-content-muted{% endif %} hidden sm:inline">Feedback</span>
         </li>
     </ol>
 </nav>

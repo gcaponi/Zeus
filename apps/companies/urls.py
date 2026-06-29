@@ -47,6 +47,12 @@ urlpatterns = [
     path("products/<int:pk>/review/", views.product_review, name="product-review"),
     path("products/<int:pk>/visualize/", views.product_dna_visualize, name="product-dna-visualize"),
     path("products/<int:pk>/download/", views.product_dna_download_pdf, name="product-dna-download-pdf"),
+    path("products/<int:pk>/feedback/", views.product_dna_feedback, name="product-dna-feedback"),
+    path(
+        "products/<int:pk>/feedback/apply/",
+        views.product_dna_feedback_apply,
+        name="product-dna-feedback-apply",
+    ),
     path(
         "products/<int:pk>/section/<str:section_key>/approve/",
         views.product_section_approve,

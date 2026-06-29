@@ -1,0 +1,57 @@
+{% extends "core/base.html" %}
+
+{% block title %}Feedback DNA Generale · {{ product.name }} — ZEUS{% endblock %}
+
+{% block content %}
+<div class="zeus-page-wrap">
+    <header class="mb-8">
+        <a href="{% url 'product-review' product.pk %}" class="text-sm text-brand-cyan hover:underline">← {{ product.name }}</a>
+        <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">Feedback: Specialista → DNA Generale</h1>
+        <p class="mt-2 text-content-secondary">ZEUS ha analizzato il DNA Specialista di "{{ product.name }}" e propone questi aggiornamenti al DNA Generale. Decidi quali accettare.</p>
+    </header>
+
+    {% include "core/onboarding/_product_step_indicator.html" with product_step=product_step %}
+
+    {% if proposals %}
+        <form method="post" action="{% url 'product-dna-feedback-apply' product.pk %}" class="space-y-4">
+            {% csrf_token %}
+            {% for proposal in proposals %}
+                <div class="zeus-card p-5">
+                    <div class="flex items-start gap-4">
+                        <input type="checkbox" name="selected_proposals" value="{{ forloop.counter0 }}" class="mt-1 w-5 h-5 rounded accent-brand-cyan" checked>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2 mb-3">
+                                <span class="zeus-badge zeus-badge-violet">{{ proposal.target_layer }}</span>
+                            </div>
+                            <div class="space-y-3 text-sm">
+                                <div>
+                                    <p class="zeus-label text-content-muted">Valore attuale</p>
+                                    <p class="mt-1 text-content-secondary leading-6">{{ proposal.current_value|default:"(vuoto)" }}</p>
+                                </div>
+                                <div>
+                                    <p class="zeus-label text-brand-lime">Valore proposto (integrato)</p>
+                                    <p class="mt-1 text-content-primary leading-6">{{ proposal.proposed_value }}</p>
+                                </div>
+                                <div>
+                                    <p class="zeus-label text-brand-cyan">Motivazione</p>
+                                    <p class="mt-1 text-content-secondary leading-6 italic">{{ proposal.rationale }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+            <div class="sticky bottom-4 zeus-card p-4 flex flex-col sm:flex-row gap-3" style="background: var(--glass-strong); backdrop-filter: blur(20px);">
+                <a href="{% url 'product-review' product.pk %}" class="zeus-btn zeus-btn-ghost sm:w-auto">← Indietro</a>
+                <button type="submit" class="zeus-btn zeus-btn-primary flex-1">Applica proposte selezionate →</button>
+            </div>
+        </form>
+    {% else %}
+        <div class="zeus-card p-8 text-center">
+            <p class="text-lg font-bold font-display text-content-primary">Nessun aggiornamento necessario</p>
+            <p class="mt-2 text-content-secondary">Il DNA Generale contiene già tutti i concetti rivelati dal DNA Specialista di "{{ product.name }}".</p>
+            <a href="{% url 'product-review' product.pk %}" class="zeus-btn zeus-btn-ghost mt-6">← Torna alla revisione</a>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
