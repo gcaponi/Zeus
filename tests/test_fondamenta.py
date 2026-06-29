@@ -587,6 +587,19 @@ class TestPromptSourceProtocol:
         assert "[SRC:file]" in text
         assert "[SRC:note]" in text
 
+    def test_specialista_prompt_has_six_layers_and_dna_generale_context(self):
+        """The dna_specialista_v1.md prompt must define 6 cognitive layers and
+        include the DNA Generale context placeholder."""
+        from pathlib import Path
+
+        prompt_path = Path(__file__).resolve().parents[1] / "apps" / "companies" / "prompts" / "dna_specialista_v1.md"
+        text = prompt_path.read_text(encoding="utf-8")
+        for key in ("identita", "modelli_mentali", "nucleo_tecnico", "confini", "tono", "logica_decisionale"):
+            assert key in text, f"Missing layer '{key}' in dna_specialista_v1.md"
+        assert "{{dna_generale}}" in text
+        assert "[SRC:dna-generale]" in text
+        assert "EREDITA" in text or "eredita" in text
+
     def test_mock_generate_emits_source_markers(self):
         """MockLLMClient.generate (free-text DNA) must include [SRC:...] markers."""
         client = MockLLMClient()
