@@ -335,6 +335,20 @@ class LLMCall(models.Model):
 
 
 class Product(models.Model):
+    STATUS_BOZZA = "bozza"
+    STATUS_IN_COSTRUZIONE = "in_costruzione"
+    STATUS_IN_VALIDAZIONE = "in_validazione"
+    STATUS_ATTIVO = "attivo"
+    STATUS_ARCHIVIATO = "archiviato"
+
+    STATUS_CHOICES = [
+        (STATUS_BOZZA, "Bozza"),
+        (STATUS_IN_COSTRUZIONE, "In Costruzione"),
+        (STATUS_IN_VALIDAZIONE, "In Validazione"),
+        (STATUS_ATTIVO, "Attivo"),
+        (STATUS_ARCHIVIATO, "Archiviato"),
+    ]
+
     company = models.ForeignKey(
         Company,
         on_delete=models.CASCADE,
@@ -342,6 +356,21 @@ class Product(models.Model):
     )
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255)
+    tipologia = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Es: canale, vasca, piastrini, copricanale",
+    )
+    codice = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Codice interno dello specialista, es: CI-001",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_BOZZA,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -351,6 +380,10 @@ class Product(models.Model):
             models.UniqueConstraint(
                 fields=["company", "slug"],
                 name="unique_product_slug_per_company",
+            ),
+            models.UniqueConstraint(
+                fields=["company", "codice"],
+                name="unique_product_code_per_company",
             ),
         ]
 
@@ -388,6 +421,9 @@ class ProductDNA(models.Model):
         blank=True,
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    audit_hash = models.CharField(max_length=64, null=True, blank=True)
+    previous_hash = models.CharField(max_length=64, null=True, blank=True)
+    _enrichment = models.JSONField(null=True, blank=True)
 
     class Meta:
         verbose_name = "Product DNA"
@@ -411,7 +447,7 @@ class ProductDNA(models.Model):
         return {s.section_key for s in self.section_approvals.filter(is_clarification=False)}
 
     def missing_sections(self):
-        all_keys = {"descrizione", "applicazione", "specifiche", "vincoli", "valore"}
+        all_keys = set(LAYER_KEYS)
         return sorted(all_keys - self.approved_sections())
 
 
@@ -440,6 +476,13 @@ class ProductFile(models.Model):
 
 
 class ProductQuestion(models.Model):
+    POOL_TEMPLATE = "template"
+    POOL_KB_ANCHORED = "kb_anchored"
+    POOL_CHOICES = [
+        (POOL_TEMPLATE, "Template"),
+        (POOL_KB_ANCHORED, "KB Anchored"),
+    ]
+
     product = models.ForeignKey(
         Product,
         on_delete=models.CASCADE,
@@ -452,17 +495,30 @@ class ProductQuestion(models.Model):
     )
     code = models.CharField(max_length=4)
     plan_slug = models.CharField(max_length=20, default="starter")
-    section_key = models.CharField(max_length=20, default="valore")
+    section_key = models.CharField(max_length=20, default="logica_decisionale")
     principle = models.CharField(max_length=120)
     question = models.TextField()
     answer_depth = models.CharField(max_length=40, default="generica")
     answer_guidance = models.TextField(blank=True)
     answer = models.TextField(blank=True)
     answered_at = models.DateTimeField(null=True, blank=True)
+    pool = models.CharField(
+        max_length=20,
+        choices=POOL_CHOICES,
+        default=POOL_TEMPLATE,
+    )
+    question_round = models.PositiveSmallIntegerField(default=1)
+    parent_question = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="follow_ups",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["id"]
+        ordering = ["question_round", "id"]
         constraints = [
             models.UniqueConstraint(
                 fields=["dna", "code"],
@@ -475,13 +531,7 @@ class ProductQuestion(models.Model):
 
 
 class ProductSectionApproval(models.Model):
-    SECTION_KEYS = [
-        ("descrizione", "Descrizione"),
-        ("applicazione", "Applicazione"),
-        ("specifiche", "Specifiche"),
-        ("vincoli", "Vincoli"),
-        ("valore", "Valore"),
-    ]
+    SECTION_KEYS = DNA_GENERALE_SECTION_CHOICES
 
     dna = models.ForeignKey(
         ProductDNA,

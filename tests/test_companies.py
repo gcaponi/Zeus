@@ -1537,30 +1537,70 @@ class TestProductDNAModel:
         dna = ProductDNA.objects.create(
             product=product,
             version=1,
-            content={"descrizione": "test"},
+            content={"identita": "test"},
             created_by=user,
         )
         assert dna.is_current is True
         assert dna.version == 1
         assert str(dna) == "Vasca v1"
 
-    def test_product_dna_missing_sections(self, django_user_model):
+    def test_product_has_status_tipologia_codice(self):
+        company = Company.objects.create(schema_name="testco", name="TestCo")
+        product = Product.objects.create(
+            company=company,
+            name="Canale Ispezionabile",
+            slug="canale-ispezionabile",
+            tipologia="canale",
+            codice="CI-001",
+        )
+        assert product.status == Product.STATUS_BOZZA
+        assert product.get_status_display() == "Bozza"
+        assert product.tipologia == "canale"
+        assert product.codice == "CI-001"
+
+    def test_product_codice_unique_per_company(self):
+        company = Company.objects.create(schema_name="testco", name="TestCo")
+        Product.objects.create(company=company, name="A", slug="a", codice="CI-001")
+        with pytest.raises(Exception):
+            Product.objects.create(company=company, name="B", slug="b", codice="CI-001")
+
+    def test_product_dna_missing_sections_six_layers(self, django_user_model):
         user = django_user_model.objects.create_user(username="t", email="test@x.it", password="pw")
         company = Company.objects.create(schema_name="testco", name="TestCo")
         product = Product.objects.create(company=company, name="Vasca", slug="vasca")
         dna = ProductDNA.objects.create(
             product=product,
             version=1,
-            content={"descrizione": "test"},
+            content={"identita": "test"},
             created_by=user,
         )
-        assert len(dna.missing_sections()) == 5
+        assert len(dna.missing_sections()) == 6
         ProductSectionApproval.objects.create(
             dna=dna,
-            section_key="descrizione",
+            section_key="identita",
             approved_by=user,
         )
-        assert len(dna.missing_sections()) == 4
+        assert len(dna.missing_sections()) == 5
+
+    def test_product_question_has_pool_and_round(self):
+        company = Company.objects.create(schema_name="testco", name="TestCo")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        dna = ProductDNA.objects.create(
+            product=product,
+            version=1,
+            content={"identita": "test"},
+        )
+        q = ProductQuestion.objects.create(
+            product=product,
+            dna=dna,
+            code="D1",
+            question="test?",
+            pool=ProductQuestion.POOL_KB_ANCHORED,
+            question_round=2,
+        )
+        assert q.pool == "kb_anchored"
+        assert q.question_round == 2
+        assert q.parent_question is None
 
 
 @pytest.mark.django_db
