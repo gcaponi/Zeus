@@ -2485,9 +2485,9 @@ def _product_question_generation_prompt(product, dna, plan_slug):
     return f"""
 GENERA_DOMANDE_D1_D20
 
-Sei ZEUS. Devi generare 10 domande per il cliente DOPO aver creato un pre-DNA prodotto.
+Sei ZEUS. Devi generare 10 domande per il cliente DOPO aver creato un pre-DNA specialista.
 Le domande NON devono essere fisse o da template: devono nascere interpretando il
-pre-DNA prodotto, i file caricati e il DNA aziendale.
+pre-DNA specialista, i file caricati e il DNA Generale di riferimento.
 
 PIANO: {plan_slug}
 PROFILO: {profile["label"]}
@@ -2496,11 +2496,18 @@ ISTRUZIONE DI PROFONDITA: {profile["instruction"]}
 Regole obbligatorie:
 - Genera esattamente 10 domande originali.
 - Ogni domanda deve partire da una lacuna, ambiguita, affermazione o opportunita
-  che noti nel pre-DNA prodotto o nei documenti.
+  che noti nel pre-DNA specialista o nei documenti.
 - Non fare domande generiche se il piano e Professional o Legacy.
 - Per Legacy comportati da vero analista professionale: devi estrarre
   logica applicativa, vincoli tecnici, valore differenziante.
-- Usa i principi D1-D20 come assi di analisi, ma scegli tu i 10 piu utili.
+- Usa i 6 strati cognitivi come assi di analisi (identita, modelli_mentali,
+  nucleo_tecnico, confini, tono, logica_decisionale), ma scegli tu i 10 piu utili.
+- DUE POOL DI DOMANDE:
+  - Pool "template": 7 domande ancorate ai 6 strati cognitivi + 1 war story.
+    Nascono dal pre-DNA e dal DNA Generale, non dai file specifici.
+  - Pool "kb_anchored": 3 domande che nascono leggendo i file specifici
+    della famiglia prodotto (brochure, disegni, manuali). Queste sono le
+    piu preziose: cacciano giudizio tecnico che il sito non rivela.
 - Rispondi SOLO JSON valido, senza markdown.
 
 Formato JSON:
@@ -2508,7 +2515,8 @@ Formato JSON:
   "questions": [
     {{
       "code": "D1",
-      "section_key": "descrizione|applicazione|specifiche|vincoli|valore",
+      "pool": "template|kb_anchored",
+      "section_key": "identita|modelli_mentali|nucleo_tecnico|confini|tono|logica_decisionale",
       "principle": "nome breve del principio usato",
       "question": "domanda al cliente",
       "answer_depth": "generica|mirata|analitica",
@@ -2517,13 +2525,13 @@ Formato JSON:
   ]
 }}
 
-PRE-DNA PRODOTTO:
+PRE-DNA SPECIALISTA:
 {content}
 
-DOCUMENTI / NOTE PRODOTTO:
+DOCUMENTI / NOTE SPECIALISTA:
 {documents}
 
-DNA AZIENDALE (se disponibile):
+DNA GENERALE DI RIFERIMENTO (se disponibile):
 {company_context}
 """.strip()
 
@@ -2565,13 +2573,16 @@ def _generate_product_questions(product, dna):
         latency_ms=result.latency_ms,
     )
 
-    section_keys = {"descrizione", "applicazione", "specifiche", "vincoli", "valore"}
+    section_keys = set(LAYER_KEYS)
     used_codes = set(dna.questions.values_list("code", flat=True))
     for raw_question in product_questions:
-        section_key = raw_question.get("section_key", "valore")
+        section_key = raw_question.get("section_key", "logica_decisionale")
         if section_key not in section_keys:
-            section_key = "valore"
+            section_key = "logica_decisionale"
         code = _unique_question_code(raw_question.get("code"), used_codes, "D?")
+        pool = raw_question.get("pool", ProductQuestion.POOL_TEMPLATE)
+        if pool not in (ProductQuestion.POOL_TEMPLATE, ProductQuestion.POOL_KB_ANCHORED):
+            pool = ProductQuestion.POOL_TEMPLATE
         ProductQuestion.objects.update_or_create(
             dna=dna,
             code=code,
@@ -2585,6 +2596,7 @@ def _generate_product_questions(product, dna):
                     raw_question.get("answer_depth") or profile["answer_depth"]
                 )[:40],
                 "answer_guidance": str(raw_question.get("answer_guidance", "")).strip(),
+                "pool": pool,
             },
         )
     return list(dna.questions.all())
