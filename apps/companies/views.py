@@ -3572,3 +3572,46 @@ def product_section_edit(request, pk, section_key):
         "section_key": section_key,
         "missing_sections": new_dna.missing_sections(),
     })
+
+
+@login_required
+def product_dna_visualize(request, pk):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    product = Product.objects.filter(pk=pk, company=company).first()
+    if not product:
+        return HttpResponse("Prodotto non trovato", status=404)
+    dna = product.dna_versions.filter(is_current=True).first()
+    if not dna:
+        return HttpResponse("DNA non trovato", status=404)
+    sections = _product_dna_sections(dna.content)
+    return render(request, "core/product_dna_visualize.html", {
+        "product": product,
+        "dna": dna,
+        "sections": sections,
+        "product_step": 4,
+    })
+
+
+@login_required
+def product_dna_download_pdf(request, pk):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    product = Product.objects.filter(pk=pk, company=company).first()
+    if not product:
+        return HttpResponse("Prodotto non trovato", status=404)
+    dna = product.dna_versions.filter(is_current=True).first()
+    if not dna:
+        return HttpResponse("DNA non trovato", status=404)
+
+    final_doc = "\n\n".join(
+        f"## {s['label']}\n\n{s['value']}"
+        for s in _product_dna_sections(dna.content)
+        if s["value"]
+    )
+    pdf_bytes = _render_dna_pdf(company, dna, final_doc)
+    response = HttpResponse(pdf_bytes, content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="DNA_{product.name.replace(" ", "_")}.pdf"'
+    return response
