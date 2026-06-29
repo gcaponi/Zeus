@@ -2637,15 +2637,9 @@ def _render_dna_pdf(company, dna, final_document):
 
 
 def _product_dna_sections(content, old_content=None):
-    labels = {
-        "descrizione": "Descrizione",
-        "applicazione": "Applicazione",
-        "specifiche": "Specifiche",
-        "vincoli": "Vincoli",
-        "valore": "Valore",
-    }
     sections = []
-    for key, label in labels.items():
+    for key in LAYER_KEYS:
+        label = LAYER_TITLES[key]
         raw_value = _as_text(content.get(key) if isinstance(content, dict) else None)
         value = _strip_source_markers(raw_value)
         old_value = None
@@ -2802,19 +2796,145 @@ def _generate_product_questions(product, dna):
     return list(dna.questions.all())
 
 
+def _global_product_dna_synthesis(product, pre_dna_content, questions):
+    """Global synthesis for specialist DNA — rewrite all 6 layers with answers."""
+    prev_content = dict(pre_dna_content) if isinstance(pre_dna_content, dict) else {}
+    qa_block = _format_qa_block(questions)
+    pre_dna_json = json.dumps(prev_content, ensure_ascii=False, indent=2)
+
+    # Include CompanyDNA as context (eredita, non ripete)
+    company_dna = product.company.dna_versions.filter(
+        dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True
+    ).first()
+    company_dna_json = ""
+    if company_dna:
+        company_dna_json = json.dumps(company_dna.content, ensure_ascii=False, indent=2)
+
+    prompt = f"""SINTESI_GLOBALE_DNA_SPECIALISTA
+
+Hai un pre-DNA specialista generato dalle fonti prodotto e le risposte del cliente.
+Il tuo compito e LEGGERE, COMPRENDERE e RIGENERARE il DNA Specialista completo come
+documento cognitivo coerente per la famiglia prodotto "{product.name}".
+
+REGOLE FONDAMENTALI:
+
+1. LE RISPOSTE DEL CLIENTE SONO VINCOLANTI. Se il cliente chiarisce un punto,
+   CHIUDI il dubbio.
+2. NON FARE PATCH. Rigenera ogni sezione come testo autonomo e coerente.
+3. SE UNA RISPOSTA CORREGGE IL PRE-DNA, la risposta prevale sempre.
+4. NON ASSOLUTIZZARE. Mai "garantisce", "certezza assoluta".
+5. NON INVENTARE. Se qualcosa non e coperto, scrivi "Da chiarire in intervista: ...".
+6. MARCATORI FONTE: mantieni [SRC:...] esistenti e aggiungi [SRC:answer].
+   I marcatori NON vanno nella sintesi_cognitiva.
+7. EREDITA DAL DNA GENERALE: non ripetere principi gia stabiliti nel DNA Generale.
+   Aggiungi SOLO specificita della famiglia prodotto.
+
+OUTPUT: JSON completo con tutte le 6 sezioni cognitive + sintesi_cognitiva.
+Il formato target NON dipende dalla struttura del pre-DNA: devi produrre SEMPRE
+tutte le chiavi canoniche.
+
+CHIAVI TOP-LEVEL OBBLIGATORIE, ESATTE E UNICHE:
+1. sintesi_cognitiva
+2. identita
+3. modelli_mentali
+4. nucleo_tecnico
+5. confini
+6. tono
+7. logica_decisionale
+
+VIETATI alias o nomi creativi: non usare identita_e_promessa, confini_produttivi,
+innovazione_e_sostenibilita, tono_comunicativo o altre varianti. Ogni sezione
+interna deve essere una stringa narrativa completa e autonoma.
+
+REGOLA ASSOLUTA: il tuo output inizia con {{ e finisce con }}. Nessun preambolo,
+nessuna spiegazione, nessun markdown, nessun blocco ```json.
+
+PRE-DNA SPECIALISTA:
+{pre_dna_json}
+
+RISPOSTE CLIENTE:
+{qa_block}
+
+DNA GENERALE DI RIFERIMENTO (principi trasversali — NON ripetere):
+{company_dna_json or "Nessun DNA Generale disponibile."}
+
+Rispondi con SOLO il JSON, senza markdown, senza preambolo.""".strip()
+
+    client = get_llm_client()
+    try:
+        result, rewritten = _generate_with_retry(
+            client,
+            prompt,
+            model=LLM_MODEL_PRO,
+            system_prompt=ZEUS_SYSTEM_PROMPT,
+            temperatures=(0.4, 0.3, 0.2),
+            parse=_parse_json_object,
+            context="global-product-synthesis",
+        )
+        LLMCall.objects.create(
+            company=product.company,
+            model_name=LLM_MODEL_PRO,
+            prompt_text=prompt,
+            response_text=result.text,
+            tokens_in=result.tokens_in,
+            tokens_out=result.tokens_out,
+            cost_usd=result.cost,
+            latency_ms=result.latency_ms,
+        )
+        return _safe_merge_synthesis(prev_content, rewritten)
+    except Exception:
+        logger.exception(
+            "Global product DNA synthesis failed for %s; keeping pre-DNA",
+            product.name,
+        )
+        prev_content["rewrite_warning"] = (
+            "Sintesi globale fallita; preservato il pre-DNA originale."
+        )
+        return prev_content
+
+
+def _apply_product_self_critique(dna, product):
+    """Run 2-pass self-critique on specialist DNA layers (duplicato temporaneo)."""
+    try:
+        from apps.companies.dna_critique import run_critique_loop
+        from apps.companies.dna_enrichment import compute_enrichment
+
+        content = dna.content
+        if not isinstance(content, dict):
+            return
+
+        critiqued = run_critique_loop(content, product.company)
+        if critiqued and isinstance(critiqued, dict):
+            dna.content = critiqued
+
+        dna._enrichment = compute_enrichment(dna.content)
+        dna.save(update_fields=["content", "_enrichment"])
+    except Exception:
+        logger.exception("Self-critique failed for product DNA %s", dna.id)
+
+
+def _finalize_complete_product_dna(dna, pre_dna, product):
+    """Compute audit chain + enrichment for specialist DNA (duplicato temporaneo)."""
+    try:
+        from apps.companies.audit import compute_audit_hash
+
+        prev = product.dna_versions.filter(
+            dna_type=ProductDNA.TYPE_COMPLETE,
+        ).exclude(id=dna.id).order_by("-version").first()
+
+        dna.previous_hash = prev.audit_hash if prev else None
+        dna.audit_hash = compute_audit_hash(dna.content, dna.previous_hash)
+        dna.save(update_fields=["audit_hash", "previous_hash"])
+    except Exception:
+        logger.exception("Audit chain failed for product DNA %s", dna.id)
+
+
 def _create_complete_product_dna(product, pre_dna, user):
     questions = list(pre_dna.questions.all())
     plan_slug = questions[0].plan_slug if questions else _plan_slug_for_company(product.company)
     content = dict(pre_dna.content) if isinstance(pre_dna.content, dict) else {}
-    section_keys = ["descrizione", "applicazione", "specifiche", "vincoli", "valore"]
-    answers_by_section = _answers_by_section(questions, section_keys, "valore")
-    content = _rewrite_sections_with_answers(
-        product.company,
-        content,
-        answers_by_section,
-        section_keys,
-        "RIFORMULA_PRODUCT_DNA_CON_RISPOSTE",
-    )
+
+    content = _global_product_dna_synthesis(product, content, questions)
 
     content["questionario_d1_d20"] = [
         {
@@ -2835,13 +2955,51 @@ def _create_complete_product_dna(product, pre_dna, user):
     last_version = product.dna_versions.order_by("-version").first()
     next_version = (last_version.version + 1) if last_version else 1
     product.dna_versions.filter(is_current=True).update(is_current=False)
-    return ProductDNA.objects.create(
+    dna = ProductDNA.objects.create(
         product=product,
         version=next_version,
         dna_type=ProductDNA.TYPE_COMPLETE,
         content=content,
         created_by=user if user and user.is_authenticated else None,
     )
+
+    # PIANO 4 — self-critique + audit chain + enrichment (duplicato temporaneo)
+    _apply_product_self_critique(dna, product)
+    _finalize_complete_product_dna(dna, pre_dna, product)
+
+    # Transition status to in_costruzione
+    product.status = Product.STATUS_IN_COSTRUZIONE
+    product.save(update_fields=["status"])
+
+    return dna
+
+
+def _product_approval_block_reasons(dna):
+    """Return CRITICAL enrichment flags that block specialist DNA approval."""
+    empty_layer_flags = [
+        {
+            "guard": "layer_completeness",
+            "severity": "CRITICAL",
+            "layer": section["key"],
+            "message": f"Lo strato '{section['label']}' e vuoto.",
+            "suggestion": "Modifica lo strato prima di approvare il DNA.",
+        }
+        for section in _product_dna_sections(dna.content)
+        if not section["value"].strip()
+    ]
+    if empty_layer_flags:
+        return empty_layer_flags
+
+    enrichment = dna._enrichment or {}
+    flags = enrichment.get("validation", {}).get("flags", [])
+    return [
+        f for f in flags
+        if f.get("severity") == "CRITICAL"
+        and not (
+            f.get("guard") == "layer_completeness"
+            and f.get("layer") == "global"
+        )
+    ]
 
 
 def _product_file_block_reason(product):
@@ -3239,7 +3397,7 @@ def product_section_approve(request, pk, section_key):
     dna = ProductDNA.objects.filter(product=product, is_current=True).first()
     if not dna:
         return JsonResponse({"error": "dna not found"}, status=404)
-    if section_key not in {"descrizione", "applicazione", "specifiche", "vincoli", "valore"}:
+    if section_key not in set(LAYER_KEYS):
         return JsonResponse({"error": "invalid section_key"}, status=400)
 
     body = _request_data(request)
@@ -3255,6 +3413,18 @@ def product_section_approve(request, pk, section_key):
             is_clarification=True,
         )
     else:
+        # Safe_mode: block approval if CRITICAL flags exist
+        block_reasons = _product_approval_block_reasons(dna)
+        if block_reasons:
+            messages = [
+                f.get("message", "Problema rilevato")
+                for f in block_reasons
+                if f.get("layer") == section_key
+            ]
+            return JsonResponse(
+                {"error": "; ".join(messages) or "Approvazione bloccata da safe_mode"},
+                status=409,
+            )
         ProductSectionApproval.objects.update_or_create(
             dna=dna,
             section_key=section_key,
@@ -3299,7 +3469,7 @@ def product_section_edit(request, pk, section_key):
     old_dna = ProductDNA.objects.filter(product=product, is_current=True).first()
     if not old_dna:
         return JsonResponse({"error": "dna not found"}, status=404)
-    if section_key not in {"descrizione", "applicazione", "specifiche", "vincoli", "valore"}:
+    if section_key not in set(LAYER_KEYS):
         return JsonResponse({"error": "invalid section_key"}, status=400)
 
     body = _request_data(request)
