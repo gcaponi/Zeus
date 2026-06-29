@@ -1,0 +1,86 @@
+{% extends "core/base.html" %}
+
+{% block title %}Approfondimenti DNA Specialista — ZEUS{% endblock %}
+
+{% block extra_head %}
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+{% endblock %}
+
+{% block content %}
+<div class="zeus-page-wrap">
+    <div class="zeus-page-grid">
+        <section>
+            <header class="mb-8">
+                <p class="zeus-badge zeus-badge-cyan mb-3">ZEUS — {{ product.name }}</p>
+                <h1 class="text-3xl font-bold tracking-tight sm:text-4xl font-display">Round {{ round_number }} — Approfondimenti</h1>
+                <p class="mt-2 text-content-secondary">Domande mirate generate dal Gap Engine per colmare le lacune emerse dalle risposte precedenti.</p>
+                <span class="zeus-badge zeus-badge-cyan mt-3">{{ plan_label }}</span>
+            </header>
+
+            {% if complete_dna %}
+                <div class="mb-6 zeus-card p-5" style="border-color: rgba(34, 197, 94, 0.3); background: rgba(34, 197, 94, 0.05);">
+                    <p class="zeus-label text-brand-lime">DNA specialista già generato</p>
+                    <p class="mt-2 text-sm leading-6 text-content-secondary">Modifica una o più risposte e salva: ZEUS rigenera una nuova versione solo se rileva cambiamenti.</p>
+                </div>
+            {% endif %}
+
+            {% if error %}
+                <div class="mb-6 rounded-xl border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-300">
+                    {{ error }}
+                </div>
+            {% endif %}
+
+            <form method="post" class="space-y-4" onsubmit="showGeneratingPopup();">
+                {% csrf_token %}
+                {% for question in questions %}
+                    <section class="zeus-card p-5">
+                        <div class="mb-3 flex items-center gap-3 flex-wrap">
+                            <span class="zeus-badge zeus-badge-cyan">{{ question.code }}</span>
+                            <p class="text-sm font-bold uppercase tracking-wider text-content-muted">{{ question.principle }}</p>
+                            <span class="zeus-badge zeus-badge-violet">{{ question.answer_depth }}</span>
+                        </div>
+                        <p class="text-sm leading-7 text-content-primary whitespace-pre-line break-words">{{ question.question }}</p>
+                        {% if question.answer_guidance %}
+                            <p class="mt-3 rounded-xl border border-white/10 bg-white/5 p-3 text-xs leading-5 text-content-muted">{{ question.answer_guidance }}</p>
+                        {% endif %}
+                        <textarea name="answer_{{ question.id }}" rows="4" class="zeus-input mt-4" placeholder="Risposta libera, anche sintetica">{{ question.answer }}</textarea>
+                    </section>
+                {% endfor %}
+                <div class="sticky-bottom-4 zeus-card p-4 flex flex-col gap-3 sm:flex-row" style="background: var(--glass-strong); backdrop-filter: blur(20px);">
+                    <a href="{% url 'product-questions' product.id %}" class="zeus-btn zeus-btn-ghost sm:w-auto">← Indietro</a>
+                    <button type="submit" class="zeus-btn zeus-btn-primary flex-1">
+                        {% if complete_dna %}Salva modifiche e rigenera DNA{% else %}Prosegui{% endif %}
+                    </button>
+                </div>
+            </form>
+        </section>
+    </div>
+</div>
+
+<!-- Popup glass "Stiamo generando il DNA..." -->
+<div id="generating-popup" class="fixed inset-0 z-50 hidden items-center justify-center" style="background: rgba(2,6,23,0.5); backdrop-filter: blur(6px);">
+    <div class="zeus-card p-8 text-center mx-4" style="max-width: min(360px, calc(100vw - 2rem)); background: rgba(255,255,255,0.08); backdrop-filter: blur(40px) saturate(180%); border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 24px 80px rgba(0,0,0,0.4);">
+        <div class="mb-5 flex justify-center">
+            <div class="w-12 h-12 rounded-full border-[3px] border-brand-cyan-light border-t-transparent animate-spin"></div>
+        </div>
+        <h3 class="text-lg font-bold font-display text-white">Stiamo generando il DNA Specialista</h3>
+        <p class="mt-2 text-sm text-white">
+            ZEUS sta valutando le risposte e preparando il DNA completo<span id="generating-dots"></span>
+        </p>
+    </div>
+</div>
+
+<script>
+function showGeneratingPopup() {
+    var popup = document.getElementById('generating-popup');
+    popup.classList.remove('hidden');
+    popup.classList.add('flex');
+    var dotsEl = document.getElementById('generating-dots');
+    var n = 0;
+    window._generatingInterval = setInterval(function() {
+        n = (n + 1) % 4;
+        dotsEl.textContent = '.'.repeat(n);
+    }, 400);
+}
+</script>
+{% endblock %}

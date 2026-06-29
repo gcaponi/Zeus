@@ -54,6 +54,11 @@ GAP_ENGINE_LIMITS = {
     Plan.SLUG_PROFESSIONAL: {"max_rounds": 2, "max_followups": 5},
     Plan.SLUG_ENTERPRISE: {"max_rounds": 3, "max_followups": 20},
 }
+GAP_ENGINE_PRODUCT_LIMITS = {
+    Plan.SLUG_STARTER: {"max_rounds": 2, "max_followups": 5},
+    Plan.SLUG_PROFESSIONAL: {"max_rounds": 3, "max_followups": 10},
+    Plan.SLUG_ENTERPRISE: {"max_rounds": 10, "max_followups": 100},
+}
 SOURCE_MARKER_RE = re.compile(r"\s*\[SRC:[^\]]+\]", re.IGNORECASE)
 SYNTHESIS_LAYER_ALIASES = {
     "identita_e_promessa": "identita",
@@ -803,6 +808,201 @@ def _process_answers_after_round(request, company, pre_dna, current_round):
 
     _create_gap_followups(company, pre_dna, followups, current_round, plan_slug)
     return redirect("dna-gap-questions", round_number=current_round + 1)
+
+
+# --- Gap Engine for ProductDNA (Specialista) ---
+
+
+def _gap_engine_product_limits(plan_slug):
+    return GAP_ENGINE_PRODUCT_LIMITS.get(
+        plan_slug, GAP_ENGINE_PRODUCT_LIMITS[Plan.SLUG_STARTER]
+    )
+
+
+def _gap_engine_product_prompt(product, pre_dna, questions, plan_slug):
+    """Build the Gap Engine prompt for specialist answer sufficiency evaluation."""
+    limits = _gap_engine_product_limits(plan_slug)
+    content = json.dumps(pre_dna.content, ensure_ascii=False, indent=2)
+    qa_lines = []
+    for question in questions:
+        answer = (question.answer or "").strip()
+        qa_lines.append(
+            f"DOMANDA {question.code} [{question.section_key}] — {question.principle}\n"
+            f"Q: {question.question}\n"
+            f"A: {answer if answer else '[nessuna risposta]'}"
+        )
+    qa_block = "\n\n".join(qa_lines)
+
+    return f"""
+GAP_ENGINE_EVAL_SPECIALISTA
+
+Sei ZEUS. Hai appena ricevuto le risposte del cliente alle domande di approfondimento
+per il DNA Specialista di "{product.name}". Il tuo compito e valutare la QUALITA
+cognitiva di ogni risposta, non la sua lunghezza.
+
+PIANO: {plan_slug}
+LIMITE FOLLOW-UP: massimo {limits['max_followups']} domande in questa tornata.
+
+Valuta ogni risposta secondo questi criteri:
+- sufficiente: la risposta chiarisce il punto e aggiunge giudizio tecnico specifico
+  della famiglia prodotto, confini, logica decisionale o contesto reale.
+- insufficiente: la risposta e troppo generica, vaga, puramente descrittiva o evita
+  il punto. Serve un approfondimento mirato.
+- contradicts: la risposta contradice il pre-DNA specialista, il DNA Generale,
+  un'altra risposta o un documento. Segnala il conflitto.
+
+Regole per i follow-up:
+- Genera SOLO domande che valgono davvero la pena.
+- Le domande follow-up devono nascere da lacune, contraddizioni o ambiguita reali
+  specifiche della famiglia prodotto.
+- Non ripetere domande gia poste.
+- Massimo {limits['max_followups']} follow-up in questa tornata.
+
+Output JSON esatto:
+{{
+  "evaluations": [
+    {{
+      "question_code": "D1",
+      "status": "sufficiente|insufficiente|contradicts",
+      "rationale": "1 frase di motivazione"
+    }}
+  ],
+  "overall_sufficient": true|false,
+  "follow_ups": [
+    {{
+      "target_question_code": "D1",
+      "section_key": "identita|modelli_mentali|nucleo_tecnico|confini|tono|logica_decisionale",
+      "principle": "nome breve del principio",
+      "question": "domanda follow-up mirata",
+      "answer_depth": "generica|mirata|analitica",
+      "answer_guidance": "che tipo di risposta ti aspetti"
+    }}
+  ]
+}}
+
+Se tutte le risposte sono sufficienti, "follow_ups" deve essere un array vuoto e
+"overall_sufficient" true.
+
+Rispondi SOLO con il JSON richiesto. Nessun preambolo, nessun markdown.
+
+PRE-DNA SPECIALISTA:
+{content}
+
+DOMANDE E RISPOSTE CLIENTE:
+{qa_block}
+""".strip()
+
+
+def _evaluate_product_answer_sufficiency(product, pre_dna, questions, plan_slug):
+    """Run the Gap Engine over all answered specialist questions."""
+    prompt = _gap_engine_product_prompt(product, pre_dna, questions, plan_slug)
+    client = get_llm_client()
+    result, evaluation = _generate_with_retry(
+        client,
+        prompt,
+        model=LLM_MODEL,
+        system_prompt=ZEUS_SYSTEM_PROMPT,
+        temperatures=(0.4, 0.3, 0.2),
+        parse=_parse_gap_evaluation,
+        context="product-gap-engine",
+    )
+    LLMCall.objects.create(
+        company=product.company,
+        model_name=LLM_MODEL,
+        prompt_text=prompt,
+        response_text=result.text,
+        tokens_in=result.tokens_in,
+        tokens_out=result.tokens_out,
+        cost_usd=result.cost,
+        latency_ms=result.latency_ms,
+    )
+    return evaluation
+
+
+def _create_product_gap_followups(product, dna, followups_data, current_round, plan_slug):
+    """Persist Gap Engine follow-up questions for the next specialist round."""
+    profile = QUESTION_GENERATION_PROFILES.get(
+        plan_slug, QUESTION_GENERATION_PROFILES[Plan.SLUG_STARTER]
+    )
+    existing_codes = set(dna.questions.values_list("code", flat=True))
+    section_keys = set(LAYER_KEYS)
+    parent_map = {q.code: q for q in dna.questions.all()}
+
+    for index, raw in enumerate(followups_data, start=1):
+        target_code = str(raw.get("target_question_code") or "")
+        section_key = str(raw.get("section_key") or DNA_GENERALE_FALLBACK_LAYER)
+        if section_key not in section_keys:
+            section_key = DNA_GENERALE_FALLBACK_LAYER
+        code = _unique_question_code(f"F{index}", existing_codes, "F1")
+        answer_depth = str(raw.get("answer_depth") or profile["answer_depth"])[:40]
+        parent = parent_map.get(target_code)
+        ProductQuestion.objects.create(
+            product=product,
+            dna=dna,
+            code=code,
+            plan_slug=plan_slug,
+            section_key=section_key,
+            principle=str(raw.get("principle", "Follow-up"))[:120],
+            question=str(raw.get("question", "")).strip(),
+            answer_depth=answer_depth,
+            answer_guidance=str(raw.get("answer_guidance", "")).strip(),
+            pool=ProductQuestion.POOL_KB_ANCHORED,
+            question_round=current_round + 1,
+            parent_question=parent,
+        )
+        existing_codes.add(code)
+
+
+def _process_product_answers_after_round(request, product, pre_dna, current_round):
+    """Save specialist answers, run Gap Engine, create follow-ups or trigger complete DNA."""
+    plan_slug = _plan_slug_for_company(product.company)
+    limits = _gap_engine_product_limits(plan_slug)
+    gap_rounds_done = current_round - 1
+
+    answered_questions = list(
+        pre_dna.questions.exclude(answer="").order_by("question_round", "id")
+    )
+
+    if gap_rounds_done >= limits["max_rounds"]:
+        _trigger_complete_product_dna(request, product, pre_dna)
+        return redirect("product-review", pk=product.id)
+
+    try:
+        evaluation = _evaluate_product_answer_sufficiency(
+            product, pre_dna, answered_questions, plan_slug
+        )
+    except Exception:
+        logger.exception(
+            "Gap Engine evaluation failed for product %s", product.name
+        )
+        _trigger_complete_product_dna(request, product, pre_dna)
+        return redirect("product-review", pk=product.id)
+
+    followups = evaluation.get("follow_ups", [])[: limits["max_followups"]]
+    if evaluation.get("overall_sufficient") or not followups:
+        _trigger_complete_product_dna(request, product, pre_dna)
+        return redirect("product-review", pk=product.id)
+
+    _create_product_gap_followups(product, pre_dna, followups, current_round, plan_slug)
+    return redirect("product-gap-questions", pk=product.id, round_number=current_round + 1)
+
+
+def _trigger_complete_product_dna(request, product, pre_dna):
+    """Trigger async generation of the complete specialist DNA."""
+    from apps.companies.tasks import generate_complete_product_dna
+
+    latest_complete = product.dna_versions.filter(
+        dna_type=ProductDNA.TYPE_COMPLETE,
+    ).order_by("-version").first()
+    _set_pending_complete_generation(
+        request,
+        (latest_complete.version + 1) if latest_complete else 1,
+    )
+    generate_complete_product_dna.delay(
+        product.id,
+        pre_dna.id,
+        request.user.id if request.user.is_authenticated else None,
+    )
 
 
 def _trigger_complete_dna(request, company, pre_dna):
@@ -2884,6 +3084,17 @@ def product_questions(request, pk):
     if not pre_dna:
         return HttpResponse("Pre-DNA prodotto non trovato", status=404)
 
+    # If follow-up questions from a previous Gap Engine round are still waiting
+    # for answers, send the user directly to the latest active round.
+    latest_unanswered_round = (
+        pre_dna.questions.filter(answer="")
+        .order_by("-question_round")
+        .values_list("question_round", flat=True)
+        .first()
+    )
+    if latest_unanswered_round and latest_unanswered_round > 1:
+        return redirect("product-gap-questions", pk=product.id, round_number=latest_unanswered_round)
+
     error = None
     try:
         questions = _generate_product_questions(product, pre_dna)
@@ -2894,18 +3105,25 @@ def product_questions(request, pk):
     if request.method == "POST" and not error:
         body = _request_data(request)
         missing = []
+        answers_changed = False
         for question in questions:
             answer = body.get(f"answer_{question.id}", "").strip()
             if not answer:
                 missing.append(question.code)
                 continue
+            if answer != question.answer:
+                answers_changed = True
             question.answer = answer
             question.answered_at = timezone.now()
             question.save(update_fields=["answer", "answered_at"])
         if missing:
             error = "Rispondi a tutte le domande prima di generare il DNA completo."
+        elif complete_dna and not answers_changed:
+            return redirect("product-review", pk=product.id)
         else:
-            complete_dna = _create_complete_product_dna(product, pre_dna, request.user)
+            return _process_product_answers_after_round(
+                request, product, pre_dna, current_round=1
+            )
 
     status_code = 400 if error else 200
     return render(request, "core/product_questions.html", {
@@ -2919,6 +3137,71 @@ def product_questions(request, pk):
         ),
         "product_step": 2,
         "error": error,
+    }, status=status_code)
+
+
+@login_required
+def product_gap_questions(request, pk, round_number):
+    """Round 2+ follow-up questions for specialist DNA (Gap Engine)."""
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    product = Product.objects.filter(pk=pk, company=company).first()
+    if not product:
+        return HttpResponse("Prodotto non trovato", status=404)
+
+    pre_dna = product.dna_versions.filter(dna_type=ProductDNA.TYPE_PRE).order_by("-version").first()
+    if not pre_dna:
+        return HttpResponse("Pre-DNA prodotto non trovato", status=404)
+
+    questions = _round_questions(pre_dna, round_number)
+    if not questions:
+        return _process_product_answers_after_round(
+            request, product, pre_dna, current_round=round_number
+        )
+
+    complete_dna = product.dna_versions.filter(
+        dna_type=ProductDNA.TYPE_COMPLETE,
+        is_current=True,
+    ).first()
+    error = None
+
+    if request.method == "POST":
+        body = _request_data(request)
+        missing = []
+        answers_changed = False
+        for question in questions:
+            answer = body.get(f"answer_{question.id}", "").strip()
+            if not answer:
+                missing.append(question.code)
+                continue
+            if answer != question.answer:
+                answers_changed = True
+            question.answer = answer
+            question.answered_at = timezone.now()
+            question.save(update_fields=["answer", "answered_at"])
+        if missing:
+            error = "Rispondi a tutte le domande di approfondimento prima di proseguire."
+        elif complete_dna and not answers_changed:
+            return redirect("product-review", pk=product.id)
+        else:
+            return _process_product_answers_after_round(
+                request, product, pre_dna, current_round=round_number
+            )
+
+    status_code = 400 if error else 200
+    return render(request, "core/product_gap_questions.html", {
+        "product": product,
+        "pre_dna": pre_dna,
+        "complete_dna": complete_dna,
+        "questions": questions,
+        "round_number": round_number,
+        "plan_slug": questions[0].plan_slug if questions else _plan_slug_for_company(company),
+        "plan_label": _question_plan_label(
+            questions[0].plan_slug if questions else _plan_slug_for_company(company)
+        ),
+        "error": error,
+        "product_step": 2,
     }, status=status_code)
 
 
