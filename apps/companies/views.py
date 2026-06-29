@@ -2896,16 +2896,17 @@ Rispondi con SOLO il JSON, senza markdown, senza preambolo.""".strip()
 def _apply_product_self_critique(dna, product):
     """Run 2-pass self-critique on specialist DNA layers (duplicato temporaneo)."""
     try:
-        from apps.companies.dna_critique import run_critique_loop
+        from apps.companies.dna_critique import self_critique_dna
+        from apps.companies.dna_schemas import LAYER_KEYS as LK
+        from apps.companies.dna_schemas import DNAGeneraleSchema
         from apps.companies.dna_enrichment import compute_enrichment
 
-        content = dna.content
-        if not isinstance(content, dict):
-            return
-
-        critiqued = run_critique_loop(content, product.company)
-        if critiqued and isinstance(critiqued, dict):
-            dna.content = critiqued
+        layer_content = {k: dna.content.get(k) for k in LK if k in dna.content}
+        schema = DNAGeneraleSchema.model_validate(layer_content)
+        refined, _report = self_critique_dna(schema, get_llm_client())
+        new_content = dict(dna.content)
+        new_content.update(refined.model_dump())
+        dna.content = new_content
 
         dna._enrichment = compute_enrichment(dna.content)
         dna.save(update_fields=["content", "_enrichment"])
@@ -2922,8 +2923,8 @@ def _finalize_complete_product_dna(dna, pre_dna, product):
             dna_type=ProductDNA.TYPE_COMPLETE,
         ).exclude(id=dna.id).order_by("-version").first()
 
-        dna.previous_hash = prev.audit_hash if prev else None
-        dna.audit_hash = compute_audit_hash(dna.content, dna.previous_hash)
+        dna.previous_hash = prev.audit_hash if prev else ""
+        dna.audit_hash = compute_audit_hash(dna.content, dna.previous_hash or "")
         dna.save(update_fields=["audit_hash", "previous_hash"])
     except Exception:
         logger.exception("Audit chain failed for product DNA %s", dna.id)

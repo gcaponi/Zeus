@@ -1763,13 +1763,13 @@ class TestProductViews:
             product=product,
             version=1,
             dna_type=ProductDNA.TYPE_PRE,
-            content={"descrizione": "Descrizione base"},
+            content={"identita": "Identita base"},
         )
         ProductQuestion.objects.create(
             product=product,
             dna=pre_dna,
             code="D1",
-            section_key="descrizione",
+            section_key="identita",
             principle="Identita prodotto",
             question="Cosa distingue il prodotto?",
             answer="Risposta tecnica cliente",
@@ -1778,9 +1778,9 @@ class TestProductViews:
         complete_dna = views._create_complete_product_dna(product, pre_dna, user)
 
         assert complete_dna.version == 2
-        assert "riformulata integrando le risposte" in complete_dna.content["descrizione"]
-        assert "Approfondimenti cliente" not in complete_dna.content["descrizione"]
-        assert "Risposta tecnica cliente" not in complete_dna.content["descrizione"]
+        assert "sintesi_cognitiva" in complete_dna.content
+        assert "identita" in complete_dna.content
+        assert product.status == Product.STATUS_IN_COSTRUZIONE
 
     def test_product_section_approve_htmx_redirects_to_review(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
@@ -1789,23 +1789,23 @@ class TestProductViews:
             product=product,
             version=1,
             dna_type=ProductDNA.TYPE_COMPLETE,
-            content={"descrizione": "Test"},
+            content={"identita": "Test", "modelli_mentali": "x", "nucleo_tecnico": "x", "confini": "x", "tono": "x", "logica_decisionale": "x"},
         )
         req = rf_with_tenant(
             "post",
-            reverse("product-section-approve", args=[product.pk, "descrizione"]),
+            reverse("product-section-approve", args=[product.pk, "identita"]),
             {},
             form=True,
         )
         req.META["HTTP_HX_REQUEST"] = "true"
 
-        resp = views.product_section_approve(req, product.pk, "descrizione")
+        resp = views.product_section_approve(req, product.pk, "identita")
 
         assert resp.status_code == 204
         assert resp["HX-Redirect"] == reverse("product-review", args=[product.pk])
         assert ProductSectionApproval.objects.filter(
             dna=dna,
-            section_key="descrizione",
+            section_key="identita",
         ).exists()
 
     def test_product_section_edit_htmx_redirects_to_review(self, rf_with_tenant):
@@ -1815,20 +1815,20 @@ class TestProductViews:
             product=product,
             version=1,
             dna_type=ProductDNA.TYPE_COMPLETE,
-            content={"descrizione": "Test"},
+            content={"identita": "Test"},
         )
         req = rf_with_tenant(
             "post",
-            reverse("product-section-edit", args=[product.pk, "descrizione"]),
+            reverse("product-section-edit", args=[product.pk, "identita"]),
             {"text": "Test aggiornato"},
             form=True,
         )
         req.META["HTTP_HX_REQUEST"] = "true"
 
-        resp = views.product_section_edit(req, product.pk, "descrizione")
+        resp = views.product_section_edit(req, product.pk, "identita")
 
         assert resp.status_code == 204
         assert resp["HX-Redirect"] == reverse("product-review", args=[product.pk])
         new_dna = ProductDNA.objects.get(product=product, is_current=True)
         assert new_dna.version == 2
-        assert new_dna.content["descrizione"] == "Test aggiornato"
+        assert new_dna.content["identita"] == "Test aggiornato"

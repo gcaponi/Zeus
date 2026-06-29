@@ -431,6 +431,44 @@ class MockLLMClient(LLMClient):
                 latency_ms=900,
             )
 
+        if "GENERA_DOMANDE_D1_D20" in prompt:
+            plan_slug = "starter"
+            answer_depth = "generica"
+            if "PIANO: professional" in prompt:
+                plan_slug = "professional"
+                answer_depth = "mirata"
+            elif "PIANO: enterprise" in prompt:
+                plan_slug = "enterprise"
+                answer_depth = "analitica"
+            guidance = {
+                "starter": "Risposta sintetica sulla famiglia prodotto.",
+                "professional": "Risposta completa e specifica della famiglia.",
+                "enterprise": "Risposta analitica sulla logica della famiglia prodotto.",
+            }[plan_slug]
+            questions = []
+            sections = list(LAYER_KEYS)
+            for index in range(10):
+                code = f"D{index + 1}"
+                questions.append({
+                    "code": code,
+                    "pool": "template" if index < 7 else "kb_anchored",
+                    "section_key": sections[index % len(sections)],
+                    "principle": f"Principio specialista {code}",
+                    "question": (
+                        f"Domanda specialista {code} per piano {plan_slug}: "
+                        "chiarisci un aspetto specifico della famiglia prodotto."
+                    ),
+                    "answer_depth": answer_depth,
+                    "answer_guidance": guidance,
+                })
+            return LLMResult(
+                text=json.dumps({"questions": questions}, ensure_ascii=False),
+                tokens_in=500,
+                tokens_out=300,
+                cost=0.0002,
+                latency_ms=900,
+            )
+
         return LLMResult(
             text=json.dumps({
                 "identita": {
