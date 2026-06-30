@@ -2984,8 +2984,8 @@ def _create_complete_product_dna(product, pre_dna, user):
     _apply_product_self_critique(dna, product)
     _finalize_complete_product_dna(dna, pre_dna, product)
 
-    # Transition status to in_costruzione
-    product.status = Product.STATUS_IN_COSTRUZIONE
+    # Transition status to in_validazione (DNA complete, ready for review)
+    product.status = Product.STATUS_IN_VALIDAZIONE
     product.save(update_fields=["status"])
 
     return dna
@@ -3504,6 +3504,22 @@ def product_review(request, pk):
         "is_fully_approved": dna.is_fully_approved(),
         "product_step": 3,
     })
+
+
+@login_required
+@require_http_methods(["POST"])
+def product_promote(request, pk):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    product = Product.objects.filter(pk=pk, company=company).first()
+    if not product:
+        return HttpResponse("Prodotto non trovato", status=404)
+    if product.status != Product.STATUS_IN_VALIDAZIONE:
+        return HttpResponse("Stato non valido per la promozione", status=400)
+    product.status = Product.STATUS_ATTIVO
+    product.save(update_fields=["status"])
+    return redirect("product-detail", pk=product.pk)
 
 
 @login_required
