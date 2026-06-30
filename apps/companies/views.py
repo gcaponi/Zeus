@@ -19,6 +19,7 @@ from apps.companies.dna_schemas import (
     PRODUCT_LAYER_KEYS,
     PRODUCT_LAYER_TITLES,
 )
+from apps.companies.sector_archetypes import get_archetype_context
 from apps.companies.llm_client import (
     LLM_MODEL,
     LLM_MODEL_PRO,
@@ -2696,12 +2697,14 @@ def _product_question_generation_prompt(product, dna, plan_slug):
     profile = QUESTION_GENERATION_PROFILES[plan_slug]
     content = json.dumps(dna.content, ensure_ascii=False, indent=2)
     documents = _product_document_context(product)
-    company_dna = product.company.dna_versions.filter(
+    company = product.company
+    company_dna = company.dna_versions.filter(
         dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True
     ).first()
     company_context = ""
     if company_dna:
         company_context = json.dumps(company_dna.content, ensure_ascii=False, indent=2)
+    archetype_context = get_archetype_context(company)
 
     return f"""
 GENERA_DOMANDE_D1_D20
@@ -2724,11 +2727,14 @@ Regole obbligatorie:
 - Usa i 6 layer tecnici come assi di analisi (identita_tecnica, architettura,
   specifiche, applicazione, vincoli, configurazione), ma scegli tu i 10 piu utili.
 - DUE POOL DI DOMANDE:
-  - Pool "template": 7 domande ancorate ai 6 layer tecnici + 1 war story.
+  - Pool "template": 5 domande ancorate ai 6 layer tecnici.
     Nascono dal pre-DNA e dal DNA Generale, non dai file specifici.
   - Pool "kb_anchored": 3 domande che nascono leggendo i file specifici
     della famiglia prodotto (brochure, disegni, manuali). Queste sono le
     piu preziose: cacciano giudizio tecnico che il sito non rivela.
+  - Pool "meta": 2 domande ispirate alle DOMANDE META UNIVERSALI e alle
+    CATEGORIE DI CONOSCENZA TACITA del settore rilevato. Queste domande
+    cercano conoscenza operativa che NON compare nei documenti.
 - Rispondi SOLO JSON valido, senza markdown.
 
 Formato JSON:
@@ -2736,7 +2742,7 @@ Formato JSON:
   "questions": [
     {{
       "code": "D1",
-      "pool": "template|kb_anchored",
+      "pool": "template|kb_anchored|meta",
       "section_key": "identita_tecnica|architettura|specifiche|applicazione|vincoli|configurazione",
       "principle": "nome breve del principio usato",
       "question": "domanda al cliente",
@@ -2754,6 +2760,9 @@ DOCUMENTI / NOTE SPECIALISTA:
 
 DNA GENERALE DI RIFERIMENTO (se disponibile):
 {company_context}
+
+CONTESTO SETTORIALE E CONOSCENZA TACITA:
+{archetype_context}
 """.strip()
 
 

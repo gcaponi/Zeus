@@ -449,15 +449,24 @@ class MockLLMClient(LLMClient):
             sections = list(PRODUCT_LAYER_KEYS)
             for index in range(10):
                 code = f"D{index + 1}"
+                if index < 5:
+                    pool = "template"
+                    question = f"Domanda {code} per piano {plan_slug}: chiarisci un aspetto tecnico del pre-DNA specialista."
+                elif index < 8:
+                    pool = "kb_anchored"
+                    question = f"Domanda {code}: cosa rivela il file caricato che il pre-DNA non ha catturato?"
+                else:
+                    pool = "meta"
+                    question = {
+                        8: "Cosa sa chi lavora qui da 10 anni che non e scritto da nessuna parte?",
+                        9: "Qual e l'errore piu costoso che un cliente nuovo fa nel primo mese?",
+                    }[index]
                 questions.append({
                     "code": code,
-                    "pool": "template" if index < 7 else "kb_anchored",
+                    "pool": pool,
                     "section_key": sections[index % len(sections)],
-                    "principle": f"Principio specialista {code}",
-                    "question": (
-                        f"Domanda specialista {code} per piano {plan_slug}: "
-                        "chiarisci un aspetto specifico della famiglia prodotto."
-                    ),
+                    "principle": f"Principio {code}",
+                    "question": question,
                     "answer_depth": answer_depth,
                     "answer_guidance": guidance,
                 })
