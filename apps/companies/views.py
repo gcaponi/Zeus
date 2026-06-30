@@ -2926,8 +2926,86 @@ Rispondi con SOLO il JSON, senza markdown, senza preambolo.""".strip()
 
 
 def _apply_product_self_critique(dna, product):
-    """Self-critique disabled for product technical layers (will be reimplemented in PIANO 5)."""
-    pass
+    """Self-critique: LLM reviews specialist DNA and proposes improvements (accept/reject)."""
+    import json as _json
+    layers = {k: dna.content.get(k, "") for k in PRODUCT_LAYER_KEYS}
+    layers_json = _json.dumps(layers, ensure_ascii=False, indent=2)
+
+    prompt = f"""SELF_CRITIQUE_SPECIALISTA
+
+Sei ZEUS. Hai generato il DNA Specialista per "{product.name}".
+Rivedi criticamente ogni sezione tecnica e proponi miglioramenti dove necessario.
+
+Per ogni sezione valuta:
+- Vuota o contiene "Da chiarire": contenuto insufficiente
+- Generica: mancano dati numerici, specifiche precise, quantificazioni
+- Contraddittoria: incoerenza tra cio che dice questa sezione e le altre
+- Incompletezza: informazioni parziali che i documenti potrebbero completare
+
+Regole:
+- Proponi SOLO sezioni con problemi reali (massimo 4 proposte, le piu critiche).
+- Non ripetere sezioni gia adequate.
+- Se tutto e adeguato, ritorna array vuoto.
+- La proposta deve integrare e migliorare, non inventare dati non presenti nei documenti.
+
+DNA SPECIALISTA:
+{layers_json}
+
+Output JSON:
+{{
+  "proposals": [
+    {{
+      "section_key": "identita_tecnica|architettura|specifiche|applicazione|vincoli|configurazione",
+      "issue": "descrizione concisa del problema",
+      "proposed_text": "testo migliorato completo per la sezione"
+    }}
+  ]
+}}
+
+Rispondi SOLO JSON, senza markdown.
+""".strip()
+
+    client = get_llm_client()
+
+    def _parse_critique(text):
+        data = _json.loads(text)
+        raw = data.get("proposals", [])
+        valid_keys = set(PRODUCT_LAYER_KEYS)
+        return [
+            p for p in raw
+            if p.get("section_key") in valid_keys and p.get("proposed_text", "").strip()
+        ]
+
+    try:
+        result, proposals = _generate_with_retry(
+            client,
+            prompt,
+            model=LLM_MODEL,
+            system_prompt=ZEUS_SYSTEM_PROMPT,
+            temperatures=(0.4, 0.3, 0.2),
+            parse=_parse_critique,
+            context="product-self-critique",
+        )
+    except Exception:
+        logger.exception("Self-critique failed for product DNA %s", dna.id)
+        return
+
+    LLMCall.objects.create(
+        company=product.company,
+        model_name=LLM_MODEL,
+        prompt_text=prompt,
+        response_text=result.text,
+        tokens_in=result.tokens_in,
+        tokens_out=result.tokens_out,
+        cost_usd=result.cost,
+        latency_ms=result.latency_ms,
+    )
+
+    if proposals:
+        dna.content["_critique"] = [
+            {**p, "status": "pending"} for p in proposals
+        ]
+        dna.save(update_fields=["content"])
 
 
 def _finalize_complete_product_dna(dna, pre_dna, product):
@@ -3495,6 +3573,10 @@ def product_review(request, pk):
     dna = product.dna_versions.filter(is_current=True).first()
     if not dna:
         return HttpResponse("DNA prodotto non trovato", status=404)
+    critique_proposals = [
+        (i, p) for i, p in enumerate(dna.content.get("_critique", []))
+        if isinstance(p, dict) and p.get("status", "pending") == "pending"
+    ]
     return render(request, "core/product_review.html", {
         "product": product,
         "dna": dna,
@@ -3502,6 +3584,7 @@ def product_review(request, pk):
         "approved_keys": dna.approved_sections(),
         "missing_keys": dna.missing_sections(),
         "is_fully_approved": dna.is_fully_approved(),
+        "critique_proposals": critique_proposals,
         "product_step": 3,
     })
 
@@ -3520,6 +3603,68 @@ def product_promote(request, pk):
     product.status = Product.STATUS_ATTIVO
     product.save(update_fields=["status"])
     return redirect("product-detail", pk=product.pk)
+
+
+def _get_critique_proposal(dna, index):
+    proposals = dna.content.get("_critique", [])
+    if not isinstance(proposals, list) or index < 0 or index >= len(proposals):
+        return None
+    return proposals[index]
+
+
+@login_required
+@require_http_methods(["POST"])
+def product_critique_accept(request, pk, proposal_index):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    product = Product.objects.filter(pk=pk, company=company).first()
+    if not product:
+        return HttpResponse("Prodotto non trovato", status=404)
+    dna = product.dna_versions.filter(is_current=True).first()
+    if not dna:
+        return HttpResponse("DNA non trovato", status=404)
+    proposal = _get_critique_proposal(dna, proposal_index)
+    if not proposal:
+        return HttpResponse("Proposta non trovata", status=404)
+    section_key = proposal.get("section_key")
+    proposed_text = proposal.get("proposed_text", "").strip()
+    if section_key not in set(PRODUCT_LAYER_KEYS) or not proposed_text:
+        return HttpResponse("Dati proposta non validi", status=400)
+
+    dna.content[section_key] = proposed_text
+    proposals = dna.content.get("_critique", [])
+    proposals.pop(proposal_index)
+    dna.content["_critique"] = proposals
+    try:
+        from apps.companies.audit import compute_audit_hash
+        dna.audit_hash = compute_audit_hash(dna.content, dna.previous_hash or "")
+    except Exception:
+        pass
+    dna.save(update_fields=["content", "audit_hash"])
+    return redirect("product-review", pk=product.pk)
+
+
+@login_required
+@require_http_methods(["POST"])
+def product_critique_reject(request, pk, proposal_index):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    product = Product.objects.filter(pk=pk, company=company).first()
+    if not product:
+        return HttpResponse("Prodotto non trovato", status=404)
+    dna = product.dna_versions.filter(is_current=True).first()
+    if not dna:
+        return HttpResponse("DNA non trovato", status=404)
+    proposal = _get_critique_proposal(dna, proposal_index)
+    if not proposal:
+        return HttpResponse("Proposta non trovata", status=404)
+    proposals = dna.content.get("_critique", [])
+    proposals.pop(proposal_index)
+    dna.content["_critique"] = proposals
+    dna.save(update_fields=["content"])
+    return redirect("product-review", pk=product.pk)
 
 
 @login_required

@@ -47,6 +47,8 @@ urlpatterns = [
     ),
     path("products/<int:pk>/review/", views.product_review, name="product-review"),
     path("products/<int:pk>/promote/", views.product_promote, name="product-promote"),
+    path("products/<int:pk>/critique/<int:proposal_index>/accept/", views.product_critique_accept, name="product-critique-accept"),
+    path("products/<int:pk>/critique/<int:proposal_index>/reject/", views.product_critique_reject, name="product-critique-reject"),
     path("products/<int:pk>/visualize/", views.product_dna_visualize, name="product-dna-visualize"),
     path("products/<int:pk>/download/", views.product_dna_download_pdf, name="product-dna-download-pdf"),
     path("products/<int:pk>/feedback/", views.product_dna_feedback, name="product-dna-feedback"),

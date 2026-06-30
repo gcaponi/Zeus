@@ -547,6 +547,38 @@ class MockLLMClient(LLMClient):
                 latency_ms=900,
             )
 
+        if "SELF_CRITIQUE_SPECIALISTA" in prompt:
+            return LLMResult(
+                text=json.dumps({
+                    "proposals": [
+                        {
+                            "section_key": "specifiche",
+                            "issue": "La sezione specifiche manca di certificazioni di conformita specifiche al mercato europeo oltre alla EN 1123.",
+                            "proposed_text": (
+                                "Sezione 90x90mm, lunghezza modulare 100cm, tolleranza +-0.5mm. "
+                                "Conforme EN 1123 (scarichi liquidi) e EN 1253-1 (canali di drenaggio edilizi). "
+                                "Portata nominale 12 l/s verificata secondo EN 1253-2. "
+                                "Peso 3.2 kg/m lineare. Materiale certificato food-grade per applicazioni HACCP."
+                            ),
+                        },
+                        {
+                            "section_key": "configurazione",
+                            "issue": "La logica di configurazione non quantifica i costi di setup per i custom.",
+                            "proposed_text": (
+                                "Sezione geometrica fissa, modificabile solo in lunghezza (moduli da 50-100cm). "
+                                "Custom accettati su lotti superiori a 50pz con costo di setup di circa 800 eur "
+                                "per modifica matrice di taglio. Non si realizzano varianti di forma per "
+                                "richieste singole. Lead time custom: 4-6 settimane lavorative."
+                            ),
+                        },
+                    ]
+                }, ensure_ascii=False),
+                tokens_in=500,
+                tokens_out=300,
+                cost=0.0003,
+                latency_ms=700,
+            )
+
         return LLMResult(
             text=json.dumps({
                 "identita": {

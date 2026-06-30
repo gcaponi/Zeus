@@ -56,6 +56,38 @@
         {% endfor %}
     </div>
 
+    {% if critique_proposals %}
+        <div class="mt-8">
+            <h2 class="text-xl font-bold font-display text-brand-violet mb-4">Analisi critica ZEUS</h2>
+            <p class="text-sm text-content-secondary mb-4">ZEUS ha revisionato il DNA e propone miglioramenti per queste sezioni. Accetta o rifiuta.</p>
+            <div class="space-y-4">
+                {% for index, proposal in critique_proposals %}
+                    <div class="zeus-card p-5" style="border-color: rgba(167, 139, 250, 0.25);">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="zeus-badge zeus-badge-violet">{{ proposal.section_key }}</span>
+                            <span class="text-xs text-content-muted">Auto-critica ZEUS</span>
+                        </div>
+                        <p class="text-sm text-content-secondary mb-3">{{ proposal.issue }}</p>
+                        <div class="rounded-lg border border-white/10 bg-white/5 p-3">
+                            <p class="text-xs text-content-muted mb-1">Testo proposto:</p>
+                            <p class="text-sm leading-6 text-content-primary break-words">{{ proposal.proposed_text }}</p>
+                        </div>
+                        <div class="mt-3 flex gap-3">
+                            <form method="post" action="{% url 'product-critique-accept' product.pk index %}">
+                                {% csrf_token %}
+                                <button type="submit" class="zeus-btn" style="background: #22c55e; color: white; min-height: 2.5rem; padding: 0.5rem 1.2rem; font-size: 0.82rem;">Accetta</button>
+                            </form>
+                            <form method="post" action="{% url 'product-critique-reject' product.pk index %}">
+                                {% csrf_token %}
+                                <button type="submit" class="zeus-btn zeus-btn-ghost" style="min-height: 2.5rem; padding: 0.5rem 1.2rem; font-size: 0.82rem;">Rifiuta</button>
+                            </form>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    {% endif %}
+
     {% if is_fully_approved %}
         <div class="mt-8 zeus-card p-6 text-center">
             <p class="text-content-secondary">DNA specialista completo e approvato. Puoi visualizzarlo, scaricarlo o tornare agli specialisti.</p>
