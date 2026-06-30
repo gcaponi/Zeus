@@ -1548,7 +1548,7 @@ def _extract_company_file_text(uploaded_file):
                 except Exception:
                     text = ""
         doc.close()
-        return text[:30000], len(raw), name
+        return text[:30000].replace("\x00", ""), len(raw), name
     if name.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
         return (
             f"Immagine caricata: {name}. Estrazione OCR/vision non ancora attiva in questo MVP.",
@@ -1559,7 +1559,7 @@ def _extract_company_file_text(uploaded_file):
         text = raw.decode("utf-8")
     except UnicodeDecodeError:
         text = raw.decode("latin-1", errors="ignore")
-    return text[:30000], len(raw), name
+    return text[:30000].replace("\x00", ""), len(raw), name
 
 
 def _save_or_update_company_notes(company, notes, user):

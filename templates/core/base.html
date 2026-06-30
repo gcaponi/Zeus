@@ -823,8 +823,18 @@
     </main>
 
     <script>
+        function getCsrfToken() {
+            var cookies = document.cookie.split(';');
+            for (var i = 0; i < cookies.length; i++) {
+                var c = cookies[i].trim();
+                if (c.indexOf('csrftoken=') === 0) {
+                    return decodeURIComponent(c.substring(10));
+                }
+            }
+            return '{{ csrf_token }}';
+        }
         document.body.addEventListener('htmx:configRequest', function(event) {
-            event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
+            event.detail.headers['X-CSRFToken'] = getCsrfToken();
         });
 
         const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
