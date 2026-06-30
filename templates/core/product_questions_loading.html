@@ -1,0 +1,32 @@
+{% extends "core/base.html" %}
+
+{% block title %}Domande Specialista · {{ product.name }} — ZEUS{% endblock %}
+
+{% block extra_head %}
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+{% endblock %}
+
+{% block content %}
+<div class="zeus-page-wrap">
+    <header class="mb-8">
+        <a href="{% url 'product-detail' product.pk %}" class="text-sm text-brand-cyan hover:underline">&larr; {{ product.name }}</a>
+        <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">Preparazione domande...</h1>
+    </header>
+
+    {% include "core/onboarding/_product_step_indicator.html" with product_step=product_step %}
+
+    <div
+        class="zeus-card p-8 mt-6 text-center"
+        hx-get="{% url 'product-questions' product.pk %}"
+        hx-trigger="every 3s"
+        hx-target="body"
+        hx-swap="outerHTML"
+    >
+        <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-brand-cyan/10">
+            <div class="w-8 h-8 rounded-full border-[3px] border-brand-cyan-light border-t-transparent animate-spin"></div>
+        </div>
+        <h3 class="text-lg font-bold font-display text-content-primary">ZEUS sta generando le domande</h3>
+        <p class="mt-2 text-sm text-content-secondary">Analisi del pre-DNA specialista in corso...</p>
+    </div>
+</div>
+{% endblock %}

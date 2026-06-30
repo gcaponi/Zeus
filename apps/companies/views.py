@@ -3311,6 +3311,14 @@ def product_dna_generate(request, pk):
     from apps.companies.tasks import _generate_product_dna
     dna, _llm_call = _generate_product_dna(product, company)
 
+    tenant_schema = getattr(request, "tenant", None)
+    from apps.companies.tasks import generate_product_questions_task
+    generate_product_questions_task.delay(
+        product.id,
+        dna.id,
+        tenant_schema=tenant_schema.schema_name if tenant_schema else None,
+    )
+
     if not _wants_json(request):
         return redirect("product-detail", pk=product.pk)
     return JsonResponse({
@@ -3351,11 +3359,27 @@ def product_questions(request, pk):
         return redirect("product-gap-questions", pk=product.id, round_number=latest_unanswered_round)
 
     error = None
-    try:
-        questions = _generate_product_questions(product, pre_dna)
-    except ValueError as exc:
-        questions = []
-        error = f"ZEUS non e riuscito a generare le domande: {exc}"
+    questions = list(pre_dna.questions.all())
+
+    if not questions:
+        if request.headers.get("HX-Request") != "true":
+            tenant_schema = getattr(request, "tenant", None)
+            from apps.companies.tasks import generate_product_questions_task
+            generate_product_questions_task.delay(
+                product.id,
+                pre_dna.id,
+                tenant_schema=tenant_schema.schema_name if tenant_schema else None,
+            )
+        return render(request, "core/product_questions_loading.html", {
+            "product": product,
+            "pre_dna": pre_dna,
+            "product_step": 2,
+        })
+
+    if request.headers.get("HX-Request") == "true" and request.method == "GET":
+        response = HttpResponse("")
+        response["HX-Redirect"] = request.get_full_path()
+        return response
 
     if request.method == "POST" and not error:
         body = _request_data(request)

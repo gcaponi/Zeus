@@ -422,3 +422,31 @@ def generate_complete_product_dna(product_id, pre_dna_id, user_id, tenant_schema
             _run()
     else:
         _run()
+
+
+@shared_task
+def generate_product_questions_task(product_id, pre_dna_id, tenant_schema=None):
+    def _run():
+        from apps.companies.models import Product, ProductDNA
+        from apps.companies.views import _generate_product_questions
+
+        try:
+            product = Product.objects.get(pk=product_id)
+            pre_dna = ProductDNA.objects.get(pk=pre_dna_id)
+        except (Product.DoesNotExist, ProductDNA.DoesNotExist):
+            logger.error("generate_product_questions: product or pre_dna not found")
+            return
+
+        try:
+            _generate_product_questions(product, pre_dna)
+            logger.info("Product questions generated for product %s", product.pk)
+        except Exception:
+            logger.exception(
+                "Product question generation failed for product %s", product.pk
+            )
+
+    if tenant_schema and hasattr(connection, "tenant"):
+        with schema_context(tenant_schema):
+            _run()
+    else:
+        _run()
