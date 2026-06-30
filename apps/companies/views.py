@@ -3705,7 +3705,7 @@ def product_dna_feedback(request, pk):
         return HttpResponse("Prodotto non trovato", status=404)
 
     specialist_dna = product.dna_versions.filter(
-        is_current=True, dna_type=ProductDNA.TYPE_COMPLETE,
+        is_current=True,
     ).first()
     if not specialist_dna:
         return HttpResponse("DNA specialista non trovato", status=404)
@@ -3744,7 +3744,7 @@ def product_dna_feedback_apply(request, pk):
         return HttpResponse("Prodotto non trovato", status=404)
 
     specialist_dna = product.dna_versions.filter(
-        is_current=True, dna_type=ProductDNA.TYPE_COMPLETE,
+        is_current=True,
     ).first()
     if not specialist_dna:
         return HttpResponse("DNA specialista non trovato", status=404)
