@@ -13,6 +13,46 @@ DNA_GENERALE_SECTION_CHOICES = [(key, LAYER_TITLES[key]) for key in LAYER_KEYS]
 
 
 class Company(models.Model):
+    ARCHETIPO_BENI_FISICI = "beni_fisici"
+    ARCHETIPO_LAVORAZIONE = "lavorazione_materiali"
+    ARCHETIPO_INSTALLAZIONE = "installazione_posa"
+    ARCHETIPO_SERVIZI = "servizi_professionali"
+    ARCHETIPO_SOFTWARE = "software_saas"
+    ARCHETIPO_DISTRIBUZIONE = "distribuzione_commercio"
+    ARCHETIPO_FORMAZIONE = "formazione_consulenza"
+
+    ARCHETIPO_CHOICES = [
+        (ARCHETIPO_BENI_FISICI, "Produzione di beni fisici"),
+        (ARCHETIPO_LAVORAZIONE, "Trasformazione/lavorazione materiali"),
+        (ARCHETIPO_INSTALLAZIONE, "Installazione/posa"),
+        (ARCHETIPO_SERVIZI, "Servizi professionali"),
+        (ARCHETIPO_SOFTWARE, "Software/SaaS"),
+        (ARCHETIPO_DISTRIBUZIONE, "Distribuzione/commercio"),
+        (ARCHETIPO_FORMAZIONE, "Formazione/consulenza"),
+    ]
+
+    CLIENTE_B2B_TECNICO = "b2b_tecnico"
+    CLIENTE_B2B_NON_TECNICO = "b2b_non_tecnico"
+    CLIENTE_B2B2C = "b2b2c"
+    CLIENTE_B2C = "b2c"
+
+    CLIENTE_CHOICES = [
+        (CLIENTE_B2B_TECNICO, "B2B con professionisti tecnici"),
+        (CLIENTE_B2B_NON_TECNICO, "B2B con buyer non tecnici"),
+        (CLIENTE_B2B2C, "B2B2C"),
+        (CLIENTE_B2C, "B2C"),
+    ]
+
+    CUSTOM_SISTEMATICO = "sistematico"
+    CUSTOM_RARAMENTE = "raramente"
+    CUSTOM_MAI = "mai"
+
+    CUSTOM_CHOICES = [
+        (CUSTOM_SISTEMATICO, "Sì, sistematicamente"),
+        (CUSTOM_RARAMENTE, "Sì, raramente"),
+        (CUSTOM_MAI, "No, mai"),
+    ]
+
     schema_name = models.SlugField(
         max_length=63,
         unique=True,
@@ -21,6 +61,24 @@ class Company(models.Model):
     name = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    # --- Profilo Operativo (routing per generazione domande) ---
+    settore_primario = models.CharField(
+        max_length=30, choices=ARCHETIPO_CHOICES, blank=True, default="",
+    )
+    prodotto_fisico = models.BooleanField(null=True, blank=True, default=None)
+    cliente_diretto = models.CharField(
+        max_length=20, choices=CLIENTE_CHOICES, blank=True, default="",
+    )
+    custom_frequenza = models.CharField(
+        max_length=15, choices=CUSTOM_CHOICES, blank=True, default="",
+    )
+    installatori_in_filiera = models.BooleanField(null=True, blank=True, default=None)
+    settore_secondario = models.CharField(max_length=255, blank=True, default="")
+    contesto_libero = models.TextField(
+        blank=True, default="",
+        help_text="Cosa un nuovo cliente dovrebbe capire prima di lavorare con voi, che non trova sul sito",
+    )
 
     class Meta:
         verbose_name_plural = "companies"
