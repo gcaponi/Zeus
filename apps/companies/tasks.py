@@ -113,6 +113,9 @@ def _generate_dna(source: Source, company):
         else:
             docs_parts.append(f"# {company_file.original_name}\n{company_file.content_text}")
 
+    from apps.companies.sector_archetypes import get_archetype_context
+    operational_profile = get_archetype_context(company)
+
     prompt = prompt_template.replace(
         "{{scraped_content}}",
         source.scraped_data.get("markdown", "") if source.scraped_data else "",
@@ -122,6 +125,9 @@ def _generate_dna(source: Source, company):
     ).replace(
         "{{company_documents}}",
         "\n\n".join(docs_parts) or "Nessun documento aziendale caricato.",
+    ).replace(
+        "{{operational_profile}}",
+        operational_profile or "Nessun profilo operativo fornito.",
     )
 
     client = get_llm_client()
@@ -178,6 +184,9 @@ def _generate_product_dna(product: Product, company):
     if company_dna:
         company_context = json.dumps(company_dna.content, ensure_ascii=False, indent=2)
 
+    from apps.companies.sector_archetypes import get_archetype_context
+    archetype_context = get_archetype_context(company)
+
     prompt = f"""
 ANALISI_NEURALE_SPECIALISTA
 
@@ -197,6 +206,9 @@ LAYER 4 — DNA: Mappa tutto su 6 sezioni tecniche strutturate.
 
 DNA AZIENDALE (contesto — eredita, non ripetere):
 {company_context or "Non disponibile"}
+
+PROFILO OPERATIVO AZIENDALE:
+{archetype_context or "Non disponibile"}
 
 DOCUMENTI PRODOTTO:
 {chr(10).join(documents) or "Nessun documento prodotto caricato."}
@@ -218,6 +230,7 @@ REGOLE:
 - Se un'informazione non e presente nei documenti, scrivi "Da chiarire in intervista".
 - Non inventare dati tecnici non presenti nei documenti.
 - Il tono e tecnico-preciso, non commerciale.
+- Se il PROFILO OPERATIVO contiene contesto libero dal cliente, usalo come fonte primaria.
 
 Rispondi SOLO JSON valido, senza markdown, senza preambolo.
 """.strip()

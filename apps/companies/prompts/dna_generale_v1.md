@@ -169,6 +169,10 @@ Rispondi ESCLUSIVAMENTE con il JSON grezzo.
 
 {{company_notes}}
 
+=== PROFILO OPERATIVO E CONTESTO LIBERO ===
+
+{{operational_profile}}
+
 === DOCUMENTI AZIENDALI ===
 
 {{company_documents}}
