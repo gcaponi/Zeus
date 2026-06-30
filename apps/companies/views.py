@@ -509,6 +509,13 @@ def _source_form_context(company, *, error=None, notice=None, review_mode=False)
         "max_company_files_mb": max_mb,
         "unlimited_company_files": unlimited,
         "company_files_bytes_used": bytes_used,
+        "settore_primario": company.settore_primario,
+        "prodotto_fisico": company.prodotto_fisico,
+        "cliente_diretto": company.cliente_diretto,
+        "custom_frequenza": company.custom_frequenza,
+        "installatori_in_filiera": company.installatori_in_filiera,
+        "settore_secondario": company.settore_secondario,
+        "contesto_libero": company.contesto_libero,
     }
 
 
@@ -532,7 +539,9 @@ def _initial_info_changed(company, url, notes, uploaded_file) -> bool:
         return True
     if notes.strip() != _current_company_notes(company).strip():
         return True
-    return bool(uploaded_file)
+    if bool(uploaded_file):
+        return True
+    return False
 
 
 def _question_generation_prompt(company, dna, plan_slug):
@@ -1723,6 +1732,19 @@ def onboarding_source_create(request):
     notes = request.POST.get("company_notes", "").strip()
     uploaded_file = getattr(request, "FILES", {}).get("company_file")
     has_existing_dna = company.dna_versions.exists()
+
+    company.settore_primario = request.POST.get("settore_primario", "")
+    company.prodotto_fisico = request.POST.get("prodotto_fisico") == "true"
+    company.cliente_diretto = request.POST.get("cliente_diretto", "")
+    company.custom_frequenza = request.POST.get("custom_frequenza", "")
+    company.installatori_in_filiera = request.POST.get("installatori_in_filiera") == "true"
+    company.settore_secondario = request.POST.get("settore_secondario", "").strip()
+    company.contesto_libero = request.POST.get("contesto_libero", "").strip()
+    company.save(update_fields=[
+        "settore_primario", "prodotto_fisico", "cliente_diretto",
+        "custom_frequenza", "installatori_in_filiera",
+        "settore_secondario", "contesto_libero",
+    ])
     if has_existing_dna and not _initial_info_changed(company, url, notes, uploaded_file):
         return _source_form_response(
             _source_form_context(

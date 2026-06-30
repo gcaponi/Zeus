@@ -103,6 +103,76 @@
                 <p class="mt-2 text-xs text-content-muted">Puoi scrivere solo il dominio, per esempio <span class="font-semibold">cais.uno</span>.</p>
             </div>
 
+            <details class="rounded-xl border border-white/10 bg-white/5 p-4">
+                <summary class="cursor-pointer font-bold font-display text-content-primary text-sm">Profilo operativo (migliora la qualità delle domande)</summary>
+                <p class="mt-2 text-xs text-content-muted">Queste informazioni aiutano ZEUS a generare domande più mirate sulla conoscenza operativa della tua azienda.</p>
+                <div class="mt-4 space-y-4">
+                    <div>
+                        <label class="zeus-label" for="settore_primario">Cosa produce o eroga concretamente la tua azienda?</label>
+                        <select name="settore_primario" id="settore_primario" class="zeus-input">
+                            <option value="">— Seleziona —</option>
+                            <option value="beni_fisici" {% if settore_primario == "beni_fisici" %}selected{% endif %}>Produzione di beni fisici</option>
+                            <option value="lavorazione_materiali" {% if settore_primario == "lavorazione_materiali" %}selected{% endif %}>Trasformazione/lavorazione materiali</option>
+                            <option value="installazione_posa" {% if settore_primario == "installazione_posa" %}selected{% endif %}>Installazione/posa</option>
+                            <option value="servizi_professionali" {% if settore_primario == "servizi_professionali" %}selected{% endif %}>Servizi professionali</option>
+                            <option value="software_saas" {% if settore_primario == "software_saas" %}selected{% endif %}>Software/SaaS</option>
+                            <option value="distribuzione_commercio" {% if settore_primario == "distribuzione_commercio" %}selected{% endif %}>Distribuzione/commercio</option>
+                            <option value="formazione_consulenza" {% if settore_primario == "formazione_consulenza" %}selected{% endif %}>Formazione/consulenza</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="zeus-label">Il vostro prodotto/servizio ha una componente fisica?</label>
+                        <div class="flex gap-4 mt-2">
+                            <label class="flex items-center gap-2 text-sm text-content-secondary cursor-pointer">
+                                <input type="radio" name="prodotto_fisico" value="true" {% if prodotto_fisico == True %}checked{% endif %} class="accent-brand-cyan"> Sì
+                            </label>
+                            <label class="flex items-center gap-2 text-sm text-content-secondary cursor-pointer">
+                                <input type="radio" name="prodotto_fisico" value="false" {% if prodotto_fisico == False %}checked{% endif %} class="accent-brand-cyan"> No
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="zeus-label" for="cliente_diretto">Chi è il vostro cliente diretto?</label>
+                        <select name="cliente_diretto" id="cliente_diretto" class="zeus-input">
+                            <option value="">— Seleziona —</option>
+                            <option value="b2b_tecnico" {% if cliente_diretto == "b2b_tecnico" %}selected{% endif %}>B2B con professionisti tecnici</option>
+                            <option value="b2b_non_tecnico" {% if cliente_diretto == "b2b_non_tecnico" %}selected{% endif %}>B2B con buyer non tecnici</option>
+                            <option value="b2b2c" {% if cliente_diretto == "b2b2c" %}selected{% endif %}>B2B2C</option>
+                            <option value="b2c" {% if cliente_diretto == "b2c" %}selected{% endif %}>B2C</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="zeus-label" for="custom_frequenza">Producete su specifica o personalizzate?</label>
+                        <select name="custom_frequenza" id="custom_frequenza" class="zeus-input">
+                            <option value="">— Seleziona —</option>
+                            <option value="sistematico" {% if custom_frequenza == "sistematico" %}selected{% endif %}>Sì, sistematicamente</option>
+                            <option value="raramente" {% if custom_frequenza == "raramente" %}selected{% endif %}>Sì, raramente</option>
+                            <option value="mai" {% if custom_frequenza == "mai" %}selected{% endif %}>No, mai</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="zeus-label">Nella vostra filiera ci sono installatori, posatori o operatori che lavorano fisicamente con il vostro prodotto?</label>
+                        <div class="flex gap-4 mt-2">
+                            <label class="flex items-center gap-2 text-sm text-content-secondary cursor-pointer">
+                                <input type="radio" name="installatori_in_filiera" value="true" {% if installatori_in_filiera == True %}checked{% endif %} class="accent-brand-cyan"> Sì
+                            </label>
+                            <label class="flex items-center gap-2 text-sm text-content-secondary cursor-pointer">
+                                <input type="radio" name="installatori_in_filiera" value="false" {% if installatori_in_filiera == False %}checked{% endif %} class="accent-brand-cyan"> No
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="zeus-label" for="settore_secondario">Settore secondario o nicchia specifica (opzionale)</label>
+                        <input type="text" name="settore_secondario" id="settore_secondario" value="{{ settore_secondario|default:'' }}" class="zeus-input" placeholder="Es. edilizia residenziale di alta gamma">
+                    </div>
+                    <div>
+                        <label class="zeus-label" for="contesto_libero">La cosa più importante che un nuovo cliente dovrebbe capire prima di lavorare con voi, che non trova sul sito:</label>
+                        <textarea name="contesto_libero" id="contesto_libero" rows="4" class="zeus-input" placeholder="Es. I nostri prodotti richiedono una verifica preliminare sul cantiere prima dell'ordine...">{{ contesto_libero|default:'' }}</textarea>
+                        <p class="mt-2 text-xs text-content-muted">Questo campo è il più prezioso per ZEUS: intercetta conoscenza operativa che altrimenti emergerebbe solo a domande fatte.</p>
+                    </div>
+                </div>
+            </details>
+
             <div>
                 <label class="zeus-label" for="company_notes">Note aggiuntive (opzionale)</label>
                 <textarea name="company_notes" id="company_notes" rows="8" class="zeus-input" placeholder="Descrivi la tua azienda, i prodotti principali, il mercato di riferimento, i valori distintivi...">{{ company_notes|default:'' }}</textarea>
