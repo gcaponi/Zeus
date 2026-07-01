@@ -31,48 +31,6 @@
     </div>
 </div>
 
-<style>
-.zeus-phase {
-    transition: opacity 0.5s ease, color 0.5s ease, transform 0.5s ease, text-shadow 0.5s ease;
-    opacity: 0.35;
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    justify-content: center;
-    text-align: left;
-}
-.zeus-phase-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: rgba(100, 116, 139, 0.4);
-    transition: all 0.5s ease;
-    flex-shrink: 0;
-}
-.zeus-phase-active {
-    opacity: 1;
-    color: #67e8f9;
-    text-shadow: 0 0 14px rgba(103, 232, 249, 0.5);
-    transform: scale(1.04);
-}
-.zeus-phase-active .zeus-phase-dot {
-    background: #67e8f9;
-    box-shadow: 0 0 12px rgba(103, 232, 249, 0.7);
-    animation: zeus-pulse 1s ease-in-out infinite;
-}
-.zeus-phase-done {
-    opacity: 0.55;
-    color: rgba(74, 222, 128, 0.85);
-}
-.zeus-phase-done .zeus-phase-dot {
-    background: rgba(74, 222, 128, 0.7);
-}
-@keyframes zeus-pulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.4); }
-}
-</style>
-
 <script>
 (function() {
     var phases = document.querySelectorAll('#zeus-phases .zeus-phase');

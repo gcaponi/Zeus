@@ -898,6 +898,70 @@ def process_product_gap_round_task(
 
 
 @shared_task(soft_time_limit=600, time_limit=660)
+def apply_specialist_feedback_task(company_id, company_dna_id, tenant_schema=None):
+    """Regenerate Company DNA from approved specialist feedback (async to avoid 504)."""
+    def _run():
+        from apps.companies.models import Company, CompanyDNA, Product, ProductDNA
+        from apps.companies.audit import compute_audit_hash
+
+        try:
+            company = Company.objects.get(pk=company_id)
+            company_dna = CompanyDNA.objects.get(pk=company_dna_id)
+        except (Company.DoesNotExist, CompanyDNA.DoesNotExist):
+            logger.error("apply_specialist_feedback_task: company or dna not found")
+            return
+
+        pending = (company_dna.content or {}).get("_pending_specialist_feedback") or {}
+        product_id = pending.get("product_id")
+        specialist_dna_id = pending.get("specialist_dna_id")
+        selected_proposals = pending.get("selected_proposals") or []
+
+        if not selected_proposals or not product_id or not specialist_dna_id:
+            logger.error("apply_specialist_feedback_task: incomplete pending data")
+            return
+
+        try:
+            product = Product.objects.get(pk=product_id)
+            specialist_dna = ProductDNA.objects.get(pk=specialist_dna_id)
+        except (Product.DoesNotExist, ProductDNA.DoesNotExist):
+            logger.error("apply_specialist_feedback_task: product or specialist_dna not found")
+            return
+
+        from apps.companies.views import _regenerate_company_dna_from_specialist_feedback
+
+        new_content = _regenerate_company_dna_from_specialist_feedback(
+            company, product, company_dna, specialist_dna, selected_proposals,
+        )
+        new_content.pop("_pending_specialist_feedback", None)
+
+        last_version = company.dna_versions.order_by("-version").first()
+        next_version = (last_version.version + 1) if last_version else 1
+        company.dna_versions.filter(is_current=True).update(is_current=False)
+
+        new_dna = CompanyDNA.objects.create(
+            company=company,
+            version=next_version,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            content=new_content,
+            is_current=True,
+            previous_hash=company_dna.audit_hash or "",
+        )
+        new_dna.audit_hash = compute_audit_hash(new_content, new_dna.previous_hash or "")
+        new_dna.save(update_fields=["audit_hash"])
+
+        logger.info(
+            "Specialist feedback applied: company %s DNA v%d",
+            company.schema_name, next_version,
+        )
+
+    if tenant_schema and hasattr(connection, "tenant"):
+        with schema_context(tenant_schema):
+            _run()
+    else:
+        _run()
+
+
+@shared_task(soft_time_limit=600, time_limit=660)
 def generate_product_dna_task(product_id, tenant_schema=None):
     """Generate pre-DNA (concept map → seeds → merge → refinement) + dispatch questions."""
     def _run():

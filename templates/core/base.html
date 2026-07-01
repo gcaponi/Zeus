@@ -220,6 +220,44 @@
         ::selection { color: #020617; background: var(--accent-cyan-light); }
         :focus-visible { outline: 2px solid var(--accent-cyan-light); outline-offset: 3px; border-radius: 6px; }
 
+        .zeus-phase {
+            transition: opacity 0.5s ease, color 0.5s ease, transform 0.5s ease, text-shadow 0.5s ease;
+            opacity: 0.4;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            justify-content: center;
+            text-align: left;
+        }
+        .zeus-phase-dot {
+            width: 10px; height: 10px; border-radius: 50%;
+            background: var(--text-muted);
+            transition: all 0.5s ease;
+            flex-shrink: 0;
+        }
+        .zeus-phase-active {
+            opacity: 1;
+            color: var(--accent-cyan);
+            text-shadow: 0 0 14px var(--glow-cyan);
+            transform: scale(1.04);
+        }
+        .zeus-phase-active .zeus-phase-dot {
+            background: var(--accent-cyan);
+            box-shadow: 0 0 12px var(--glow-cyan);
+            animation: zeus-pulse 1s ease-in-out infinite;
+        }
+        .zeus-phase-done {
+            opacity: 0.6;
+            color: var(--text-secondary);
+        }
+        .zeus-phase-done .zeus-phase-dot {
+            background: var(--text-secondary);
+        }
+        @keyframes zeus-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.4); }
+        }
+
         h1, h2, h3, h4, h5, h6 {
             font-family: 'Space Grotesk', 'Inter', sans-serif;
             letter-spacing: -0.045em;

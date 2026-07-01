@@ -4796,31 +4796,28 @@ def product_dna_feedback_apply(request, pk):
     if not selected_proposals:
         return redirect("product-dna-feedback", pk=product.pk)
 
-    new_content = _regenerate_company_dna_from_specialist_feedback(
-        company,
-        product,
-        company_dna,
-        specialist_dna,
-        selected_proposals,
-    )
+    content = dict(company_dna.content) if isinstance(company_dna.content, dict) else {}
+    content["_pending_specialist_feedback"] = {
+        "product_id": product.pk,
+        "specialist_dna_id": specialist_dna.pk,
+        "selected_proposals": selected_proposals,
+    }
+    company_dna.content = content
+    company_dna.save(update_fields=["content"])
 
     last_version = company.dna_versions.order_by("-version").first()
-    next_version = (last_version.version + 1) if last_version else 1
-    company.dna_versions.filter(is_current=True).update(is_current=False)
+    expected_version = (last_version.version + 1) if last_version else 1
+    _set_pending_complete_generation(request, expected_version)
 
-    from apps.companies.audit import compute_audit_hash
-    new_dna = CompanyDNA.objects.create(
-        company=company,
-        version=next_version,
-        dna_type=CompanyDNA.TYPE_COMPLETE,
-        content=new_content,
-        is_current=True,
-        created_by=request.user if request.user.is_authenticated else None,
-        previous_hash=company_dna.audit_hash or "",
+    tenant_schema = getattr(request, "tenant", None)
+    from apps.companies.tasks import apply_specialist_feedback_task
+    apply_specialist_feedback_task.delay(
+        company.pk,
+        company_dna.pk,
+        tenant_schema=tenant_schema.schema_name if tenant_schema else None,
     )
-    new_dna.audit_hash = compute_audit_hash(new_content, new_dna.previous_hash or "")
-    new_dna.save(update_fields=["audit_hash"])
+
     request.session.pop(session_key, None)
     request.session.modified = True
 
-    return redirect("dna-review")
+    return redirect("dna-generating")
