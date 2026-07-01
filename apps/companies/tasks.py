@@ -794,3 +794,30 @@ def generate_product_questions_task(product_id, pre_dna_id, tenant_schema=None):
             _run()
     else:
         _run()
+
+
+@shared_task(soft_time_limit=600, time_limit=660)
+def generate_product_dna_task(product_id, tenant_schema=None):
+    """Generate pre-DNA (concept map → seeds → merge → refinement) + dispatch questions."""
+    def _run():
+        try:
+            product = Product.objects.get(pk=product_id)
+        except Product.DoesNotExist:
+            logger.error("generate_product_dna_task: product %d not found", product_id)
+            return
+
+        company = product.company
+        try:
+            dna, _ = _generate_product_dna(product, company)
+            logger.info("Pre-DNA generated for product %s, dispatching questions", product.pk)
+            generate_product_questions_task.delay(
+                product.id, dna.id, tenant_schema=tenant_schema,
+            )
+        except Exception:
+            logger.exception("Pre-DNA generation failed for product %s", product.pk)
+
+    if tenant_schema and hasattr(connection, "tenant"):
+        with schema_context(tenant_schema):
+            _run()
+    else:
+        _run()

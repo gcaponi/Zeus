@@ -1,0 +1,37 @@
+{% extends "core/base.html" %}
+
+{% block title %}Analisi Neurale · {{ product.name }} — ZEUS{% endblock %}
+
+{% block extra_head %}
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+{% endblock %}
+
+{% block content %}
+<div class="zeus-page-wrap">
+    <header class="mb-8">
+        <a href="{% url 'product-list-create' %}" class="text-sm text-brand-cyan hover:underline">&larr; Specialisti</a>
+        <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">{{ product.name }}</h1>
+    </header>
+
+    <div
+        class="zeus-card p-8 text-center"
+        hx-get="/products/{{ product.pk }}/?generating=1"
+        hx-trigger="every 5s"
+        hx-target="body"
+        hx-swap="outerHTML"
+    >
+        <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-brand-cyan/10">
+            <div class="w-8 h-8 rounded-full border-[3px] border-brand-cyan-light border-t-transparent animate-spin"></div>
+        </div>
+        <h3 class="text-lg font-bold font-display text-content-primary">Analisi Neurale in corso</h3>
+        <p class="mt-2 text-sm text-content-secondary">ZEUS sta elaborando i documenti del prodotto.</p>
+        <div class="mt-4 space-y-2 text-xs text-content-muted">
+            <p>1. Concept Map — estrazione entit&agrave; e parametri</p>
+            <p>2. Multi-seed — 3 angoli di lettura paralleli</p>
+            <p>3. Merge — unificazione delle varianti</p>
+            <p>4. Refinement — 6 sezioni raffinate indipendentemente</p>
+        </div>
+        <p class="mt-4 text-xs text-content-muted">Aggiornamento automatico ogni 5 secondi...</p>
+    </div>
+</div>
+{% endblock %}

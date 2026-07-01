@@ -3285,6 +3285,13 @@ def product_detail(request, pk):
     if not product:
         return HttpResponse("Prodotto non trovato", status=404)
 
+    generating = request.GET.get("generating") == "1"
+    pre_dna = product.dna_versions.filter(dna_type=ProductDNA.TYPE_PRE).order_by("-version").first()
+    if generating and not pre_dna and product.product_files.exists():
+        return render(request, "core/product_dna_loading.html", {
+            "product": product,
+        })
+
     return render(request, "core/product_detail.html", _product_detail_context(product))
 
 
@@ -3424,25 +3431,19 @@ def product_dna_generate(request, pk):
             )
         return JsonResponse({"error": error}, status=400)
 
-    from apps.companies.tasks import _generate_product_dna
-    dna, _llm_call = _generate_product_dna(product, company)
-
+    from apps.companies.tasks import generate_product_dna_task
     tenant_schema = getattr(request, "tenant", None)
-    from apps.companies.tasks import generate_product_questions_task
-    generate_product_questions_task.delay(
+    generate_product_dna_task.delay(
         product.id,
-        dna.id,
         tenant_schema=tenant_schema.schema_name if tenant_schema else None,
     )
 
     if not _wants_json(request):
-        return redirect("product-detail", pk=product.pk)
+        return redirect(f"/products/{product.pk}/?generating=1")
     return JsonResponse({
-        "dna_id": dna.id,
-        "version": dna.version,
-        "content": dna.content,
-        "dna_type": dna.dna_type,
-    }, status=201)
+        "status": "generating",
+        "product_id": product.pk,
+    }, status=202)
 
 
 @login_required
