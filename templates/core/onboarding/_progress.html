@@ -17,11 +17,11 @@
             </div>
             <h3 class="text-lg font-bold font-display text-content-primary">Analisi Neurale in corso</h3>
             <p class="mt-2 text-sm text-content-secondary">ZEUS sta elaborando sito, documenti e note aziendali.</p>
-            <div class="mt-4 space-y-2 text-xs text-content-muted">
-                <p>1. Scraping — lettura del sito {{ source.url }}</p>
-                <p>2. Context Map — unificazione di note, documenti e profilo operativo</p>
-                <p>3. Pre-DNA — estrazione dei 6 layer cognitivi generali</p>
-                <p>4. Domande — preparazione del primo round di approfondimento</p>
+            <div id="zeus-phases" class="mt-6 space-y-3 text-sm">
+                <div class="zeus-phase"><span class="zeus-phase-dot"></span>1. Scraping — lettura del sito {{ source.url }}</div>
+                <div class="zeus-phase"><span class="zeus-phase-dot"></span>2. Context Map — unificazione di note, documenti e profilo operativo</div>
+                <div class="zeus-phase"><span class="zeus-phase-dot"></span>3. Pre-DNA — estrazione dei 6 layer cognitivi generali</div>
+                <div class="zeus-phase"><span class="zeus-phase-dot"></span>4. Domande — preparazione del primo round di approfondimento</div>
             </div>
             <p class="mt-4 text-xs text-content-muted">Fase attuale: {{ run.current_step|default:"avvio" }}</p>
 
@@ -37,5 +37,65 @@
                 </div>
             </div>
         </div>
+
+        <style>
+        .zeus-phase {
+            transition: opacity 0.5s ease, color 0.5s ease, transform 0.5s ease, text-shadow 0.5s ease;
+            opacity: 0.35;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            justify-content: center;
+            text-align: left;
+        }
+        .zeus-phase-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: rgba(100, 116, 139, 0.4);
+            transition: all 0.5s ease;
+            flex-shrink: 0;
+        }
+        .zeus-phase-active {
+            opacity: 1;
+            color: #67e8f9;
+            text-shadow: 0 0 14px rgba(103, 232, 249, 0.5);
+            transform: scale(1.04);
+        }
+        .zeus-phase-active .zeus-phase-dot {
+            background: #67e8f9;
+            box-shadow: 0 0 12px rgba(103, 232, 249, 0.7);
+            animation: zeus-pulse 1s ease-in-out infinite;
+        }
+        .zeus-phase-done {
+            opacity: 0.55;
+            color: rgba(74, 222, 128, 0.85);
+        }
+        .zeus-phase-done .zeus-phase-dot {
+            background: rgba(74, 222, 128, 0.7);
+        }
+        @keyframes zeus-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.4); }
+        }
+        </style>
+
+        <script>
+        (function() {
+            var phases = document.querySelectorAll('#zeus-phases .zeus-phase');
+            var current = 0;
+            function tick() {
+                phases.forEach(function(p, i) {
+                    p.classList.remove('zeus-phase-active', 'zeus-phase-done');
+                    if (i < current) p.classList.add('zeus-phase-done');
+                    if (i === current) p.classList.add('zeus-phase-active');
+                });
+                current++;
+                if (current > phases.length) current = 0;
+            }
+            tick();
+            setInterval(tick, 1800);
+        })();
+        </script>
     {% endif %}
 </div>

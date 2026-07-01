@@ -4043,7 +4043,7 @@ def product_questions(request, pk):
         return redirect("product-gap-questions", pk=product.id, round_number=latest_unanswered_round)
 
     error = None
-    questions = list(pre_dna.questions.all())
+    questions = list(pre_dna.questions.filter(question_round=1).order_by("id"))
 
     if not questions:
         if request.headers.get("HX-Request") != "true":

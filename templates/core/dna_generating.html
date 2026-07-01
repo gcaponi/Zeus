@@ -8,7 +8,7 @@
 
 {% block content %}
 <div class="zeus-page-wrap">
-    <div class="zeus-card p-8 text-center mx-auto" style="max-width: 32rem; background: var(--glass-strong); border-color: var(--border-color); box-shadow: 0 32px 100px rgba(0,0,0,0.28); backdrop-filter: blur(40px) saturate(180%);">
+    <div class="zeus-card p-8 text-center mx-auto" style="max-width: 36rem; background: var(--glass-strong); border-color: var(--border-color); box-shadow: 0 32px 100px rgba(0,0,0,0.28); backdrop-filter: blur(40px) saturate(180%);">
         <div class="mb-6 flex justify-center">
             <div class="w-14 h-14 rounded-full border-4 border-brand-cyan-light border-t-transparent animate-spin"></div>
         </div>
@@ -17,6 +17,12 @@
             ZEUS sta riformulando le sezioni con le tue risposte.<br>
             Questo puo richiedere fino a 2 minuti<span id="generating-dots"></span>
         </p>
+        <div id="zeus-phases" class="mt-6 space-y-3 text-sm">
+            <div class="zeus-phase"><span class="zeus-phase-dot"></span>1. Lettura di tutte le risposte</div>
+            <div class="zeus-phase"><span class="zeus-phase-dot"></span>2. Sintesi cognitiva globale</div>
+            <div class="zeus-phase"><span class="zeus-phase-dot"></span>3. Riformulazione dei 6 layer</div>
+            <div class="zeus-phase"><span class="zeus-phase-dot"></span>4. Self-critique e validazione</div>
+        </div>
         <div class="mt-8"
               hx-get="{% url 'dna-generating' %}"
               hx-trigger="every 4s"
@@ -25,11 +31,69 @@
     </div>
 </div>
 
+<style>
+.zeus-phase {
+    transition: opacity 0.5s ease, color 0.5s ease, transform 0.5s ease, text-shadow 0.5s ease;
+    opacity: 0.35;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    justify-content: center;
+    text-align: left;
+}
+.zeus-phase-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: rgba(100, 116, 139, 0.4);
+    transition: all 0.5s ease;
+    flex-shrink: 0;
+}
+.zeus-phase-active {
+    opacity: 1;
+    color: #67e8f9;
+    text-shadow: 0 0 14px rgba(103, 232, 249, 0.5);
+    transform: scale(1.04);
+}
+.zeus-phase-active .zeus-phase-dot {
+    background: #67e8f9;
+    box-shadow: 0 0 12px rgba(103, 232, 249, 0.7);
+    animation: zeus-pulse 1s ease-in-out infinite;
+}
+.zeus-phase-done {
+    opacity: 0.55;
+    color: rgba(74, 222, 128, 0.85);
+}
+.zeus-phase-done .zeus-phase-dot {
+    background: rgba(74, 222, 128, 0.7);
+}
+@keyframes zeus-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.4); }
+}
+</style>
+
 <script>
-var n = 0;
-setInterval(function() {
-    n = (n + 1) % 4;
-    document.getElementById('generating-dots').textContent = '.'.repeat(n);
-}, 400);
+(function() {
+    var phases = document.querySelectorAll('#zeus-phases .zeus-phase');
+    var current = 0;
+    function tick() {
+        phases.forEach(function(p, i) {
+            p.classList.remove('zeus-phase-active', 'zeus-phase-done');
+            if (i < current) p.classList.add('zeus-phase-done');
+            if (i === current) p.classList.add('zeus-phase-active');
+        });
+        current++;
+        if (current > phases.length) current = 0;
+    }
+    tick();
+    setInterval(tick, 1800);
+    var n = 0;
+    setInterval(function() {
+        n = (n + 1) % 4;
+        var el = document.getElementById('generating-dots');
+        if (el) el.textContent = '.'.repeat(n);
+    }, 400);
+})();
 </script>
 {% endblock %}
