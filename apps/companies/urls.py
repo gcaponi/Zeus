@@ -46,6 +46,11 @@ urlpatterns = [
         views.product_gap_questions,
         name="product-gap-questions",
     ),
+    path(
+        "products/<int:pk>/gap-questions/<int:round_number>/processing/",
+        views.product_gap_processing,
+        name="product-gap-processing",
+    ),
     path("products/<int:pk>/review/", views.product_review, name="product-review"),
     path("products/<int:pk>/promote/", views.product_promote, name="product-promote"),
     path("products/<int:pk>/critique/<int:proposal_index>/accept/", views.product_critique_accept, name="product-critique-accept"),

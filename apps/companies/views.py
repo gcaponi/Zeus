@@ -66,6 +66,10 @@ GAP_ENGINE_PRODUCT_LIMITS = {
     Plan.SLUG_ENTERPRISE: {"max_rounds": 10, "max_followups": 100},
 }
 SOURCE_MARKER_RE = re.compile(r"\s*\[SRC:[^\]]+\]", re.IGNORECASE)
+INSTRUCTION_PREFIX_RE = re.compile(
+    r"(?im)^\s*(?:[-*]\s*)?(?:aggiungere|da aggiungere|integrare|inserire|"
+    r"aggiornare|sostituire|riscrivere|proposta)\s*:\s*"
+)
 SYNTHESIS_LAYER_ALIASES = {
     "identita_e_promessa": "identita",
     "identita_funzionale": "identita",
@@ -411,8 +415,35 @@ def _as_text(value):
     return str(value or "")
 
 
+def _strip_instruction_prefixes(text):
+    cleaned = INSTRUCTION_PREFIX_RE.sub("", str(text or "")).strip()
+    if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] and cleaned[0] in ("'", '"'):
+        cleaned = cleaned[1:-1].strip()
+    return cleaned
+
+
+def _sanitize_public_value(value):
+    if isinstance(value, list):
+        return [_sanitize_public_value(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _sanitize_public_value(item) for key, item in value.items()}
+    if isinstance(value, str):
+        return _strip_instruction_prefixes(value)
+    return value
+
+
+def _public_content(content):
+    if not isinstance(content, dict):
+        return {}
+    return {
+        key: _sanitize_public_value(value)
+        for key, value in content.items()
+        if not str(key).startswith("_")
+    }
+
+
 def _strip_source_markers(text):
-    return SOURCE_MARKER_RE.sub("", str(text or "")).strip()
+    return _strip_instruction_prefixes(SOURCE_MARKER_RE.sub("", str(text or "")))
 
 
 def _section_context(content, section_key):
@@ -837,7 +868,7 @@ def _gap_engine_product_limits(plan_slug):
 def _gap_engine_product_prompt(product, pre_dna, questions, plan_slug):
     """Build the Gap Engine prompt for specialist answer sufficiency evaluation."""
     limits = _gap_engine_product_limits(plan_slug)
-    content = json.dumps(pre_dna.content, ensure_ascii=False, indent=2)
+    content = json.dumps(_public_content(pre_dna.content), ensure_ascii=False, indent=2)
     qa_lines = []
     for question in questions:
         answer = (question.answer or "").strip()
@@ -966,6 +997,62 @@ def _create_product_gap_followups(product, dna, followups_data, current_round, p
             parent_question=parent,
         )
         existing_codes.add(code)
+
+
+def _set_product_gap_processing(pre_dna, **data):
+    content = dict(pre_dna.content) if isinstance(pre_dna.content, dict) else {}
+    state = dict(content.get("_gap_processing") or {})
+    state.update(data)
+    state["updated_at"] = timezone.now().isoformat()
+    content["_gap_processing"] = state
+    pre_dna.content = content
+    pre_dna.save(update_fields=["content"])
+    return state
+
+
+def _product_gap_processing_state(pre_dna):
+    if not isinstance(pre_dna.content, dict):
+        return {}
+    state = pre_dna.content.get("_gap_processing") or {}
+    return state if isinstance(state, dict) else {}
+
+
+def _latest_unanswered_product_round(pre_dna, after_round=0):
+    return (
+        pre_dna.questions.filter(answer="", question_round__gt=after_round)
+        .order_by("question_round")
+        .values_list("question_round", flat=True)
+        .first()
+    )
+
+
+def _start_product_gap_processing(request, product, pre_dna, current_round):
+    latest_complete = product.dna_versions.filter(
+        dna_type=ProductDNA.TYPE_COMPLETE,
+    ).order_by("-version").first()
+    expected_complete_version = (latest_complete.version + 1) if latest_complete else 1
+    _set_product_gap_processing(
+        pre_dna,
+        round=current_round,
+        status="running",
+        expected_complete_version=expected_complete_version,
+        started_at=timezone.now().isoformat(),
+        error="",
+    )
+    tenant_schema = getattr(request, "tenant", None)
+    from apps.companies.tasks import process_product_gap_round_task
+    process_product_gap_round_task.delay(
+        product.id,
+        pre_dna.id,
+        current_round,
+        request.user.id if request.user.is_authenticated else None,
+        tenant_schema=tenant_schema.schema_name if tenant_schema else None,
+    )
+    return redirect(
+        "product-gap-processing",
+        pk=product.id,
+        round_number=current_round,
+    )
 
 
 def _process_product_answers_after_round(request, product, pre_dna, current_round):
@@ -1307,7 +1394,7 @@ def _format_qa_block(questions):
 
 
 def _global_dna_synthesis(company, pre_dna_content, questions):
-    prev_content = dict(pre_dna_content) if isinstance(pre_dna_content, dict) else {}
+    prev_content = _public_content(pre_dna_content)
     qa_block = _format_qa_block(questions)
     pre_dna_json = json.dumps(prev_content, ensure_ascii=False, indent=2)
 
@@ -1405,12 +1492,12 @@ Rispondi con SOLO il JSON, senza markdown, senza preambolo.""".strip()
         return prev_content
 
 
-def _normalize_synthesis_layers(synthesis: dict) -> dict:
+def _normalize_synthesis_layers(synthesis: dict, aliases=None) -> dict:
     """Map known LLM layer aliases to canonical 6-layer DNA keys."""
     if not isinstance(synthesis, dict):
         return {}
     normalized = dict(synthesis)
-    for alias, canonical in SYNTHESIS_LAYER_ALIASES.items():
+    for alias, canonical in (aliases or {}).items():
         if normalized.get(canonical):
             continue
         if normalized.get(alias):
@@ -1423,31 +1510,38 @@ def _normalize_synthesis_layers(synthesis: dict) -> dict:
     return normalized
 
 
-def _safe_merge_synthesis(original: dict, synthesis: dict) -> dict:
+def _safe_merge_synthesis(
+    original: dict,
+    synthesis: dict,
+    layer_keys=None,
+    aliases=None,
+) -> dict:
     """P5 — merge synthesis output without clobbering layers on partial output.
 
     Only updates a layer if the synthesis provides a non-empty value for it,
     so a partial LLM response cannot silently erase existing cognitive layers.
     """
-    synthesis = _normalize_synthesis_layers(synthesis)
+    layer_keys = layer_keys or LAYER_KEYS
+    aliases = SYNTHESIS_LAYER_ALIASES if aliases is None else aliases
+    synthesis = _normalize_synthesis_layers(synthesis, aliases=aliases)
     merged = dict(original)
-    missing = [key for key in LAYER_KEYS if not synthesis.get(key)]
+    missing = [key for key in layer_keys if not synthesis.get(key)]
     if missing:
         logger.warning(
             "Sintesi globale incompleta, sezioni mancanti o vuote: %s", missing,
         )
-    for key in LAYER_KEYS:
+    for key in layer_keys:
         if synthesis.get(key):
-            merged[key] = synthesis[key]
+            merged[key] = _sanitize_public_value(synthesis[key])
     if synthesis.get("sintesi_cognitiva"):
-        merged["sintesi_cognitiva"] = synthesis["sintesi_cognitiva"]
+        merged["sintesi_cognitiva"] = _sanitize_public_value(synthesis["sintesi_cognitiva"])
     return merged
 
 
 def _create_complete_dna(company, pre_dna, user):
     questions = list(pre_dna.questions.all())
     plan_slug = questions[0].plan_slug if questions else _plan_slug_for_company(company)
-    content = dict(pre_dna.content) if isinstance(pre_dna.content, dict) else {}
+    content = _public_content(pre_dna.content)
 
     content = _global_dna_synthesis(company, content, questions)
 
@@ -2853,7 +2947,7 @@ def _generate_product_questions(product, dna):
 
 def _global_product_dna_synthesis(product, pre_dna_content, questions):
     """Global synthesis for specialist DNA — rewrite all 6 layers with answers."""
-    prev_content = dict(pre_dna_content) if isinstance(pre_dna_content, dict) else {}
+    prev_content = _public_content(pre_dna_content)
     qa_block = _format_qa_block(questions)
     pre_dna_json = json.dumps(prev_content, ensure_ascii=False, indent=2)
 
@@ -2932,7 +3026,12 @@ Rispondi con SOLO il JSON, senza markdown, senza preambolo.""".strip()
             cost_usd=result.cost,
             latency_ms=result.latency_ms,
         )
-        return _safe_merge_synthesis(prev_content, rewritten)
+        return _safe_merge_synthesis(
+            prev_content,
+            rewritten,
+            layer_keys=PRODUCT_LAYER_KEYS,
+            aliases={},
+        )
     except Exception:
         logger.exception(
             "Global product DNA synthesis failed for %s; keeping pre-DNA",
@@ -3065,7 +3164,7 @@ def _finalize_complete_product_dna(dna, pre_dna, product):
 def _create_complete_product_dna(product, pre_dna, user):
     questions = list(pre_dna.questions.all())
     plan_slug = questions[0].plan_slug if questions else _plan_slug_for_company(product.company)
-    content = dict(pre_dna.content) if isinstance(pre_dna.content, dict) else {}
+    content = _public_content(pre_dna.content)
 
     content = _global_product_dna_synthesis(product, content, questions)
 
@@ -3517,7 +3616,7 @@ def product_questions(request, pk):
         elif complete_dna and not answers_changed:
             return redirect("product-review", pk=product.id)
         else:
-            return _process_product_answers_after_round(
+            return _start_product_gap_processing(
                 request, product, pre_dna, current_round=1
             )
 
@@ -3552,7 +3651,7 @@ def product_gap_questions(request, pk, round_number):
 
     questions = _round_questions(pre_dna, round_number)
     if not questions:
-        return _process_product_answers_after_round(
+        return _start_product_gap_processing(
             request, product, pre_dna, current_round=round_number
         )
 
@@ -3581,7 +3680,7 @@ def product_gap_questions(request, pk, round_number):
         elif complete_dna and not answers_changed:
             return redirect("product-review", pk=product.id)
         else:
-            return _process_product_answers_after_round(
+            return _start_product_gap_processing(
                 request, product, pre_dna, current_round=round_number
             )
 
@@ -3599,6 +3698,58 @@ def product_gap_questions(request, pk, round_number):
         "error": error,
         "product_step": 2,
     }, status=status_code)
+
+
+@login_required
+def product_gap_processing(request, pk, round_number):
+    """Wait for async specialist Gap Engine processing."""
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    product = Product.objects.filter(pk=pk, company=company).first()
+    if not product:
+        return HttpResponse("Prodotto non trovato", status=404)
+
+    pre_dna = product.dna_versions.filter(dna_type=ProductDNA.TYPE_PRE).order_by("-version").first()
+    if not pre_dna:
+        return HttpResponse("Pre-DNA prodotto non trovato", status=404)
+
+    state = _product_gap_processing_state(pre_dna)
+    next_round = _latest_unanswered_product_round(pre_dna, after_round=round_number)
+    if next_round:
+        target = reverse("product-gap-questions", args=[product.id, next_round])
+        if request.headers.get("HX-Request") == "true":
+            response = HttpResponse(status=204)
+            response["HX-Redirect"] = target
+            return response
+        return redirect(target)
+
+    expected_version = state.get("expected_complete_version")
+    complete_qs = product.dna_versions.filter(
+        dna_type=ProductDNA.TYPE_COMPLETE,
+        is_current=True,
+    )
+    if expected_version:
+        complete_qs = complete_qs.filter(version__gte=expected_version)
+    complete_dna = complete_qs.first()
+    if complete_dna:
+        target = reverse("product-review", args=[product.id])
+        if request.headers.get("HX-Request") == "true":
+            response = HttpResponse(status=204)
+            response["HX-Redirect"] = target
+            return response
+        return redirect(target)
+
+    if request.headers.get("HX-Request") == "true" and state.get("status") != "failed":
+        return HttpResponse(status=204)
+
+    return render(request, "core/product_gap_processing.html", {
+        "product": product,
+        "pre_dna": pre_dna,
+        "round_number": round_number,
+        "state": state,
+        "product_step": 2,
+    })
 
 
 @login_required
@@ -3901,6 +4052,8 @@ Per ogni proposta, indica:
 Regole:
 - Proponi SOLO aggiornamenti che aggiungono informazione nuova.
 - Non ripetere cio che il DNA Generale contiene gia.
+- "proposed_value" deve essere testo finale integrato, non una direttiva.
+- Non usare prefissi come "Aggiungere:", "Integrare:" o "Proposta:".
 - Massimo 5 proposte.
 - Se non c'è nulla di nuovo da aggiungere, ritorna un array vuoto.
 
@@ -3949,6 +4102,152 @@ Rispondi SOLO JSON, senza markdown.
     return content.get("proposals", [])
 
 
+def _feedback_session_key(product, specialist_dna, company_dna):
+    return f"specialist_feedback:{product.pk}:{specialist_dna.pk}:{company_dna.pk}"
+
+
+def _selected_specialist_feedback_proposals(proposals, selected_indices):
+    selected = []
+    valid_layers = set(LAYER_KEYS)
+    for idx in selected_indices:
+        try:
+            proposal = proposals[int(idx)]
+        except (TypeError, ValueError, IndexError):
+            continue
+        target = proposal.get("target_layer", "")
+        proposed = _strip_instruction_prefixes(proposal.get("proposed_value", ""))
+        if target not in valid_layers or not proposed:
+            continue
+        selected.append({
+            "target_layer": target,
+            "current_value": _strip_instruction_prefixes(proposal.get("current_value", "")),
+            "proposed_value": proposed,
+            "rationale": _strip_instruction_prefixes(proposal.get("rationale", "")),
+        })
+    return selected
+
+
+def _sanitize_company_feedback_content(content):
+    clean = _public_content(content)
+    for key in ["sintesi_cognitiva", *LAYER_KEYS]:
+        if key in clean:
+            clean[key] = _sanitize_public_value(clean[key])
+    return clean
+
+
+def _fallback_apply_specialist_feedback(current_content, selected_proposals):
+    new_content = dict(current_content)
+    for proposal in selected_proposals:
+        target = proposal["target_layer"]
+        current = _strip_instruction_prefixes(_as_text(new_content.get(target)))
+        proposed = _strip_instruction_prefixes(proposal.get("proposed_value", ""))
+        if not proposed:
+            continue
+        if proposed.lower() in current.lower():
+            new_content[target] = current
+        else:
+            new_content[target] = f"{current}\n\n{proposed}".strip() if current else proposed
+    return new_content
+
+
+def _regenerate_company_dna_from_specialist_feedback(
+    company,
+    product,
+    company_dna,
+    specialist_dna,
+    selected_proposals,
+):
+    current_content = _sanitize_company_feedback_content(company_dna.content)
+    current_json = json.dumps(current_content, ensure_ascii=False, indent=2)
+    specialist_json = json.dumps(
+        {k: specialist_dna.content.get(k, "") for k in PRODUCT_LAYER_KEYS},
+        ensure_ascii=False,
+        indent=2,
+    )
+    proposals_json = json.dumps(selected_proposals, ensure_ascii=False, indent=2)
+
+    prompt = f"""
+RIGENERA_DNA_GENERALE_DA_SPECIALISTA
+
+Sei ZEUS. Devi rigenerare il DNA Generale dell'azienda integrando SOLO le proposte
+specialistiche approvate dall'utente per il prodotto "{product.name}".
+
+OBIETTIVO:
+- Non applicare patch testuali.
+- Non appendere istruzioni al testo esistente.
+- Riscrivi le sezioni interessate come paragrafi coerenti e naturali.
+- Preserva le parti valide del DNA Generale non toccate dalle proposte.
+
+REGOLE OBBLIGATORIE:
+1. Non scrivere mai etichette operative come "Aggiungere:", "Integrare:",
+   "Proposta:", "Da aggiungere:" o simili nel testo finale.
+2. Le proposte approvate sono input concettuali, non testo da incollare.
+3. Integra il contributo specialista solo quando cambia davvero la comprensione
+   trasversale dell'azienda; non trasformare il DNA Generale in scheda prodotto.
+4. Mantieni tono tecnico, fluido, in terza persona, italiano naturale.
+5. Se una sezione non e toccata dalle proposte, restituiscila pulita e invariata.
+6. Rimuovi eventuali residui gia presenti nel DNA attuale come "Aggiungere:".
+
+OUTPUT JSON completo con queste chiavi esatte:
+- sintesi_cognitiva
+- identita
+- modelli_mentali
+- nucleo_tecnico
+- confini
+- tono
+- logica_decisionale
+
+DNA GENERALE ATTUALE:
+{current_json}
+
+DNA SPECIALISTA DI RIFERIMENTO:
+{specialist_json}
+
+PROPOSTE APPROVATE:
+{proposals_json}
+
+Rispondi SOLO con JSON valido. Nessun markdown, nessuna spiegazione.
+""".strip()
+
+    client = get_llm_client()
+    try:
+        result, rewritten = _generate_with_retry(
+            client,
+            prompt,
+            model=LLM_MODEL_PRO,
+            system_prompt=ZEUS_SYSTEM_PROMPT,
+            temperatures=(0.35, 0.25, 0.15),
+            parse=_parse_json_object,
+            context="specialist-feedback-regeneration",
+        )
+        LLMCall.objects.create(
+            company=company,
+            model_name=LLM_MODEL_PRO,
+            prompt_text=prompt,
+            response_text=result.text,
+            tokens_in=result.tokens_in,
+            tokens_out=result.tokens_out,
+            cost_usd=result.cost,
+            latency_ms=result.latency_ms,
+        )
+        merged = _safe_merge_synthesis(current_content, rewritten)
+    except Exception:
+        logger.exception(
+            "Specialist feedback regeneration failed for product %s; applying cleaned fallback",
+            product.pk,
+        )
+        merged = _fallback_apply_specialist_feedback(current_content, selected_proposals)
+
+    merged["_specialist_feedback"] = {
+        "product_id": product.pk,
+        "product_name": product.name,
+        "specialist_dna_id": specialist_dna.pk,
+        "approved_proposals": selected_proposals,
+        "applied_at": timezone.now().isoformat(),
+    }
+    return merged
+
+
 @login_required
 def product_dna_feedback(request, pk):
     """Show proposals to update Company DNA based on approved Specialist DNA."""
@@ -3977,6 +4276,8 @@ def product_dna_feedback(request, pk):
         return HttpResponse("DNA Generale non trovato", status=404)
 
     proposals = _generate_specialist_feedback_proposals(product, specialist_dna, company_dna)
+    request.session[_feedback_session_key(product, specialist_dna, company_dna)] = proposals
+    request.session.modified = True
 
     return render(request, "core/product_dna_feedback.html", {
         "product": product,
@@ -4016,25 +4317,24 @@ def product_dna_feedback_apply(request, pk):
         return HttpResponse("DNA Generale non trovato", status=404)
 
     selected_indices = request.POST.getlist("selected_proposals")
-    proposals = _generate_specialist_feedback_proposals(product, specialist_dna, company_dna)
+    session_key = _feedback_session_key(product, specialist_dna, company_dna)
+    proposals = request.session.get(session_key)
+    if not isinstance(proposals, list):
+        proposals = _generate_specialist_feedback_proposals(product, specialist_dna, company_dna)
+    selected_proposals = _selected_specialist_feedback_proposals(
+        proposals,
+        selected_indices,
+    )
+    if not selected_proposals:
+        return redirect("product-dna-feedback", pk=product.pk)
 
-    new_content = dict(company_dna.content)
-    applied = []
-    for idx in selected_indices:
-        try:
-            proposal = proposals[int(idx)]
-        except (ValueError, IndexError):
-            continue
-        target = proposal.get("target_layer", "")
-        if target in LAYER_KEYS:
-            current = _as_text(new_content.get(target))
-            proposed = proposal.get("proposed_value", "")
-            if proposed:
-                new_content[target] = f"{current}\n\n{proposed}".strip() if current else proposed
-                applied.append({
-                    "layer": target,
-                    "rationale": proposal.get("rationale", ""),
-                })
+    new_content = _regenerate_company_dna_from_specialist_feedback(
+        company,
+        product,
+        company_dna,
+        specialist_dna,
+        selected_proposals,
+    )
 
     last_version = company.dna_versions.order_by("-version").first()
     next_version = (last_version.version + 1) if last_version else 1
@@ -4052,5 +4352,7 @@ def product_dna_feedback_apply(request, pk):
     )
     new_dna.audit_hash = compute_audit_hash(new_content, new_dna.previous_hash or "")
     new_dna.save(update_fields=["audit_hash"])
+    request.session.pop(session_key, None)
+    request.session.modified = True
 
     return redirect("dna-review")

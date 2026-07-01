@@ -11,13 +11,19 @@
             </div>
         </div>
     {% else %}
-        <div class="mx-auto max-w-xl rounded-3xl p-8 text-center" style="background: var(--glass-strong); border: 1px solid var(--border-color); box-shadow: 0 32px 100px rgba(0,0,0,0.24); backdrop-filter: blur(40px) saturate(180%);">
+        <div class="mx-auto max-w-4xl rounded-3xl p-8 text-center" style="background: var(--glass-strong); border: 1px solid var(--border-color); box-shadow: 0 32px 100px rgba(0,0,0,0.24); backdrop-filter: blur(40px) saturate(180%);">
             <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-brand-cyan/10">
                 <div class="w-8 h-8 rounded-full border-[3px] border-brand-cyan-light border-t-transparent animate-spin"></div>
             </div>
-            <h3 class="text-lg font-bold font-display text-content-primary">Analisi in corso...</h3>
-            <p class="mt-2 text-sm text-content-secondary">ZEUS sta leggendo il sito <strong class="text-content-primary">{{ source.url }}</strong></p>
-            <p class="mt-1 text-xs text-content-muted">Fase: {{ run.current_step|default:"avvio" }}</p>
+            <h3 class="text-lg font-bold font-display text-content-primary">Analisi Neurale in corso</h3>
+            <p class="mt-2 text-sm text-content-secondary">ZEUS sta elaborando sito, documenti e note aziendali.</p>
+            <div class="mt-4 space-y-2 text-xs text-content-muted">
+                <p>1. Scraping — lettura del sito {{ source.url }}</p>
+                <p>2. Context Map — unificazione di note, documenti e profilo operativo</p>
+                <p>3. Pre-DNA — estrazione dei 6 layer cognitivi generali</p>
+                <p>4. Domande — preparazione del primo round di approfondimento</p>
+            </div>
+            <p class="mt-4 text-xs text-content-muted">Fase attuale: {{ run.current_step|default:"avvio" }}</p>
 
             <div
                 class="mt-6"

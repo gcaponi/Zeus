@@ -797,6 +797,107 @@ def generate_product_questions_task(product_id, pre_dna_id, tenant_schema=None):
 
 
 @shared_task(soft_time_limit=600, time_limit=660)
+def process_product_gap_round_task(
+    product_id,
+    pre_dna_id,
+    current_round,
+    user_id=None,
+    tenant_schema=None,
+):
+    """Evaluate specialist answers outside the HTTP request to avoid 504s."""
+    def _run():
+        from apps.companies.views import (
+            _create_product_gap_followups,
+            _evaluate_product_answer_sufficiency,
+            _gap_engine_product_limits,
+            _plan_slug_for_company,
+            _set_product_gap_processing,
+        )
+
+        try:
+            product = Product.objects.get(pk=product_id)
+            pre_dna = ProductDNA.objects.get(pk=pre_dna_id)
+        except (Product.DoesNotExist, ProductDNA.DoesNotExist):
+            logger.error("process_product_gap_round: product or pre_dna not found")
+            return
+
+        plan_slug = _plan_slug_for_company(product.company)
+        limits = _gap_engine_product_limits(plan_slug)
+        gap_rounds_done = current_round - 1
+
+        def _dispatch_complete():
+            _set_product_gap_processing(
+                pre_dna,
+                round=current_round,
+                status="complete_pending",
+                result="complete",
+            )
+            generate_complete_product_dna.delay(
+                product.id,
+                pre_dna.id,
+                user_id,
+                tenant_schema=tenant_schema,
+            )
+
+        try:
+            if gap_rounds_done >= limits["max_rounds"]:
+                _dispatch_complete()
+                return
+
+            answered_questions = list(
+                pre_dna.questions.exclude(answer="").order_by("question_round", "id")
+            )
+            evaluation = _evaluate_product_answer_sufficiency(
+                product, pre_dna, answered_questions, plan_slug,
+            )
+            followups = evaluation.get("follow_ups", [])[: limits["max_followups"]]
+            if evaluation.get("overall_sufficient") or not followups:
+                _dispatch_complete()
+                return
+
+            _create_product_gap_followups(
+                product, pre_dna, followups, current_round, plan_slug,
+            )
+            _set_product_gap_processing(
+                pre_dna,
+                round=current_round,
+                status="followups_ready",
+                result="followups",
+                target_round=current_round + 1,
+            )
+            logger.info(
+                "Product gap follow-ups created for product %s round %s",
+                product.pk,
+                current_round,
+            )
+        except Exception as exc:
+            logger.exception(
+                "Product gap processing failed for product %s round %s; dispatching complete DNA",
+                product.pk,
+                current_round,
+            )
+            _set_product_gap_processing(
+                pre_dna,
+                round=current_round,
+                status="complete_pending",
+                result="complete",
+                error=str(exc)[:500],
+            )
+            generate_complete_product_dna.delay(
+                product.id,
+                pre_dna.id,
+                user_id,
+                tenant_schema=tenant_schema,
+            )
+
+    if tenant_schema and hasattr(connection, "tenant"):
+        with schema_context(tenant_schema):
+            _run()
+    else:
+        _run()
+
+
+@shared_task(soft_time_limit=600, time_limit=660)
 def generate_product_dna_task(product_id, tenant_schema=None):
     """Generate pre-DNA (concept map → seeds → merge → refinement) + dispatch questions."""
     def _run():
