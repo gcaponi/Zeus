@@ -15,7 +15,7 @@
 
     <div
         class="zeus-card p-8 text-center"
-        hx-get="/products/{{ product.pk }}/?generating=1"
+        hx-get="{% url 'product-detail' product.pk %}?generating=1"
         hx-trigger="every 5s"
         hx-target="body"
         hx-swap="outerHTML"

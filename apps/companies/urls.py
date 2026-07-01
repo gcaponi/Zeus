@@ -30,6 +30,7 @@ urlpatterns = [
         name="dna-section-edit",
     ),
     path("products/", views.product_list_create, name="product-list-create"),
+    path("products/<int:pk>", views.product_detail),
     path("products/<int:pk>/", views.product_detail, name="product-detail"),
     path("products/<int:pk>/upload/", views.product_file_upload, name="product-file-upload"),
     path(

@@ -3439,7 +3439,7 @@ def product_dna_generate(request, pk):
     )
 
     if not _wants_json(request):
-        return redirect(f"/products/{product.pk}/?generating=1")
+        return redirect(f"{reverse('product-detail', args=[product.pk])}?generating=1")
     return JsonResponse({
         "status": "generating",
         "product_id": product.pk,
