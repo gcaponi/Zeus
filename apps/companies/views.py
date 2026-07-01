@@ -2717,6 +2717,24 @@ PIANO: {plan_slug}
 PROFILO: {profile["label"]}
 ISTRUZIONE DI PROFONDITA: {profile["instruction"]}
 
+METODO COMBINAZIONALE (esegui prima di generare le domande):
+Prima di scrivere le domande, ragiona cosi:
+
+1. FATTI SPECIALISTA: Quali sono i fatti tecnici chiave del pre-DNA specialista?
+   Quali lacune, ambiguita, o affermazioni generiche noti?
+
+2. FATTI AZIENDA: Quali sono i principi, confini, e logiche del DNA Generale?
+
+3. COMBINAZIONE: Dove si incrociano i due livelli?
+   - Un vincolo tecnico dello specialista contraddice o arricchisce un confine aziendale?
+   - La configurazione custom riflette la logica decisionale generale?
+   - Le specifiche tecniche rivelano qualcosa sul nucleo tecnico aziendale?
+   - Cosa sa chi lavora con questo prodotto che il DNA Generale non cattura?
+
+4. GENERAZIONE: Usa le combinazioni identificate per generare domande che
+   NON chiedono solo "qual e il valore" ma che rivelano conoscenza operativa
+   che collega il prodotto specifico alla postura aziendale generale.
+
 Regole obbligatorie:
 - Genera esattamente 10 domande originali.
 - Ogni domanda deve partire da una lacuna, ambiguita, affermazione o opportunita
@@ -2729,6 +2747,7 @@ Regole obbligatorie:
 - DUE POOL DI DOMANDE:
   - Pool "template": 5 domande ancorate ai 6 layer tecnici.
     Nascono dal pre-DNA e dal DNA Generale, non dai file specifici.
+    Devono esplorare i collegamenti tra specialista e generale.
   - Pool "kb_anchored": 3 domande che nascono leggendo i file specifici
     della famiglia prodotto (brochure, disegni, manuali). Queste sono le
     piu preziose: cacciano giudizio tecnico che il sito non rivela.
@@ -2931,18 +2950,33 @@ def _apply_product_self_critique(dna, product):
     layers = {k: dna.content.get(k, "") for k in PRODUCT_LAYER_KEYS}
     layers_json = _json.dumps(layers, ensure_ascii=False, indent=2)
 
+    source_snippets = []
+    for pf in product.product_files.all()[:5]:
+        snippet = pf.content_text[:800].replace("\x00", "")
+        source_snippets.append(f"[{pf.original_name}]\n{snippet}")
+    sources_text = "\n\n---\n\n".join(source_snippets) if source_snippets else "Nessun documento di origine disponibile."
+
     prompt = f"""SELF_CRITIQUE_SPECIALISTA
 
 Sei ZEUS. Hai generato il DNA Specialista per "{product.name}".
 Rivedi criticamente ogni sezione tecnica e proponi miglioramenti dove necessario.
 
-Per ogni sezione valuta:
-- Vuota o contiene "Da chiarire": contenuto insufficiente
-- Generica: mancano dati numerici, specifiche precise, quantificazioni
-- Contraddittoria: incoerenza tra cio che dice questa sezione e le altre
-- Incompletezza: informazioni parziali che i documenti potrebbero completare
+PER OGNI SEZIONE VALUTA:
+1. Vuota o "Da chiarire": contenuto insufficiente
+2. Generica: mancano dati numerici, specifiche precise, quantificazioni
+3. Contraddittoria: incoerenza tra questa sezione e le altre
+4. Incompletezza: informazioni parziali che i documenti potrebbero completare
 
-Regole:
+ANTI-MEMORIZATION (critico):
+Per ogni sezione, confronta il testo del DNA con i DOCUMENTI DI ORIGINE.
+- PARAFRASI: il DNA ripede quasi word-for-word il documento (>60% somiglianza)
+- SINTESI: il DNA riformula, collega, interpreta, aggiunge prospettiva
+
+Se una sezione e parafrasi, proponi una riformulazione che SINTETIZZI:
+riorganizza le informazioni, collega dati di documenti diversi, aggiungi
+interpretazione tecnica. Segnala con "anti_memorization": true.
+
+REGOLE:
 - Proponi SOLO sezioni con problemi reali (massimo 4 proposte, le piu critiche).
 - Non ripetere sezioni gia adequate.
 - Se tutto e adeguato, ritorna array vuoto.
@@ -2951,12 +2985,16 @@ Regole:
 DNA SPECIALISTA:
 {layers_json}
 
+DOCUMENTI DI ORIGINE:
+{sources_text}
+
 Output JSON:
 {{
   "proposals": [
     {{
       "section_key": "identita_tecnica|architettura|specifiche|applicazione|vincoli|configurazione",
       "issue": "descrizione concisa del problema",
+      "anti_memorization": false,
       "proposed_text": "testo migliorato completo per la sezione"
     }}
   ]

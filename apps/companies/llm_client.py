@@ -451,15 +451,26 @@ class MockLLMClient(LLMClient):
                 code = f"D{index + 1}"
                 if index < 5:
                     pool = "template"
-                    question = f"Domanda {code} per piano {plan_slug}: chiarisci un aspetto tecnico del pre-DNA specialista."
+                    combinational = [
+                        f"Domanda {code}: il vincolo di temperatura nello specialista e coerente con i confini operativi dichiarati nel DNA Generale? Se diverge, in quale direzione?",
+                        f"Domanda {code}: la configurazione custom descritta rispecchia la logica decisionale aziendale sul 'fuori standard'? Ci sono casi dove il prodotto la segue o la contrasta?",
+                        f"Domanda {code}: le specifiche tecniche (materiali, tolleranze) arricchiscono o contraddicono il nucleo tecnico aziendale? Cosa rende questo prodotto tecnicamente unico?",
+                        f"Domanda {code}: il processo di installazione descritto e standard o richiede adattamenti? Come si collega al modo in cui l'azienda approccia il mercato?",
+                        f"Domanda {code}: l'identita del prodotto si allinea alla postura aziendale? Se l'azienda e 'tecnica e precisa', questo prodotto lo riflette pienamente?",
+                    ][index]
+                    question = combinational
                 elif index < 8:
                     pool = "kb_anchored"
-                    question = f"Domanda {code}: cosa rivela il file caricato che il pre-DNA non ha catturato?"
+                    question = [
+                        f"Domanda {code}: i documenti tecnici specificano tolleranze o parametri che il pre-DNA ha riassunto in modo generico. Quali numeri esatti dovremmo registrare?",
+                        f"Domanda {code}: il manuale o la brochure menzionano un caso d'uso o limite che non e stato catturato nel pre-DNA? Quale?",
+                        f"Domanda {code}: cosa rivela il file caricato sul processo di produzione o sui controlli qualita che il DNA non ha ancora riflesso?",
+                    ][index - 5]
                 else:
                     pool = "meta"
                     question = {
-                        8: "Cosa sa chi lavora qui da 10 anni che non e scritto da nessuna parte?",
-                        9: "Qual e l'errore piu costoso che un cliente nuovo fa nel primo mese?",
+                        8: "Cosa sa chi lavora con questo prodotto ogni giorno che non e scritto nei documenti e che cambierebbe il modo in cui lo presentiamo ai clienti?",
+                        9: "Qual e l'errore piu costoso che un installatore fa con questo prodotto nei primi 30 giorni, e come lo preveniamo?",
                     }[index]
                 questions.append({
                     "code": code,
@@ -554,6 +565,7 @@ class MockLLMClient(LLMClient):
                         {
                             "section_key": "specifiche",
                             "issue": "La sezione specifiche manca di certificazioni di conformita specifiche al mercato europeo oltre alla EN 1123.",
+                            "anti_memorization": False,
                             "proposed_text": (
                                 "Sezione 90x90mm, lunghezza modulare 100cm, tolleranza +-0.5mm. "
                                 "Conforme EN 1123 (scarichi liquidi) e EN 1253-1 (canali di drenaggio edilizi). "
@@ -564,6 +576,7 @@ class MockLLMClient(LLMClient):
                         {
                             "section_key": "configurazione",
                             "issue": "La logica di configurazione non quantifica i costi di setup per i custom.",
+                            "anti_memorization": False,
                             "proposed_text": (
                                 "Sezione geometrica fissa, modificabile solo in lunghezza (moduli da 50-100cm). "
                                 "Custom accettati su lotti superiori a 50pz con costo di setup di circa 800 eur "
@@ -571,12 +584,25 @@ class MockLLMClient(LLMClient):
                                 "richieste singole. Lead time custom: 4-6 settimane lavorative."
                             ),
                         },
+                        {
+                            "section_key": "architettura",
+                            "issue": "La descrizione dei materiali ripete quasi word-for-word il documento tecnico caricato, senza aggiungere interpretazione.",
+                            "anti_memorization": True,
+                            "proposed_text": (
+                                "Il sistema combina INOX AISI 304 (spessore 2mm) per il corpo principale con "
+                                "saldature TIG per garantire tenuta stagna a lungo termine. La scelta dell'AISI 304 "
+                                "rispetto al 316 riflette un compromise tra resistenza alla corrosione e costi, "
+                                "adeguato per applicazioni residenziali e commerciali standard. Il copricanale "
+                                "removibile con scorrimento laterale e un dettaglio di progettazione che "
+                                "distingue questo prodotto dai canali a incastro tradizionali."
+                            ),
+                        },
                     ]
                 }, ensure_ascii=False),
-                tokens_in=500,
-                tokens_out=300,
-                cost=0.0003,
-                latency_ms=700,
+                tokens_in=600,
+                tokens_out=400,
+                cost=0.0004,
+                latency_ms=800,
             )
 
         return LLMResult(
