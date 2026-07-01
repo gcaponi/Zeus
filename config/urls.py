@@ -24,6 +24,7 @@ urlpatterns = [
     path("accounts/", include("allauth.urls")),
     path("dashboard/", tenant_dashboard, name="tenant-dashboard"),
     path("onboarding/", public_onboarding_redirect, name="public-onboarding-redirect"),
+    path("", include(companies_urls)),
     path("api/", include(companies_urls)),
     path("", tenant_landing, name="tenant-landing"),
 ]

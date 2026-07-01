@@ -18,5 +18,6 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("accounts/", include("allauth.urls")),
     path("", include(onboarding_urls)),
+    path("", include(companies_urls)),
     path("api/", include(companies_urls)),
 ]
