@@ -2515,6 +2515,7 @@ def _dna_review_context(company, dna):
         blocking_flags = _safe_mode_flags(dna)
     final_document = _dna_final_document(dna.content)
     latest_run = company.pipeline_runs.order_by("-created_at").first()
+    cross_specialist = _cross_specialist_state(company, dna)
 
     return {
         "company": company,
@@ -2530,6 +2531,7 @@ def _dna_review_context(company, dna):
         "is_export_ready": dna.is_export_ready(),
         "company_name": company.name,
         "blocking_flags": blocking_flags,
+        "cross_specialist": cross_specialist,
         "step": 3,
         "step_has_run": latest_run is not None,
         "step_has_dna": True,
@@ -2544,6 +2546,472 @@ def _render_dna_review_fragment(request, company, dna, status=200):
         _dna_review_context(company, dna),
         status=status,
     )
+
+
+def _active_specialist_records(company):
+    records = []
+    products = company.products.filter(status=Product.STATUS_ATTIVO).order_by("name")
+    for product in products:
+        dna = product.dna_versions.filter(
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            is_current=True,
+        ).first()
+        if not dna:
+            continue
+        content = dna.content if isinstance(dna.content, dict) else {}
+        records.append({
+            "product_id": product.pk,
+            "product_name": product.name,
+            "tipologia": product.tipologia or "",
+            "codice": product.codice or "",
+            "dna_id": dna.pk,
+            "dna_version": dna.version,
+            "layers": {
+                key: _sanitize_public_value(content.get(key, ""))
+                for key in PRODUCT_LAYER_KEYS
+            },
+        })
+    return records
+
+
+def _cross_specialist_state(company, dna):
+    records = _active_specialist_records(company)
+    source_dna_ids = sorted(record["dna_id"] for record in records)
+    analysis = {}
+    if isinstance(dna.content, dict):
+        raw_analysis = dna.content.get("_cross_specialist") or {}
+        analysis = raw_analysis if isinstance(raw_analysis, dict) else {}
+    analysis_source_ids = sorted(analysis.get("source_dna_ids") or [])
+    requires_refresh = bool(analysis and analysis_source_ids != source_dna_ids)
+    proposals = analysis.get("consolidation_proposals") or []
+    conflicts = analysis.get("conflicts") or []
+    return {
+        "active_count": len(records),
+        "products": [
+            {
+                "product_id": record["product_id"],
+                "product_name": record["product_name"],
+                "dna_id": record["dna_id"],
+                "dna_version": record["dna_version"],
+            }
+            for record in records
+        ],
+        "analysis": analysis,
+        "has_analysis": bool(analysis),
+        "requires_refresh": requires_refresh,
+        "shared_patterns": analysis.get("shared_patterns") or [],
+        "conflicts": conflicts,
+        "has_conflicts": bool(conflicts),
+        "proposals": proposals,
+        "can_analyze": bool(records),
+        "can_consolidate": bool(proposals) and not requires_refresh,
+    }
+
+
+def _normalize_cross_specialist_analysis(raw, company_dna, records):
+    valid_layers = set(LAYER_KEYS)
+    raw = raw if isinstance(raw, dict) else {}
+
+    def _clean_items(key, max_items):
+        items = raw.get(key) or []
+        if not isinstance(items, list):
+            return []
+        return [item for item in items[:max_items] if isinstance(item, dict)]
+
+    patterns = []
+    for item in _clean_items("shared_patterns", 6):
+        theme = _strip_instruction_prefixes(item.get("theme", ""))
+        if not theme:
+            continue
+        patterns.append({
+            "theme": theme,
+            "evidence": _strip_instruction_prefixes(item.get("evidence", "")),
+            "impact": _strip_instruction_prefixes(item.get("impact", "")),
+            "source_products": item.get("source_products") or [],
+        })
+
+    conflicts = []
+    for item in _clean_items("conflicts", 8):
+        issue = _strip_instruction_prefixes(item.get("issue", ""))
+        if not issue:
+            continue
+        severity = str(item.get("severity") or "medium").lower()
+        if severity not in {"low", "medium", "high"}:
+            severity = "medium"
+        conflicts.append({
+            "severity": severity,
+            "products": item.get("products") or item.get("source_products") or [],
+            "issue": issue,
+            "recommendation": _strip_instruction_prefixes(item.get("recommendation", "")),
+        })
+
+    proposals = []
+    for item in _clean_items("consolidation_proposals", 8):
+        target_layer = item.get("target_layer", "")
+        proposed_value = _strip_instruction_prefixes(item.get("proposed_value", ""))
+        if target_layer not in valid_layers or not proposed_value:
+            continue
+        proposals.append({
+            "target_layer": target_layer,
+            "title": _strip_instruction_prefixes(item.get("title", "")) or LAYER_TITLES[target_layer],
+            "proposed_value": proposed_value,
+            "rationale": _strip_instruction_prefixes(item.get("rationale", "")),
+            "source_products": item.get("source_products") or [],
+        })
+
+    return {
+        "generated_at": timezone.now().isoformat(),
+        "company_dna_id": company_dna.pk,
+        "company_dna_version": company_dna.version,
+        "source_dna_ids": sorted(record["dna_id"] for record in records),
+        "source_products": [
+            {
+                "product_id": record["product_id"],
+                "product_name": record["product_name"],
+                "dna_id": record["dna_id"],
+                "dna_version": record["dna_version"],
+            }
+            for record in records
+        ],
+        "summary": _strip_instruction_prefixes(raw.get("summary", "")),
+        "shared_patterns": patterns,
+        "conflicts": conflicts,
+        "consolidation_proposals": proposals,
+        "status": "ready",
+    }
+
+
+def _fallback_cross_specialist_analysis(company_dna, records):
+    proposals = []
+    if records:
+        product_names = [record["product_name"] for record in records]
+        proposals.append({
+            "target_layer": "nucleo_tecnico",
+            "title": "Specialisti attivi come evidenza tecnica",
+            "proposed_value": (
+                "Gli specialisti attivi rendono piu esplicita la competenza tecnica "
+                "dell'azienda: " + ", ".join(product_names) + "."
+            ),
+            "rationale": "Fallback controllato: l'analisi LLM non ha restituito proposte strutturate.",
+            "source_products": product_names,
+        })
+    return _normalize_cross_specialist_analysis(
+        {
+            "summary": "Analisi specialisti costruita in modalita fallback.",
+            "shared_patterns": [],
+            "conflicts": [],
+            "consolidation_proposals": proposals,
+        },
+        company_dna,
+        records,
+    )
+
+
+def _generate_cross_specialist_analysis(company, company_dna, records):
+    company_json = json.dumps(
+        _sanitize_company_feedback_content(company_dna.content),
+        ensure_ascii=False,
+        indent=2,
+    )
+    specialists_json = json.dumps(records, ensure_ascii=False, indent=2)
+    prompt = f"""
+CROSS_SPECIALIST_ANALYSIS
+
+Sei ZEUS. Analizza tutti i DNA Specialisti ATTIVI dell'azienda e confrontali con
+il DNA Generale corrente. Questo e il Motore B: serve a capire cosa emerge solo
+guardando gli specialisti insieme.
+
+OBIETTIVI:
+1. Trovare pattern comuni tra specialisti che meritano di diventare principi del DNA Generale.
+2. Trovare conflitti o tensioni tra specialisti. I conflitti sono WARNING, non blocchi.
+3. Proporre aggiornamenti al DNA Generale solo quando l'informazione e trasversale.
+
+REGOLE:
+- Non trasformare il DNA Generale in una scheda prodotto.
+- Non proporre dettagli tecnici isolati validi per un solo specialista, salvo se rivelano una postura aziendale.
+- Non usare prefissi come "Aggiungere:", "Integrare:" o "Proposta:" nel testo finale.
+- Massimo 6 pattern, 8 conflitti, 8 proposte.
+- Le proposte devono essere testo finale integrabile, non istruzioni operative.
+
+DNA GENERALE CORRENTE:
+{company_json}
+
+DNA SPECIALISTI ATTIVI:
+{specialists_json}
+
+Output JSON esatto:
+{{
+  "summary": "sintesi breve del quadro cross-specialist",
+  "shared_patterns": [
+    {{
+      "theme": "pattern trasversale",
+      "evidence": "quali specialisti lo mostrano e come",
+      "impact": "cosa cambia nel DNA Generale",
+      "source_products": ["nome specialista"]
+    }}
+  ],
+  "conflicts": [
+    {{
+      "severity": "low|medium|high",
+      "products": ["nome specialista A", "nome specialista B"],
+      "issue": "tensione o conflitto rilevato",
+      "recommendation": "come segnalarlo o gestirlo senza bloccare"
+    }}
+  ],
+  "consolidation_proposals": [
+    {{
+      "target_layer": "identita|modelli_mentali|nucleo_tecnico|confini|tono|logica_decisionale",
+      "title": "titolo breve",
+      "proposed_value": "testo finale da integrare nel DNA Generale",
+      "rationale": "perche nasce dagli specialisti attivi",
+      "source_products": ["nome specialista"]
+    }}
+  ]
+}}
+
+Rispondi SOLO JSON valido, senza markdown.
+""".strip()
+
+    client = get_llm_client()
+    try:
+        result, raw = _generate_with_retry(
+            client,
+            prompt,
+            model=LLM_MODEL_PRO,
+            system_prompt=ZEUS_SYSTEM_PROMPT,
+            temperatures=(0.35, 0.25, 0.15),
+            parse=_parse_json_object,
+            context="cross-specialist-analysis",
+        )
+        LLMCall.objects.create(
+            company=company,
+            model_name=LLM_MODEL_PRO,
+            prompt_text=prompt,
+            response_text=result.text,
+            tokens_in=result.tokens_in,
+            tokens_out=result.tokens_out,
+            cost_usd=result.cost,
+            latency_ms=result.latency_ms,
+        )
+        analysis = _normalize_cross_specialist_analysis(raw, company_dna, records)
+        if analysis["consolidation_proposals"] or analysis["conflicts"] or analysis["shared_patterns"]:
+            return analysis
+    except Exception:
+        logger.exception("Cross-specialist analysis failed for company %s", company.schema_name)
+    return _fallback_cross_specialist_analysis(company_dna, records)
+
+
+def _selected_cross_specialist_proposals(analysis, selected_indices):
+    proposals = analysis.get("consolidation_proposals") or []
+    selected = []
+    for idx in selected_indices:
+        try:
+            proposal = proposals[int(idx)]
+        except (TypeError, ValueError, IndexError):
+            continue
+        target = proposal.get("target_layer", "")
+        proposed = _strip_instruction_prefixes(proposal.get("proposed_value", ""))
+        if target not in set(LAYER_KEYS) or not proposed:
+            continue
+        selected.append({
+            "target_layer": target,
+            "title": _strip_instruction_prefixes(proposal.get("title", "")),
+            "proposed_value": proposed,
+            "rationale": _strip_instruction_prefixes(proposal.get("rationale", "")),
+            "source_products": proposal.get("source_products") or [],
+        })
+    return selected
+
+
+def _fallback_apply_cross_specialist_proposals(current_content, selected_proposals):
+    new_content = dict(current_content)
+    for proposal in selected_proposals:
+        target = proposal["target_layer"]
+        current = _strip_instruction_prefixes(_as_text(new_content.get(target)))
+        proposed = _strip_instruction_prefixes(proposal.get("proposed_value", ""))
+        if not proposed:
+            continue
+        if proposed.lower() in current.lower():
+            new_content[target] = current
+        else:
+            new_content[target] = f"{current}\n\n{proposed}".strip() if current else proposed
+    return new_content
+
+
+def _regenerate_company_dna_from_cross_specialists(
+    company,
+    company_dna,
+    records,
+    selected_proposals,
+    analysis,
+):
+    current_content = _sanitize_company_feedback_content(company_dna.content)
+    current_json = json.dumps(current_content, ensure_ascii=False, indent=2)
+    specialists_json = json.dumps(records, ensure_ascii=False, indent=2)
+    proposals_json = json.dumps(selected_proposals, ensure_ascii=False, indent=2)
+    conflicts_json = json.dumps(analysis.get("conflicts") or [], ensure_ascii=False, indent=2)
+
+    prompt = f"""
+CONSOLIDA_DNA_GENERALE_DA_SPECIALISTI
+
+Sei ZEUS. Devi rigenerare il DNA Generale integrando le proposte cross-specialist
+approvate dall'utente. Usa i DNA Specialisti attivi come evidenza, ma il risultato
+deve restare un DNA Generale: principi trasversali, non dettagli di catalogo.
+
+REGOLE:
+1. Non applicare patch testuali. Riscrivi le sezioni interessate in modo fluido.
+2. Non usare mai etichette operative come "Aggiungere:", "Integrare:", "Proposta:".
+3. I conflitti sono warning: non inventare una soluzione se richiede scelta umana.
+4. Se una proposta vale solo per uno specialista, integrala solo come esempio di postura generale.
+5. Mantieni le sezioni non toccate pulite e sostanzialmente invariate.
+
+OUTPUT JSON completo con queste chiavi esatte:
+- sintesi_cognitiva
+- identita
+- modelli_mentali
+- nucleo_tecnico
+- confini
+- tono
+- logica_decisionale
+
+DNA GENERALE ATTUALE:
+{current_json}
+
+DNA SPECIALISTI ATTIVI:
+{specialists_json}
+
+PROPOSTE CROSS-SPECIALIST APPROVATE:
+{proposals_json}
+
+WARNING CONFLITTI DA NON NASCONDERE:
+{conflicts_json}
+
+Rispondi SOLO JSON valido, senza markdown.
+""".strip()
+
+    client = get_llm_client()
+    try:
+        result, rewritten = _generate_with_retry(
+            client,
+            prompt,
+            model=LLM_MODEL_PRO,
+            system_prompt=ZEUS_SYSTEM_PROMPT,
+            temperatures=(0.35, 0.25, 0.15),
+            parse=_parse_json_object,
+            context="cross-specialist-consolidation",
+        )
+        LLMCall.objects.create(
+            company=company,
+            model_name=LLM_MODEL_PRO,
+            prompt_text=prompt,
+            response_text=result.text,
+            tokens_in=result.tokens_in,
+            tokens_out=result.tokens_out,
+            cost_usd=result.cost,
+            latency_ms=result.latency_ms,
+        )
+        merged = _safe_merge_synthesis(current_content, rewritten)
+    except Exception:
+        logger.exception(
+            "Cross-specialist consolidation failed for company %s; applying cleaned fallback",
+            company.schema_name,
+        )
+        merged = _fallback_apply_cross_specialist_proposals(current_content, selected_proposals)
+
+    merged["_cross_specialist"] = {
+        **analysis,
+        "status": "applied",
+        "applied_at": timezone.now().isoformat(),
+        "applied_proposals": selected_proposals,
+    }
+    return merged
+
+
+@login_required
+@require_http_methods(["POST"])
+def dna_cross_specialist_analyze(request):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    dna = company.dna_versions.filter(
+        dna_type=CompanyDNA.TYPE_COMPLETE,
+        is_current=True,
+    ).first()
+    if not dna:
+        return HttpResponse("DNA Generale non trovato", status=404)
+    records = _active_specialist_records(company)
+    if not records:
+        return redirect("dna-review")
+
+    analysis = _generate_cross_specialist_analysis(company, dna, records)
+    content = dict(dna.content) if isinstance(dna.content, dict) else {}
+    content["_cross_specialist"] = analysis
+    dna.content = content
+    try:
+        from apps.companies.audit import compute_audit_hash
+        dna.audit_hash = compute_audit_hash(content, dna.previous_hash or "")
+        dna.save(update_fields=["content", "audit_hash"])
+    except Exception:
+        logger.exception("Cross-specialist audit refresh failed for DNA %s", dna.pk)
+        dna.save(update_fields=["content"])
+    return redirect("dna-review")
+
+
+@login_required
+@require_http_methods(["POST"])
+def dna_cross_specialist_apply(request):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    old_dna = company.dna_versions.filter(
+        dna_type=CompanyDNA.TYPE_COMPLETE,
+        is_current=True,
+    ).first()
+    if not old_dna:
+        return HttpResponse("DNA Generale non trovato", status=404)
+
+    analysis = (old_dna.content or {}).get("_cross_specialist") if isinstance(old_dna.content, dict) else None
+    if not isinstance(analysis, dict) or not analysis.get("consolidation_proposals"):
+        return redirect("dna-review")
+
+    selected_proposals = _selected_cross_specialist_proposals(
+        analysis,
+        request.POST.getlist("selected_proposals"),
+    )
+    if not selected_proposals:
+        return redirect("dna-review")
+
+    records = _active_specialist_records(company)
+    source_ids = sorted(record["dna_id"] for record in records)
+    if source_ids != sorted(analysis.get("source_dna_ids") or []):
+        return redirect("dna-review")
+
+    new_content = _regenerate_company_dna_from_cross_specialists(
+        company,
+        old_dna,
+        records,
+        selected_proposals,
+        analysis,
+    )
+
+    last_version = company.dna_versions.order_by("-version").first()
+    next_version = (last_version.version + 1) if last_version else 1
+    company.dna_versions.filter(is_current=True).update(is_current=False)
+    new_dna = CompanyDNA.objects.create(
+        company=company,
+        version=next_version,
+        dna_type=CompanyDNA.TYPE_COMPLETE,
+        content=new_content,
+        is_current=True,
+        created_by=request.user if request.user.is_authenticated else None,
+        previous_hash=old_dna.audit_hash or "",
+    )
+    from apps.companies.audit import compute_audit_hash
+    from apps.companies.tasks import _compute_enrichment
+    new_dna._enrichment = _compute_enrichment(new_content, company, source=None)
+    new_dna.audit_hash = compute_audit_hash(new_content, new_dna.previous_hash or "")
+    new_dna.save(update_fields=["_enrichment", "audit_hash"])
+    return redirect("dna-review")
 
 
 @login_required

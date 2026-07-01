@@ -386,6 +386,63 @@ class MockLLMClient(LLMClient):
                 latency_ms=700,
             )
 
+        if "CROSS_SPECIALIST_ANALYSIS" in prompt:
+            return LLMResult(
+                text=json.dumps({
+                    "summary": "Gli specialisti attivi mostrano una convergenza su controllo tecnico, configurazione consapevole e confini applicativi espliciti.",
+                    "shared_patterns": [
+                        {
+                            "theme": "Controllo tecnico prima della promessa commerciale",
+                            "evidence": "Gli specialisti danno priorita a vincoli, installazione e compatibilita.",
+                            "impact": "Il DNA Generale deve rendere piu forte la postura di affidabilita tecnica.",
+                            "source_products": ["Specialista mock"],
+                        }
+                    ],
+                    "conflicts": [
+                        {
+                            "severity": "low",
+                            "products": ["Specialista mock"],
+                            "issue": "Alcuni limiti applicativi sono specifici del prodotto e non vanno assolutizzati nel DNA Generale.",
+                            "recommendation": "Mantenerli come warning di perimetro, non come blocco.",
+                        }
+                    ],
+                    "consolidation_proposals": [
+                        {
+                            "target_layer": "nucleo_tecnico",
+                            "title": "Tecnica come perimetro operativo",
+                            "proposed_value": "La competenza distintiva dell'azienda emerge dalla capacita di trasformare vincoli tecnici, installativi e configurativi in criteri operativi chiari prima della promessa commerciale.",
+                            "rationale": "Pattern ricorrente nei DNA Specialisti attivi.",
+                            "source_products": ["Specialista mock"],
+                        }
+                    ],
+                }, ensure_ascii=False),
+                tokens_in=700,
+                tokens_out=450,
+                cost=0.0005,
+                latency_ms=900,
+            )
+
+        if "CONSOLIDA_DNA_GENERALE_DA_SPECIALISTI" in prompt:
+            return LLMResult(
+                text=json.dumps({
+                    "identita": "L'azienda si pone come interlocutore tecnico che preferisce chiarire vincoli, compatibilita e condizioni operative prima di promettere una soluzione.",
+                    "modelli_mentali": [
+                        "Leggere prima il vincolo tecnico",
+                        "Separare promessa commerciale e fattibilita operativa",
+                        "Usare gli specialisti come prova del metodo aziendale",
+                    ],
+                    "nucleo_tecnico": "La competenza distintiva emerge dalla capacita di trasformare vincoli tecnici, installativi e configurativi in criteri operativi chiari.",
+                    "confini": "I limiti applicativi degli specialisti non sono eccezioni da nascondere, ma confini da esplicitare per proteggere affidabilita e qualita del risultato.",
+                    "tono": "Il tono resta tecnico, diretto e orientato alla fattibilita reale.",
+                    "logica_decisionale": "Le decisioni partono dai vincoli tecnici comuni agli specialisti attivi e solo dopo traducono la soluzione in proposta commerciale.",
+                    "sintesi_cognitiva": "Il DNA Generale incorpora gli specialisti attivi come prova della postura aziendale: prima verifica tecnica, poi promessa commerciale.",
+                }, ensure_ascii=False),
+                tokens_in=900,
+                tokens_out=600,
+                cost=0.0007,
+                latency_ms=1100,
+            )
+
         if "GENERA_DOMANDE_A1_A20" in prompt:
             plan_slug = "starter"
             answer_depth = "generica"

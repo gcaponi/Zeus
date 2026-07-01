@@ -16,6 +16,16 @@ urlpatterns = [
     ),
     path("company/dna/<int:pk>/feedback/", views.dna_feedback, name="dna-feedback"),
     path("company/dna/review/", views.dna_review, name="dna-review"),
+    path(
+        "company/dna/specialists/analyze/",
+        views.dna_cross_specialist_analyze,
+        name="dna-cross-specialist-analyze",
+    ),
+    path(
+        "company/dna/specialists/apply/",
+        views.dna_cross_specialist_apply,
+        name="dna-cross-specialist-apply",
+    ),
     path("company/dna/visualize/", views.dna_visualize, name="dna-visualize"),
     path("company/dna/generating/", views.dna_generating, name="dna-generating"),
     path("company/dna/download/", views.dna_download_pdf, name="dna-download-pdf"),
