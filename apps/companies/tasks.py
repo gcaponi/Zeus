@@ -171,8 +171,13 @@ def _generate_dna(source: Source, company):
     return dna, llm_call
 
 
-def _generate_product_dna(product: Product, company):
-    """Generate ProductDNA from product files and company DNA using multi-layer analysis."""
+def _extract_concept_map(product: Product, company):
+    """Stage 1 — Extract structured concept map from product documents before DNA generation.
+
+    This is the 'explicit planning phase': instead of asking the LLM to go from raw
+    documents to DNA in one pass, we first extract entities, relations, parameters
+    and gaps. The concept map then feeds into the DNA generation prompt.
+    """
     documents = []
     for product_file in product.product_files.all()[:10]:
         documents.append(f"# {product_file.original_name}\n{product_file.content_text}")
@@ -188,30 +193,126 @@ def _generate_product_dna(product: Product, company):
     archetype_context = get_archetype_context(company)
 
     prompt = f"""
-ANALISI_NEURALE_SPECIALISTA
+CONCEPT_MAP_SPECIALISTA
 
 Sei ZEUS. Analizza i documenti tecnici del prodotto "{product.name}" dell'azienda {company.name}.
-Elabora i documenti come una rete neurale a 4 layer di feature extraction gerarchica.
+Estrai una mappa concettuale strutturata. Non generare ancora il DNA: estrai SOLO i dati grezzi organizzati.
 
-LAYER 1 — FATTI GREZZI: Estrai tutti i fatti tecnici dai documenti
-(materiali, dimensioni, standard, processi, certificazioni, tolleranze).
+DNA AZIENDALE (contesto):
+{company_context or "Non disponibile"}
 
-LAYER 2 — PATTERN: Identifica relazioni e dipendenze tra i fatti
-(materiale + spessore → proprieta, dimensione → vincolo installazione).
+PROFILO OPERATIVO:
+{archetype_context or "Non disponibile"}
 
-LAYER 3 — SEMANTICA: Sintetizza principi guida e vincoli semantici
-(scopo del prodotto, confini operativi, logica di configurazione).
+DOCUMENTI PRODOTTO:
+{chr(10).join(documents) or "Nessun documento caricato."}
 
-LAYER 4 — DNA: Mappa tutto su 6 sezioni tecniche strutturate.
+Estrai 4 categorie:
+
+1. ENTITA: oggetti fisici, materiali, componenti, standard, certificazioni, processi.
+2. RELAZIONI: dipendenze, causazioni, vincoli reciproci tra entita.
+3. PARAMETRI: valori numerici, tolleranze, range operativi (con unita di misura).
+4. GAPS: informazioni incomplete o ambigue nei documenti che richiedono chiarimento.
+
+Output JSON:
+{{
+  "entities": [
+    {{"name": "acciaio INOX AISI 304", "type": "materiale"}},
+    {{"name": "saldatura TIG", "type": "processo"}}
+  ],
+  "relations": [
+    {{"from": "acciaio INOX AISI 304", "to": "resistenza corrosione", "type": "determina"}}
+  ],
+  "parameters": [
+    {{"name": "spessore", "value": "2", "unit": "mm", "source": "documento"}},
+    {{"name": "temperatura max", "value": "80", "unit": "C", "source": "documento"}}
+  ],
+  "gaps": [
+    {{"what": "certificazione food-grade", "why_missing": "non menzionata nei documenti", "can_ask": true}}
+  ]
+}}
+
+REGOLE:
+- Estrai SOLO cio che e nei documenti, non inventare.
+- Sii specifico: nomi esatti di materiali, valori numerici precisi.
+- Per i GAPS, indica sempre se possono essere chiesti al cliente (can_ask: true).
+
+Rispondi SOLO JSON valido, senza markdown.
+""".strip()
+
+    client = get_llm_client()
+
+    def _parse_concept_map(text):
+        data = json.loads(text)
+        for key in ("entities", "relations", "parameters", "gaps"):
+            if not isinstance(data.get(key), list):
+                data[key] = []
+        return data
+
+    try:
+        result, concept_map = _generate_with_retry(
+            client,
+            prompt,
+            model=LLM_MODEL,
+            system_prompt=ZEUS_SYSTEM_PROMPT,
+            temperatures=(0.4, 0.3, 0.2),
+            parse=_parse_concept_map,
+            context="product-concept-map",
+        )
+        LLMCall.objects.create(
+            company=company,
+            model_name=LLM_MODEL,
+            prompt_text=prompt,
+            response_text=result.text,
+            tokens_in=result.tokens_in,
+            tokens_out=result.tokens_out,
+            cost_usd=result.cost,
+            latency_ms=result.latency_ms,
+        )
+        return concept_map
+    except Exception:
+        logger.exception("Concept map extraction failed for product %s", product.pk)
+        return None
+
+
+def _generate_product_dna(product: Product, company):
+    """Generate ProductDNA from concept map + company DNA using multi-layer analysis."""
+    company_dna = company.dna_versions.filter(
+        dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True
+    ).first()
+    company_context = ""
+    if company_dna:
+        company_context = json.dumps(company_dna.content, ensure_ascii=False, indent=2)
+
+    from apps.companies.sector_archetypes import get_archetype_context
+    archetype_context = get_archetype_context(company)
+
+    concept_map = _extract_concept_map(product, company)
+
+    if concept_map:
+        concept_map_json = json.dumps(concept_map, ensure_ascii=False, indent=2)
+        source_block = f"CONCEPT MAP (entita, relazioni, parametri, gap gia estratti):\n{concept_map_json}"
+    else:
+        documents = []
+        for product_file in product.product_files.all()[:10]:
+            documents.append(f"# {product_file.original_name}\n{product_file.content_text}")
+        source_block = f"DOCUMENTI PRODOTTO:\n{chr(10).join(documents) or 'Nessun documento caricato.'}"
+
+    prompt = f"""
+ANALISI_NEURALE_SPECIALISTA
+
+Sei ZEUS. Genera il DNA tecnico del prodotto "{product.name}" dell'azienda {company.name}.
+
+Hai a disposizione una CONCEPT MAP gia estratta dai documenti. Il tuo compito e
+mapparla su 6 sezioni tecniche strutturate, colmando i gap con intervista.
+
+{source_block}
 
 DNA AZIENDALE (contesto — eredita, non ripetere):
 {company_context or "Non disponibile"}
 
 PROFILO OPERATIVO AZIENDALE:
 {archetype_context or "Non disponibile"}
-
-DOCUMENTI PRODOTTO:
-{chr(10).join(documents) or "Nessun documento prodotto caricato."}
 
 Output JSON con ESATTAMENTE queste 6 chiavi (ogni valore e una stringa
 narrativa tecnica completa e autonoma):
@@ -226,9 +327,11 @@ narrativa tecnica completa e autonoma):
 }}
 
 REGOLE:
-- Ogni sezione deve contenere informazioni tecniche specifiche estratte dai documenti.
-- Se un'informazione non e presente nei documenti, scrivi "Da chiarire in intervista".
-- Non inventare dati tecnici non presenti nei documenti.
+- Usa i PARAMETRI della concept map per arricchire le sezioni con dati numerici precisi.
+- Usa le RELAZIONI per spiegare come le entita si influenzano a vicenda.
+- Usa i GAPS per identificare cosa scrivere come "Da chiarire in intervista".
+- Sintetizza, non parafrasare: riformula, collega, aggiungi interpretazione tecnica.
+- Non inventare dati tecnici non presenti nella concept map.
 - Il tono e tecnico-preciso, non commerciale.
 - Se il PROFILO OPERATIVO contiene contesto libero dal cliente, usalo come fonte primaria.
 

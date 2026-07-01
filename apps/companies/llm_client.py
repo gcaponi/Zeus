@@ -489,6 +489,46 @@ class MockLLMClient(LLMClient):
                 latency_ms=900,
             )
 
+        if "CONCEPT_MAP_SPECIALISTA" in prompt:
+            return LLMResult(
+                text=json.dumps({
+                    "entities": [
+                        {"name": "acciaio INOX AISI 304", "type": "materiale"},
+                        {"name": "saldatura TIG", "type": "processo"},
+                        {"name": "copricanale removibile", "type": "componente"},
+                        {"name": "piastrino di ispezione", "type": "componente"},
+                        {"name": "EN 1123", "type": "standard"},
+                        {"name": "malta di posa", "type": "materiale"},
+                        {"name": "sigillante epossidico", "type": "materiale"},
+                    ],
+                    "relations": [
+                        {"from": "acciaio INOX AISI 304", "to": "resistenza corrosione", "type": "determina"},
+                        {"from": "spessore 2mm", "to": "tenuta strutturale", "type": "garantisce"},
+                        {"from": "copricanale removibile", "to": "ispezionabilita", "type": "abilita"},
+                        {"from": "malta di posa", "to": "stabilita installazione", "type": "necessaria"},
+                    ],
+                    "parameters": [
+                        {"name": "spessore", "value": "2", "unit": "mm", "source": "documento"},
+                        {"name": "sezione", "value": "90x90", "unit": "mm", "source": "documento"},
+                        {"name": "lunghezza modulare", "value": "100", "unit": "cm", "source": "documento"},
+                        {"name": "tolleranza", "value": "+-0.5", "unit": "mm", "source": "documento"},
+                        {"name": "portata nominale", "value": "12", "unit": "l/s", "source": "documento"},
+                        {"name": "peso", "value": "3.2", "unit": "kg/m", "source": "documento"},
+                        {"name": "temperatura max", "value": "80", "unit": "C", "source": "documento"},
+                        {"name": "carico verticale max", "value": "200", "unit": "kg", "source": "documento"},
+                    ],
+                    "gaps": [
+                        {"what": "certificazione EN 1253-1", "why_missing": "non menzionata nei documenti ma rilevante per canali di drenaggio", "can_ask": True},
+                        {"what": "compatibilita agenti chimici", "why_missing": "i documenti non specificano quali agenti chimici sono corrosivi per il prodotto", "can_ask": True},
+                        {"what": "lead time custom", "why_missing": "non quantificato nei documenti per ordini personalizzati", "can_ask": True},
+                    ],
+                }, ensure_ascii=False),
+                tokens_in=500,
+                tokens_out=400,
+                cost=0.0003,
+                latency_ms=600,
+            )
+
         if "ANALISI_NEURALE_SPECIALISTA" in prompt or "SINTESI_GLOBALE_DNA_SPECIALISTA" in prompt:
             return LLMResult(
                 text=json.dumps({
