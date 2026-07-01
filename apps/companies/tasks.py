@@ -427,6 +427,90 @@ applicazione, vincoli, configurazione. Rispondi SOLO JSON.
     return content, llm_call
 
 
+_SECTION_FOCUS = {
+    "identita_tecnica": "categoria tecnica, problema risolto, posizionamento di mercato, cio che lo distingue da alternative generiche",
+    "architettura": "materiali specifici con grado/peso, componenti, costruzione, scelta progettuale (perche questo materiale, questa giunzione)",
+    "specifiche": "tutti i numeri: dimensioni, tolleranze, portate, pesi, standard, certificazioni — niente senza unita di misura",
+    "applicazione": "passaggi installazione in ordine, attrezzi, tempistiche, punti critici, manutenzione programmata",
+    "vincoli": "limiti numerici (max/min), incompatibilita testate, controindicazioni — ogni limite con il valore numerico",
+    "configurazione": "regola decisionale per custom (se/threshold), varianti, lead time, cosa non si fa MAI e perche",
+}
+
+
+def _refine_single_section(key, current_text, concept_map, product, company):
+    """Refine one DNA section independently, using only the concept map as reference."""
+    focus = _SECTION_FOCUS.get(key, "")
+    concept_map_json = json.dumps(concept_map, ensure_ascii=False, indent=2) if concept_map else "Non disponibile"
+
+    prompt = f"""
+REFINEMENT_SEZIONE — {key.upper()}
+
+Sei ZEUS. Raffina UNA sola sezione del DNA Specialista per "{product.name}".
+Non vedere le altre sezioni — concentrati esclusivamente su questa.
+
+FOCUS DELLA SEZIONE: {focus}
+
+CONCEPT MAP (riferimento per dati):
+{concept_map_json}
+
+VERSIONE ATTUALE:
+{current_text or "Vuota o mancante."}
+
+ISTRUZIONI:
+- Aggiungi dettagli tecnici specifici usando i PARAMETRI della concept map.
+- Se mancano dati numerici e sono nella concept map, aggiungili con unita di misura.
+- Verifica che ogni affermazione sia supportata dalla concept map.
+- Se un'informazione non e verificabile, scrivi "Da chiarire in intervista".
+- Riformula per chiarezza tecnica: sintetizza, non elencare.
+- Non aggiungere informazioni non presenti nella concept map.
+- Mantieni il testo come narrativa tecnica fluida, non come lista.
+
+Output: SOLO il testo della sezione {key}, nessun JSON, nessun preambolo.
+""".strip()
+
+    client = get_llm_client()
+    result = client.generate(
+        prompt,
+        model=LLM_MODEL,
+        temperature=0.3,
+        system_prompt=ZEUS_SYSTEM_PROMPT,
+    )
+    LLMCall.objects.create(
+        company=company,
+        model_name=LLM_MODEL,
+        prompt_text=prompt,
+        response_text=result.text,
+        tokens_in=result.tokens_in,
+        tokens_out=result.tokens_out,
+        cost_usd=result.cost,
+        latency_ms=result.latency_ms,
+    )
+    return result.text.strip()
+
+
+def _refine_sections_parallel(merged_content, concept_map, product, company):
+    """Refine all 6 sections independently in parallel to eliminate anchoring bias."""
+    from apps.companies.dna_schemas import PRODUCT_LAYER_KEYS
+
+    refined = dict(merged_content)
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        future_to_key = {}
+        for key in PRODUCT_LAYER_KEYS:
+            current_text = merged_content.get(key, "")
+            future_to_key[key] = pool.submit(
+                _refine_single_section, key, current_text, concept_map, product, company
+            )
+        for future in as_completed(future_to_key):
+            key = future_to_key[future]
+            try:
+                new_text = future.result()
+                if new_text:
+                    refined[key] = new_text
+            except Exception:
+                logger.exception("Section refinement '%s' failed for product %s", key, product.pk)
+    return refined
+
+
 def _generate_product_dna(product: Product, company):
     """Generate ProductDNA: concept map → 3 seed variants (parallel) → merge."""
     concept_map = _extract_concept_map(product, company)
@@ -460,6 +544,8 @@ def _generate_product_dna(product: Product, company):
         )
     else:
         content, llm_call = _merge_seed_variants(variants, concept_map, company, product)
+
+    content = _refine_sections_parallel(content, concept_map, product, company)
 
     from apps.companies.dna_schemas import PRODUCT_LAYER_KEYS as PLK
     missing = [k for k in PLK if not content.get(k)]

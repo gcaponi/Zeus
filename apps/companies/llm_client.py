@@ -569,6 +569,64 @@ class MockLLMClient(LLMClient):
                 tokens_in=800, tokens_out=500, cost=0.0005, latency_ms=900,
             )
 
+        if "REFINEMENT_SEZIONE" in prompt:
+            section_texts = {
+                "IDENTITA_TECNICA": (
+                    "Sistema di scarico integrato in vasca in acciaio INOX AISI 304, progettato per "
+                    "garantire piena ispezionabilita senza smontaggio. Appartiene alla categoria dei "
+                    "canali di drenaggio tecnico modulare per edilizia residenziale e commerciale. "
+                    "La configurabilita in lunghezza lo adatta a progetti diversi, mentre la sezione "
+                    "geometrica fissa ne definisce il perimetro applicativo. Si distingue dai canali "
+                    "a incastro tradizionali per il copricanale a scorrimento laterale removibile."
+                ),
+                "ARCHITETTURA": (
+                    "Corpo principale in acciaio INOX AISI 304 spessore 2mm con giunzioni saldate TIG "
+                    "per garantire tenuta stagna a lungo termine. La scelta dell'AISI 304 rispetto al "
+                    "316L riflette un compromise tra resistenza alla corrosione e costi, adeguato per "
+                    "applicazioni residenziali e commerciali standard. Copricanale removibile con "
+                    "sistema di scorrimento laterale per accesso diretto. Piastrino di ispezione "
+                    "integrato che distingue questo prodotto dai sistemi a incastro tradizionali."
+                ),
+                "SPECIFICHE": (
+                    "Sezione interna 90x90mm. Lunghezza modulare 100cm (moduli disponibili: 50cm e "
+                    "100cm). Tolleranza dimensionale +-0.5mm. Portata nominale 12 l/s verificata "
+                    "secondo EN 1253-2. Peso 3.2 kg/m lineare. Conforme EN 1123 (scarichi liquidi). "
+                    "Temperatura di esercizio massima 80C. Carico verticale massimo 200kg. "
+                    "Materiale: acciaio INOX AISI 304, spessore 2mm. Certificazione food-grade "
+                    "per applicazioni HACCP: Da chiarire in intervista."
+                ),
+                "APPLICAZIONE": (
+                    "Installazione su letto di malta con stuccaggio perimetrale utilizzando sigillante "
+                    "epossidico. Il copricanale si rimuove per scorrimento laterale senza attrezzi, "
+                    "consentendo ispezione completa del canale. Manutenzione programmata ogni 6 mesi "
+                    "per rimozione residui e verifica della tenuta della sigillatura. Il punto critico "
+                    "del processo di installazione e la corretta esecuzione dello stuccaggio "
+                    "perimetrale, che determina la tenuta idraulica a lungo termine."
+                ),
+                "VINCOLI": (
+                    "Carico verticale massimo 200kg — non idoneo per aree con transito veicolare. "
+                    "Temperatura massima 80C — non per scarichi di fluidi caldi industriali. "
+                    "Incompatibile con vasche in resina per differenza strutturale. Non installare "
+                    "in presenza di agenti chimici corrosivi forti (acidi concentrati, alcali forti). "
+                    "Manutenzione semestrale obbligatoria per garantire la portata nominale nel tempo."
+                ),
+                "CONFIGURAZIONE": (
+                    "Sezione geometrica IMMODIFICABILE — la personalizzazione avviene esclusivamente "
+                    "in lunghezza modulare (moduli da 50cm o 100cm). Regola decisionale: varianti di "
+                    "forma non vengono realizzate MAI per richieste singole. Custom accettati solo "
+                    "per lotti superiori a 50 pezzi, con lead time di 4-6 settimane lavorative e "
+                    "costo di setup aggiuntivo per modifica matrice di taglio. Il costo di setup "
+                    "funziona da filtro naturale: chi non e disposto a sostenerlo non e il "
+                    "cliente target per configurazioni personalizzate."
+                ),
+            }
+            for section_key, text in section_texts.items():
+                if section_key in prompt:
+                    return LLMResult(
+                        text=text,
+                        tokens_in=300, tokens_out=200, cost=0.0002, latency_ms=500,
+                    )
+
         if "CONCEPT_MAP_SPECIALISTA" in prompt:
             return LLMResult(
                 text=json.dumps({
