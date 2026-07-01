@@ -489,6 +489,86 @@ class MockLLMClient(LLMClient):
                 latency_ms=900,
             )
 
+        if "SEED_VARIANT" in prompt:
+            if "MATERIALI" in prompt:
+                return LLMResult(
+                    text=json.dumps({
+                        "identita_tecnica": "Sistema di scarico in INOX per edilizia, categoria canali di drenaggio tecnico residenziale.",
+                        "architettura": "Corpo in acciaio INOX AISI 304 spessore 2mm, saldature TIG. Copricanale removibile. La scelta del 304 sul 316 e un compromise costo-resistenza adeguato per applicazioni standard.",
+                        "specifiche": "Sezione 90x90mm, lunghezza 100cm modulare, tolleranza +-0.5mm. Portata 12 l/s. Peso 3.2 kg/m. EN 1123. Temperatura max 80C.",
+                        "applicazione": "Installazione su letto di malta. Il copricanale removibile permette ispezione senza smontaggio.",
+                        "vincoli": "Max 200kg carico verticale. Non compatibile con resina. Max 80C. Non per agenti chimici corrosivi forti.",
+                        "configurazione": "Sezione fissa, lunghezza modulare 50-100cm. Custom su lotti >50pz.",
+                    }, ensure_ascii=False),
+                    tokens_in=500, tokens_out=350, cost=0.0003, latency_ms=700,
+                )
+            elif "WORKFLOW" in prompt:
+                return LLMResult(
+                    text=json.dumps({
+                        "identita_tecnica": "Canale ispezionabile per drenaggio tecnico, progettato per accessibilita di manutenzione senza attrezzi.",
+                        "architettura": "Struttura INOX con copricanale a scorrimento laterale. Il design enfatizza la smontabilita rispetto alla portata.",
+                        "specifiche": "Sezione 90x90mm, moduli 100cm. Portata 12 l/s. Peso 3.2 kg/m.",
+                        "applicazione": "Posa su malta con stuccaggio epossidico perimetrale. Ispezione tramite sfila-copricanale senza attrezzi. Manutenzione raccomandata ogni 6 mesi per residui. Il punto critico del workflow e la sigillatura.",
+                        "vincoli": "Non per carichi >200kg. Temperatura max 80C. La manutenzione semestrale e obbligatoria per garantire la portata.",
+                        "configurazione": "Modulare in lunghezza. Custom su lotti >50pz. La configurazione segue le esigenze di ispezione del cantiere.",
+                    }, ensure_ascii=False),
+                    tokens_in=500, tokens_out=350, cost=0.0003, latency_ms=700,
+                )
+            elif "DECISIONE" in prompt or "CONFIGURAZIONE" in prompt:
+                return LLMResult(
+                    text=json.dumps({
+                        "identita_tecnica": "Canale di drenaggio modulare INOX, configurabile per progetti residenziali e commerciali standard.",
+                        "architettura": "INOX AISI 304, 2mm, saldature TIG. Copricanale removibile.",
+                        "specifiche": "Sezione 90x90mm, lunghezza modulare 50-100cm. Portata 12 l/s.",
+                        "applicazione": "Installazione standard su malta. Ispezione senza attrezzi.",
+                        "vincoli": "La sezione geometrica e fissa: questo e il vincolo fondamentale. Non si modifica la forma, solo la lunghezza. Max 80C, max 200kg.",
+                        "configurazione": "Regola decisionale chiave: sezione geometrica IMMODIFICABILE. Custom solo in lunghezza (moduli 50-100cm). Varianti di forma MAI per richieste singole. Custom accettati solo per lotti >50pezzi con lead time 4-6 settimane. Il costo di setup per custom e il filtro naturale: chi non e disposto a pagarlo non e il cliente target.",
+                    }, ensure_ascii=False),
+                    tokens_in=500, tokens_out=350, cost=0.0003, latency_ms=700,
+                )
+
+        if "MERGE_DNA_SPECIALISTA" in prompt:
+            return LLMResult(
+                text=json.dumps({
+                    "identita_tecnica": (
+                        "Sistema di scarico integrato in vasca in acciaio INOX, progettato per garantire "
+                        "ispezionabilita senza smontaggio. Canale di drenaggio tecnico modulare per edilizia "
+                        "residenziale e commerciale. La configurabilita in lunghezza lo adatta a progetti diversi "
+                        "ma la sezione geometrica fissa ne definisce il perimetro applicativo."
+                    ),
+                    "architettura": (
+                        "Canale in acciaio INOX AISI 304 spessore 2mm, giunzioni saldate TIG. "
+                        "Copricanale removibile con sistema di scorrimento laterale. "
+                        "Piastrino di ispezione integrato per accesso diretto senza attrezzi. "
+                        "La scelta dell'AISI 304 riflette un compromise tra resistenza alla corrosione "
+                        "e costi, adeguato per applicazioni standard."
+                    ),
+                    "specifiche": (
+                        "Sezione 90x90mm, lunghezza modulare 100cm, tolleranza +-0.5mm. "
+                        "Conforme EN 1123. Portata nominale 12 l/s. Peso 3.2 kg/m lineare. "
+                        "Temperatura massima 80C."
+                    ),
+                    "applicazione": (
+                        "Installazione su letto di malta, stuccaggio perimetrale con sigillante "
+                        "epossidico. Ispezione tramite sfila-copricanale senza attrezzi. "
+                        "Manutenzione consigliata ogni 6 mesi per rimozione residui. "
+                        "Il punto critico del workflow e la sigillatura perimetrale."
+                    ),
+                    "vincoli": (
+                        "Non per carichi verticali superiori a 200kg. Non compatibile con vasche "
+                        "in resina. Temperatura massima 80C. Non installare in presenza di "
+                        "agenti chimici corrosivi forti. La manutenzione semestrale e obbligatoria."
+                    ),
+                    "configurazione": (
+                        "Sezione geometrica IMMODIFICABILE, modificabile solo in lunghezza "
+                        "(moduli da 50-100cm). Custom accettati su lotti superiori a 50pz. "
+                        "Non si realizzano varianti di forma per richieste singole. "
+                        "Lead time custom: 4-6 settimane lavorative."
+                    ),
+                }, ensure_ascii=False),
+                tokens_in=800, tokens_out=500, cost=0.0005, latency_ms=900,
+            )
+
         if "CONCEPT_MAP_SPECIALISTA" in prompt:
             return LLMResult(
                 text=json.dumps({

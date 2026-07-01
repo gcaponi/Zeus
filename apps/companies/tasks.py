@@ -1,5 +1,6 @@
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from celery import shared_task
@@ -275,67 +276,71 @@ Rispondi SOLO JSON valido, senza markdown.
         return None
 
 
-def _generate_product_dna(product: Product, company):
-    """Generate ProductDNA from concept map + company DNA using multi-layer analysis."""
+_SEED_ANGLES = {
+    "materials": (
+        "ANGOLO MATERIALI E VINCOLI FISICI. "
+        "Parti dall'architettura materiale: cosa e fatto, come e costruito, "
+        "quali vincoli fisici ne derivano. Poi deduci identita, specifiche, "
+        "applicazione e configurazione dai materiali."
+    ),
+    "workflow": (
+        "ANGOLO APPLICAZIONE E WORKFLOW OPERATIVO. "
+        "Parti da come si installa e si usa sul campo: qual e il processo, "
+        "quali sono i passaggi critici. Poi deduci vincoli, configurazione, "
+        "specifiche e architettura dal workflow reale."
+    ),
+    "decision": (
+        "ANGOLO CONFIGURAZIONE E LOGICA DECISIONALE. "
+        "Parti dalle decisioni: cosa e standard, cosa e personalizzabile, "
+        "quando si dice no. Poi deduci vincoli, specifiche, applicazione "
+        "e architettura dalla logica decisionale."
+    ),
+}
+
+
+def _generate_seed_variant(concept_map, company, product, angle):
+    """Generate one pre-DNA variant from a specific reading angle."""
+    instruction = _SEED_ANGLES[angle]
     company_dna = company.dna_versions.filter(
         dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True
     ).first()
-    company_context = ""
-    if company_dna:
-        company_context = json.dumps(company_dna.content, ensure_ascii=False, indent=2)
+    company_context = json.dumps(company_dna.content, ensure_ascii=False, indent=2) if company_dna else ""
 
     from apps.companies.sector_archetypes import get_archetype_context
     archetype_context = get_archetype_context(company)
 
-    concept_map = _extract_concept_map(product, company)
-
     if concept_map:
         concept_map_json = json.dumps(concept_map, ensure_ascii=False, indent=2)
-        source_block = f"CONCEPT MAP (entita, relazioni, parametri, gap gia estratti):\n{concept_map_json}"
+        source_block = f"CONCEPT MAP:\n{concept_map_json}"
     else:
         documents = []
-        for product_file in product.product_files.all()[:10]:
-            documents.append(f"# {product_file.original_name}\n{product_file.content_text}")
-        source_block = f"DOCUMENTI PRODOTTO:\n{chr(10).join(documents) or 'Nessun documento caricato.'}"
+        for pf in product.product_files.all()[:10]:
+            documents.append(f"# {pf.original_name}\n{pf.content_text}")
+        source_block = f"DOCUMENTI:\n{chr(10).join(documents) or 'Nessun documento.'}"
 
     prompt = f"""
-ANALISI_NEURALE_SPECIALISTA
+SEED_VARIANT — {instruction}
 
-Sei ZEUS. Genera il DNA tecnico del prodotto "{product.name}" dell'azienda {company.name}.
-
-Hai a disposizione una CONCEPT MAP gia estratta dai documenti. Il tuo compito e
-mapparla su 6 sezioni tecniche strutturate, colmando i gap con intervista.
+Sei ZEUS. Analizza il prodotto "{product.name}" dell'azienda {company.name}.
+Genera il DNA a 6 sezioni tecniche partendo dall'angolo indicato sopra.
 
 {source_block}
 
-DNA AZIENDALE (contesto — eredita, non ripetere):
+DNA AZIENDALE (contesto):
 {company_context or "Non disponibile"}
 
-PROFILO OPERATIVO AZIENDALE:
+PROFILO OPERATIVO:
 {archetype_context or "Non disponibile"}
 
-Output JSON con ESATTAMENTE queste 6 chiavi (ogni valore e una stringa
-narrativa tecnica completa e autonoma):
-
-{{
-  "identita_tecnica": "Cosa e il prodotto, che problema risolve, categoria tecnica di appartenenza",
-  "architettura": "Materiali, struttura, componenti, come e costruito fisicamente",
-  "specifiche": "Dimensioni, tolleranze, standard di riferimento, certificazioni, parametri numerici",
-  "applicazione": "Come si monta, si usa, si mantiene, workflow di installazione e ispezione",
-  "vincoli": "Cosa NON fa, limiti ambientali, incompatibilita, controindicazioni tecniche",
-  "configurazione": "Varianti disponibili, personalizzazioni accettate, quando dire no a richieste custom"
-}}
-
 REGOLE:
-- Usa i PARAMETRI della concept map per arricchire le sezioni con dati numerici precisi.
-- Usa le RELAZIONI per spiegare come le entita si influenzano a vicenda.
-- Usa i GAPS per identificare cosa scrivere come "Da chiarire in intervista".
-- Sintetizza, non parafrasare: riformula, collega, aggiungi interpretazione tecnica.
-- Non inventare dati tecnici non presenti nella concept map.
-- Il tono e tecnico-preciso, non commerciale.
-- Se il PROFILO OPERATIVO contiene contesto libero dal cliente, usalo come fonte primaria.
+- Tutte le 6 sezioni devono essere presenti e complete.
+- Approccia ogni sezione dall'angolo indicato, ma assicurati che sia autonoma.
+- Usa i PARAMETRI della concept map per dati numerici precisi.
+- Usa i GAPS per identificare "Da chiarire in intervista".
+- Sintetizza, non parafrasare.
 
-Rispondi SOLO JSON valido, senza markdown, senza preambolo.
+Output JSON con 6 chiavi: identita_tecnica, architettura, specifiche,
+applicazione, vincoli, configurazione. Rispondi SOLO JSON.
 """.strip()
 
     client = get_llm_client()
@@ -345,9 +350,70 @@ Rispondi SOLO JSON valido, senza markdown, senza preambolo.
         model=LLM_MODEL,
         system_prompt=ZEUS_SYSTEM_PROMPT,
         temperatures=(0.5, 0.3, 0.2),
-        context="product-pre-dna",
+        context=f"product-seed-{angle}",
     )
+    LLMCall.objects.create(
+        company=company,
+        model_name=LLM_MODEL,
+        prompt_text=prompt,
+        response_text=result.text,
+        tokens_in=result.tokens_in,
+        tokens_out=result.tokens_out,
+        cost_usd=result.cost,
+        latency_ms=result.latency_ms,
+    )
+    return content
 
+
+def _merge_seed_variants(variants, concept_map, company, product):
+    """Merge multiple seed variants into a unified pre-DNA."""
+    company_dna = company.dna_versions.filter(
+        dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True
+    ).first()
+    company_context = json.dumps(company_dna.content, ensure_ascii=False, indent=2) if company_dna else ""
+
+    variant_blocks = []
+    angle_labels = {
+        "materials": "VARIANTE A (materiali)",
+        "workflow": "VARIANTE B (workflow)",
+        "decision": "VARIANTE C (decisione)",
+    }
+    for angle, content in variants.items():
+        label = angle_labels.get(angle, angle)
+        variant_blocks.append(f"{label}:\n{json.dumps(content, ensure_ascii=False, indent=2)}")
+
+    prompt = f"""
+MERGE_DNA_SPECIALISTA
+
+Sei ZEUS. Tre analisi parallele del prodotto "{product.name}" sono state generate
+da angoli di lettura diversi. Uniscile in un DNA unificato.
+
+{chr(10).join(variant_blocks)}
+
+DNA AZIENDALE (riferimento):
+{company_context or "Non disponibile"}
+
+REGOLE:
+- Per ogni sezione, seleziona il contenuto piu completo e preciso tra le varianti.
+- Se una variante contiene informazioni che le altre mancano, integrarle.
+- Risolvi le contraddizioni preferendo la variante piu specifica e documentata.
+- Elimina ridondanze: il DNA finale deve essere conciso ma completo.
+- Mantieni tutti i dati numerici precisi trovati nelle varianti.
+- Se tutte le varianti dicono "Da chiarire", mantienilo.
+
+Output JSON con 6 chiavi: identita_tecnica, architettura, specifiche,
+applicazione, vincoli, configurazione. Rispondi SOLO JSON.
+""".strip()
+
+    client = get_llm_client()
+    result, content = _generate_with_retry(
+        client,
+        prompt,
+        model=LLM_MODEL,
+        system_prompt=ZEUS_SYSTEM_PROMPT,
+        temperatures=(0.4, 0.3, 0.2),
+        context="product-merge",
+    )
     llm_call = LLMCall.objects.create(
         company=company,
         model_name=LLM_MODEL,
@@ -358,6 +424,42 @@ Rispondi SOLO JSON valido, senza markdown, senza preambolo.
         cost_usd=result.cost,
         latency_ms=result.latency_ms,
     )
+    return content, llm_call
+
+
+def _generate_product_dna(product: Product, company):
+    """Generate ProductDNA: concept map → 3 seed variants (parallel) → merge."""
+    concept_map = _extract_concept_map(product, company)
+
+    variants = {}
+    errors = []
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        future_to_angle = {
+            pool.submit(_generate_seed_variant, concept_map, company, product, angle): angle
+            for angle in _SEED_ANGLES
+        }
+        for future in as_completed(future_to_angle):
+            angle = future_to_angle[future]
+            try:
+                variants[angle] = future.result()
+            except Exception:
+                logger.exception("Seed variant '%s' failed for product %s", angle, product.pk)
+                errors.append(angle)
+
+    if not variants:
+        logger.error("All seed variants failed for product %s, falling back to single-pass", product.pk)
+        return _generate_product_dna_singlepass(product, company, concept_map)
+
+    if len(variants) == 1:
+        angle, content = next(iter(variants.items()))
+        logger.info("Only 1 seed variant succeeded (%s) for product %s", angle, product.pk)
+        llm_call = LLMCall.objects.create(
+            company=company, model_name=LLM_MODEL,
+            prompt_text=f"single-variant:{angle}", response_text="",
+            tokens_in=0, tokens_out=0, cost_usd=0, latency_ms=0,
+        )
+    else:
+        content, llm_call = _merge_seed_variants(variants, concept_map, company, product)
 
     from apps.companies.dna_schemas import PRODUCT_LAYER_KEYS as PLK
     missing = [k for k in PLK if not content.get(k)]
@@ -376,6 +478,59 @@ Rispondi SOLO JSON valido, senza markdown, senza preambolo.
         version=next_version,
         dna_type=ProductDNA.TYPE_PRE,
         content=content,
+    )
+    return dna, llm_call
+
+
+def _generate_product_dna_singlepass(product: Product, company, concept_map=None):
+    """Fallback: single-pass DNA generation without multi-seed (used when all seeds fail)."""
+    company_dna = company.dna_versions.filter(
+        dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True
+    ).first()
+    company_context = json.dumps(company_dna.content, ensure_ascii=False, indent=2) if company_dna else ""
+
+    from apps.companies.sector_archetypes import get_archetype_context
+    archetype_context = get_archetype_context(company)
+
+    if concept_map:
+        source_block = f"CONCEPT MAP:\n{json.dumps(concept_map, ensure_ascii=False, indent=2)}"
+    else:
+        documents = [f"# {pf.original_name}\n{pf.content_text}" for pf in product.product_files.all()[:10]]
+        source_block = f"DOCUMENTI:\n{chr(10).join(documents) or 'Nessun documento.'}"
+
+    prompt = f"""
+ANALISI_NEURALE_SPECIALISTA
+
+Sei ZEUS. Genera il DNA tecnico del prodotto "{product.name}" dell'azienda {company.name}.
+
+{source_block}
+
+DNA AZIENDALE (contesto):
+{company_context or "Non disponibile"}
+
+PROFILO OPERATIVO:
+{archetype_context or "Non disponibile"}
+
+Output JSON con 6 chiavi: identita_tecnica, architettura, specifiche,
+applicazione, vincoli, configurazione. Rispondi SOLO JSON.
+""".strip()
+
+    client = get_llm_client()
+    result, content = _generate_with_retry(
+        client, prompt, model=LLM_MODEL, system_prompt=ZEUS_SYSTEM_PROMPT,
+        temperatures=(0.5, 0.3, 0.2), context="product-pre-dna-fallback",
+    )
+    llm_call = LLMCall.objects.create(
+        company=company, model_name=LLM_MODEL, prompt_text=prompt,
+        response_text=result.text, tokens_in=result.tokens_in,
+        tokens_out=result.tokens_out, cost_usd=result.cost, latency_ms=result.latency_ms,
+    )
+    last_version = product.dna_versions.order_by("-version").first()
+    next_version = (last_version.version + 1) if last_version else 1
+    product.dna_versions.filter(is_current=True).update(is_current=False)
+    dna = ProductDNA.objects.create(
+        product=product, version=next_version,
+        dna_type=ProductDNA.TYPE_PRE, content=content,
     )
     return dna, llm_call
 
