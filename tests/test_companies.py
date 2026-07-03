@@ -1808,6 +1808,80 @@ class TestProductViews:
             section_key="identita",
         ).exists()
 
+    # --- Decision 1B: auto-promote to in_validazione when 6/6 sections approved ---
+
+    _FULL_SPECIALIST_CONTENT = {
+        key: f"Contenuto {key}" for key in (
+            "identita_tecnica",
+            "architettura",
+            "specifiche",
+            "applicazione",
+            "vincoli",
+            "configurazione",
+        )
+    }
+
+    def test_approving_last_section_promotes_product_to_in_validazione(self, rf_with_tenant):
+        """1B: approving the 6th section auto-promotes product to in_validazione."""
+        from apps.companies.dna_schemas import PRODUCT_LAYER_KEYS
+
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(
+            company=company, name="Vasca", slug="vasca", status=Product.STATUS_IN_COSTRUZIONE
+        )
+        dna = ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            content=dict(self._FULL_SPECIALIST_CONTENT),
+        )
+        # Approve the first 5 sections
+        for key in PRODUCT_LAYER_KEYS[:-1]:
+            ProductSectionApproval.objects.create(
+                dna=dna, section_key=key, approved_by=None, is_clarification=False
+            )
+        # Approve the 6th (last) section via the view
+        last_key = PRODUCT_LAYER_KEYS[-1]
+        req = rf_with_tenant(
+            "post",
+            reverse("product-section-approve", args=[product.pk, last_key]),
+            form=True,
+        )
+        req.META["HTTP_HX_REQUEST"] = "true"
+
+        views.product_section_approve(req, product.pk, last_key)
+
+        product.refresh_from_db()
+        dna.refresh_from_db()
+        assert product.status == Product.STATUS_IN_VALIDAZIONE
+        assert dna.is_fully_approved()
+
+    def test_approving_non_last_section_keeps_product_in_costruzione(self, rf_with_tenant):
+        """1B: approving a non-final section does NOT change status yet."""
+        from apps.companies.dna_schemas import PRODUCT_LAYER_KEYS
+
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(
+            company=company, name="Vasca", slug="vasca", status=Product.STATUS_IN_COSTRUZIONE
+        )
+        dna = ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            content=dict(self._FULL_SPECIALIST_CONTENT),
+        )
+        req = rf_with_tenant(
+            "post",
+            reverse("product-section-approve", args=[product.pk, PRODUCT_LAYER_KEYS[0]]),
+            form=True,
+        )
+        req.META["HTTP_HX_REQUEST"] = "true"
+
+        views.product_section_approve(req, product.pk, PRODUCT_LAYER_KEYS[0])
+
+        product.refresh_from_db()
+        assert product.status == Product.STATUS_IN_COSTRUZIONE
+
     def test_product_section_edit_htmx_redirects_to_review(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
         product = Product.objects.create(company=company, name="Vasca", slug="vasca")
@@ -1832,3 +1906,101 @@ class TestProductViews:
         new_dna = ProductDNA.objects.get(product=product, is_current=True)
         assert new_dna.version == 2
         assert new_dna.content["identita"] == "Test aggiornato"
+
+
+class TestCrossSpecialistThreshold:
+    """Decision 2B: Motore B requires at least 2 active specialists."""
+
+    @staticmethod
+    def _make_active_specialist(company, name, slug, codice):
+        product = Product.objects.create(
+            company=company,
+            name=name,
+            slug=slug,
+            codice=codice,
+            status=Product.STATUS_ATTIVO,
+        )
+        ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            content={
+                "identita_tecnica": "x",
+                "architettura": "x",
+                "specifiche": "x",
+                "applicazione": "x",
+                "vincoli": "x",
+                "configurazione": "x",
+            },
+        )
+        return product
+
+    def _make_company_with_generale(self):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            content={"identita": "DNA generale base"},
+            is_current=True,
+        )
+        return company
+
+    def test_cross_specialist_redirects_with_zero_specialists(self, rf_with_tenant):
+        company = self._make_company_with_generale()
+        req = rf_with_tenant("post", reverse("dna-cross-specialist-analyze"))
+        from django.contrib.messages.storage.fallback import FallbackStorage
+
+        setattr(req, "session", "session")
+        setattr(req, "_messages", FallbackStorage(req))
+
+        resp = views.dna_cross_specialist_analyze(req)
+
+        assert resp.status_code == 302
+        # No LLMCall should have been made
+        assert LLMCall.objects.count() == 0
+
+    def test_cross_specialist_redirects_with_single_specialist(self, rf_with_tenant):
+        company = self._make_company_with_generale()
+        self._make_active_specialist(company, "Vasca A", "vasca-a", "CI-001")
+        req = rf_with_tenant("post", reverse("dna-cross-specialist-analyze"))
+        # messages.info needs the messages middleware storage attached
+        from django.contrib.messages.storage.fallback import FallbackStorage
+
+        setattr(req, "session", "session")
+        setattr(req, "_messages", FallbackStorage(req))
+
+        resp = views.dna_cross_specialist_analyze(req)
+
+        assert resp.status_code == 302
+        assert LLMCall.objects.count() == 0
+
+    def test_cross_specialist_proceeds_with_two_specialists(self, rf_with_tenant, monkeypatch):
+        company = self._make_company_with_generale()
+        self._make_active_specialist(company, "Vasca A", "vasca-a", "CI-001")
+        self._make_active_specialist(company, "Vasca B", "vasca-b", "CI-002")
+        req = rf_with_tenant("post", reverse("dna-cross-specialist-analyze"))
+        from django.contrib.messages.storage.fallback import FallbackStorage
+
+        setattr(req, "session", "session")
+        setattr(req, "_messages", FallbackStorage(req))
+
+        # Mock the LLM so we verify the gate passes without a real API call.
+        fake = SimpleNamespace(
+            text='{"summary": "ok", "shared_patterns": [], "conflicts": [], "consolidation_proposals": []}',
+            tokens_in=10,
+            tokens_out=10,
+            cost=0.0,
+            latency_ms=1,
+        )
+        monkeypatch.setattr(
+            "apps.companies.views._generate_with_retry",
+            lambda *a, **kw: (fake, json.loads(fake.text)),
+        )
+        monkeypatch.setattr("apps.companies.views.get_llm_client", lambda: None)
+
+        resp = views.dna_cross_specialist_analyze(req)
+
+        # When the gate passes and LLM returns empty analysis, the view still
+        # stores the fallback and redirects to dna-review.
+        assert resp.status_code == 302

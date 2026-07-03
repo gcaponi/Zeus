@@ -5,6 +5,7 @@ import textwrap
 from urllib.parse import urlparse
 
 import fitz
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Sum
 from django.http import HttpResponse, JsonResponse
@@ -2940,7 +2941,15 @@ def dna_cross_specialist_analyze(request):
     if not dna:
         return HttpResponse("DNA Generale non trovato", status=404)
     records = _active_specialist_records(company)
-    if not records:
+    # Decision 2B: cross-specialist consolidation (Motore B) requires at least
+    # 2 active specialists. True cross-specialist insight emerges from
+    # comparison; a single specialist is handled by the manual feedback flow.
+    if len(records) < 2:
+        messages.info(
+            request,
+            "Il Motore B richiede almeno 2 specialisti attivi per il "
+            "consolidamento cross-specialist.",
+        )
         return redirect("dna-review")
 
     analysis = _generate_cross_specialist_analysis(company, dna, records)
@@ -4378,6 +4387,12 @@ def product_section_approve(request, pk, section_key):
         if not dna.missing_sections():
             dna.is_approved = timezone.now()
             dna.save(update_fields=["is_approved"])
+            # Decision 1B: auto-promote product to in_validazione once the
+            # specialist DNA is fully approved. The final attivo transition
+            # stays manual (product_promote view) as the human gate.
+            if product.status == Product.STATUS_IN_COSTRUZIONE:
+                product.status = Product.STATUS_IN_VALIDAZIONE
+                product.save(update_fields=["status"])
 
     if is_clarification and request.headers.get("HX-Request"):
         return HttpResponse(
