@@ -870,7 +870,6 @@ def process_product_gap_round_task(
 
         plan_slug = _plan_slug_for_company(product.company)
         limits = _gap_engine_product_limits(plan_slug)
-        gap_rounds_done = current_round - 1
 
         def _dispatch_complete():
             _set_product_gap_processing(
@@ -887,7 +886,9 @@ def process_product_gap_round_task(
             )
 
         try:
-            if gap_rounds_done >= limits["max_rounds"]:
+            # max_rounds = number of follow-up rounds allowed (excluding round 1).
+            # If current_round > max_rounds, we have used all allowed follow-ups.
+            if current_round > limits["max_rounds"] + 1:
                 _dispatch_complete()
                 return
 

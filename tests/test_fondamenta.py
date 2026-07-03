@@ -588,17 +588,22 @@ class TestPromptSourceProtocol:
         assert "[SRC:note]" in text
 
     def test_specialista_prompt_has_six_layers_and_dna_generale_context(self):
-        """The dna_specialista_v1.md prompt must define 6 cognitive layers and
-        include the DNA Generale context placeholder."""
-        from pathlib import Path
+        """The specialist DNA prompts must define 6 technical layers and
+        include the DNA Generale context + inheritance rule.
 
-        prompt_path = Path(__file__).resolve().parents[1] / "apps" / "companies" / "prompts" / "dna_specialista_v1.md"
-        text = prompt_path.read_text(encoding="utf-8")
-        for key in ("identita", "modelli_mentali", "nucleo_tecnico", "confini", "tono", "logica_decisionale"):
-            assert key in text, f"Missing layer '{key}' in dna_specialista_v1.md"
-        assert "{{dna_generale}}" in text
-        assert "[SRC:dna-generale]" in text
-        assert "EREDITA" in text or "eredita" in text
+        The prompt lives inline in tasks.py (_generate_product_dna_singlepass)
+        after the obsolete dna_specialista_v1.md template was removed.
+        """
+        import inspect
+        from apps.companies import tasks
+
+        # Check the singlepass fallback prompt (the most complete inline prompt).
+        source = inspect.getsource(tasks._generate_product_dna_singlepass)
+        for key in ("identita_tecnica", "architettura", "specifiche",
+                     "applicazione", "vincoli", "configurazione"):
+            assert key in source, f"Missing technical layer '{key}' in specialist prompt"
+        assert "DNA AZIENDALE" in source or "DNA GENERALE" in source
+        assert "EREDITA" in source or "eredita" in source
 
     def test_mock_generate_emits_source_markers(self):
         """MockLLMClient.generate (free-text DNA) must include [SRC:...] markers."""

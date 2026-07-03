@@ -63,9 +63,9 @@ GAP_ENGINE_LIMITS = {
     Plan.SLUG_ENTERPRISE: {"max_rounds": 3, "max_followups": 20},
 }
 GAP_ENGINE_PRODUCT_LIMITS = {
-    Plan.SLUG_STARTER: {"max_rounds": 2, "max_followups": 5},
-    Plan.SLUG_PROFESSIONAL: {"max_rounds": 3, "max_followups": 10},
-    Plan.SLUG_ENTERPRISE: {"max_rounds": 10, "max_followups": 100},
+    Plan.SLUG_STARTER: {"max_rounds": 1, "max_followups": 3},
+    Plan.SLUG_PROFESSIONAL: {"max_rounds": 2, "max_followups": 5},
+    Plan.SLUG_ENTERPRISE: {"max_rounds": 3, "max_followups": 20},
 }
 SOURCE_MARKER_RE = re.compile(r"\s*\[SRC:[^\]]+\]", re.IGNORECASE)
 INSTRUCTION_PREFIX_RE = re.compile(
@@ -827,15 +827,15 @@ def _process_answers_after_round(request, company, pre_dna, current_round):
     """Save answers, run Gap Engine, create follow-ups or trigger complete DNA."""
     plan_slug = _plan_slug_for_company(company)
     limits = _gap_engine_limits(plan_slug)
-    gap_rounds_done = current_round - 1
 
     # Collect all answered questions across rounds for the synthesis.
     answered_questions = list(
         pre_dna.questions.exclude(answer="").order_by("question_round", "id")
     )
 
-    # If we already used all allowed follow-up rounds, proceed directly.
-    if gap_rounds_done >= limits["max_rounds"]:
+    # max_rounds = number of follow-up rounds allowed (excluding round 1).
+    # If current_round > max_rounds + 1, we have used all allowed follow-ups.
+    if current_round > limits["max_rounds"] + 1:
         _trigger_complete_dna(request, company, pre_dna)
         return redirect("dna-generating")
 
@@ -1061,13 +1061,14 @@ def _process_product_answers_after_round(request, product, pre_dna, current_roun
     """Save specialist answers, run Gap Engine, create follow-ups or trigger complete DNA."""
     plan_slug = _plan_slug_for_company(product.company)
     limits = _gap_engine_product_limits(plan_slug)
-    gap_rounds_done = current_round - 1
 
     answered_questions = list(
         pre_dna.questions.exclude(answer="").order_by("question_round", "id")
     )
 
-    if gap_rounds_done >= limits["max_rounds"]:
+    # max_rounds = number of follow-up rounds allowed (excluding round 1).
+    # If current_round > max_rounds + 1, we have used all allowed follow-ups.
+    if current_round > limits["max_rounds"] + 1:
         _trigger_complete_product_dna(request, product, pre_dna)
         return redirect("product-review", pk=product.id)
 
@@ -3649,10 +3650,20 @@ Rispondi SOLO JSON, senza markdown.
         dna.save(update_fields=["content"])
 
 
+def _product_available_sources(product):
+    """Build the available_sources dict for specialist evidence checks."""
+    company = product.company
+    has_scrape = company.sources.filter(status=Source.STATUS_SCRAPED).exists()
+    has_note = product.product_files.exists()
+    files = [pf.original_name for pf in product.product_files.all()[:10]]
+    return {"scrape": has_scrape, "note": has_note, "files": files}
+
+
 def _finalize_complete_product_dna(dna, pre_dna, product):
-    """Compute audit chain + enrichment for specialist DNA (duplicato temporaneo)."""
+    """Compute audit chain + enrichment for specialist DNA."""
     try:
         from apps.companies.audit import compute_audit_hash
+        from apps.companies.product_enrichment import build_product_enrichment
 
         prev = product.dna_versions.filter(
             dna_type=ProductDNA.TYPE_COMPLETE,
@@ -3660,9 +3671,15 @@ def _finalize_complete_product_dna(dna, pre_dna, product):
 
         dna.previous_hash = prev.audit_hash if prev else ""
         dna.audit_hash = compute_audit_hash(dna.content, dna.previous_hash or "")
-        dna.save(update_fields=["audit_hash", "previous_hash"])
+
+        # Specialist enrichment: technical validation + scoring + evidence.
+        # Uses dedicated guards (numeric density, boundary precision, etc.)
+        # instead of the cognitive guards built for the DNA Generale.
+        available = _product_available_sources(product)
+        dna._enrichment = build_product_enrichment(dna.content, available_sources=available)
+        dna.save(update_fields=["audit_hash", "previous_hash", "_enrichment"])
     except Exception:
-        logger.exception("Audit chain failed for product DNA %s", dna.id)
+        logger.exception("Audit/enrichment failed for product DNA %s", dna.id)
 
 
 def _create_complete_product_dna(product, pre_dna, user):
