@@ -497,9 +497,10 @@ def _refine_sections_parallel(merged_content, concept_map, product, company):
         future_to_key = {}
         for key in PRODUCT_LAYER_KEYS:
             current_text = merged_content.get(key, "")
-            future_to_key[key] = pool.submit(
+            future = pool.submit(
                 _refine_single_section, key, current_text, concept_map, product, company
             )
+            future_to_key[future] = key
         for future in as_completed(future_to_key):
             key = future_to_key[future]
             try:
