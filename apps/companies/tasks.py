@@ -608,17 +608,41 @@ def _generate_product_dna_singlepass(product: Product, company, concept_map=None
         source_block = f"DOCUMENTI:\n{chr(10).join(documents) or 'Nessun documento.'}"
 
     prompt = f"""
-ANALISI_NEURALE_SPECIALISTA
+ANALISI_NEURALE_SPECIALISTA — SINGLE PASS (fallback)
 
 Sei ZEUS. Genera il DNA tecnico del prodotto "{product.name}" dell'azienda {company.name}.
+Non stai scrivendo una scheda tecnica. Stai costruendo ARCHITETTURA COGNITIVA SPECIALIZZATA:
+un sistema che insegna a un tecnico AI COME PENSARE davanti a questa famiglia prodotto.
+
+MISSIONE: estrai GIUDIZIO, non solo fatti. Un DNA che elenca solo specifiche tecniche
+e un lettore di brochure, non un fondatore. Per ogni sezione, cerca il principio
+cognitivo, il trade-off, il confine, la logica decisionale che i documenti rivelano.
 
 {source_block}
 
-DNA AZIENDALE (contesto):
+DNA AZIENDALE (contesto — eredita senza ripetere):
 {company_context or "Non disponibile"}
 
 PROFILO OPERATIVO:
 {archetype_context or "Non disponibile"}
+
+REGOLE:
+- Tutte le 6 sezioni devono essere presenti e complete.
+- EREDITA DAL DNA GENERALE: non ripetere principi gia stabiliti. Aggiungi SOLO
+  specificita tecniche del prodotto che il Generale non copre.
+- Sintetizza, non parafrasare. Riformula, collega, interpreta.
+- Non assolutizzare MAI ("garantisce", "certezza assoluta").
+- Se un dato non e coperto dalle fonti, scrivi "Da chiarire in intervista: ...".
+- Usa i PARAMETRI della concept map per dati numerici precisi.
+- Usa i GAPS per identificare "Da chiarare in intervista".
+
+LE 6 SEZIONI TECNICHE:
+1. identita_tecnica — categoria tecnica, problema risolto, posizionamento
+2. architettura — materiali, struttura, componenti, costruzione fisica
+3. specifiche — dimensioni, tolleranze, standard, parametri numerici
+4. applicazione — installazione, uso, manutenzione, workflow operativo
+5. vincoli — limiti, incompatibilita, range operativi, controindicazioni
+6. configurazione — varianti, personalizzazioni, logica decisionale per custom
 
 Output JSON con 6 chiavi: identita_tecnica, architettura, specifiche,
 applicazione, vincoli, configurazione. Rispondi SOLO JSON.

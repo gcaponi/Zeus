@@ -3265,10 +3265,25 @@ def _product_document_context(product):
     return " | ".join(snippets) or "Nessun documento prodotto caricato"
 
 
+def _product_document_context_rich(product, max_files=5, max_chars=1200):
+    """Richer document context for question generation.
+
+    The question prompt needs enough source text to anchor kb_anchored questions
+    to specific passages. The standard _product_document_context truncates too
+    aggressively (3 files x 220 chars) for the LLM to spot gaps and tensions.
+    """
+    snippets = []
+    for product_file in product.product_files.all()[:max_files]:
+        text = " ".join(product_file.content_text.split())[:max_chars]
+        if text:
+            snippets.append(f"[{product_file.original_name}]\n{text}")
+    return "\n\n---\n\n".join(snippets) or "Nessun documento prodotto caricato"
+
+
 def _product_question_generation_prompt(product, dna, plan_slug):
     profile = QUESTION_GENERATION_PROFILES[plan_slug]
     content = json.dumps(dna.content, ensure_ascii=False, indent=2)
-    documents = _product_document_context(product)
+    documents = _product_document_context_rich(product)
     company = product.company
     company_dna = company.dna_versions.filter(
         dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True
@@ -3455,8 +3470,11 @@ REGOLE FONDAMENTALI:
 3. SE UNA RISPOSTA CORREGGE IL PRE-DNA, la risposta prevale sempre.
 4. NON ASSOLUTIZZARE. Mai "garantisce", "certezza assoluta".
 5. NON INVENTARE. Se qualcosa non e coperto, scrivi "Da chiarire in intervista: ...".
-6. EREDITA DAL DNA GENERALE: non ripetere principi gia stabiliti nel DNA Generale.
-   Aggiungi SOLO specificita tecniche del prodotto.
+6. EREDITA DAL DNA GENERALE: quando un principio del DNA Generale si applica
+   a questo specialista, DICHIARALO esplicitamente e spiega COME si manifesta
+   in questo prodotto specifico. Non ripetere il principio a vuoto: colleghialo
+   a una specifica tecnica concreta. Aggiungi poi SOLO le specificita che il
+   Generale non copre.
 
 OUTPUT: JSON completo con ESATTAMENTE queste 6 chiavi tecniche.
 Il formato target NON dipende dalla struttura del pre-DNA: devi produrre SEMPRE
@@ -3550,8 +3568,12 @@ PER OGNI SEZIONE VALUTA:
 
 ANTI-MEMORIZATION (critico):
 Per ogni sezione, confronta il testo del DNA con i DOCUMENTI DI ORIGINE.
-- PARAFRASI: il DNA ripede quasi word-for-word il documento (>60% somiglianza)
-- SINTESI: il DNA riformula, collega, interpreta, aggiunge prospettiva
+- PARAFRASI: il DNA copia intere frasi del documento, mantiene lo stesso
+  ordine delle informazioni e non aggiunge interpretazione. Se oltre meta
+  del testo di una sezione riproduce frasi dei documenti quasi identiche,
+  e parafrasi.
+- SINTESI: il DNA riformula con parole proprie, collega dati di documenti
+  diversi, estrae principi cognitivi, aggiunge prospettiva tecnica.
 
 Se una sezione e parafrasi, proponi una riformulazione che SINTETIZZI:
 riorganizza le informazioni, collega dati di documenti diversi, aggiungi
