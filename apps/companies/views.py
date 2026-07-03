@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 import fitz
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.db.models import Sum
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -3393,33 +3394,37 @@ def _generate_product_questions(product, dna):
         latency_ms=result.latency_ms,
     )
 
-    section_keys = set(PRODUCT_LAYER_KEYS)
-    used_codes = set(dna.questions.values_list("code", flat=True))
-    for raw_question in product_questions:
-        section_key = raw_question.get("section_key", "identita_tecnica")
-        if section_key not in section_keys:
-            section_key = "identita_tecnica"
-        code = _unique_question_code(raw_question.get("code"), used_codes, "D?")
-        pool = raw_question.get("pool", ProductQuestion.POOL_TEMPLATE)
-        if pool not in (ProductQuestion.POOL_TEMPLATE, ProductQuestion.POOL_KB_ANCHORED):
-            pool = ProductQuestion.POOL_TEMPLATE
-        ProductQuestion.objects.update_or_create(
-            dna=dna,
-            code=code,
-            defaults={
-                "product": product,
-                "plan_slug": plan_slug,
-                "section_key": section_key,
-                "principle": str(raw_question.get("principle", "D1-D20"))[:120],
-                "question": str(raw_question.get("question", "")).strip(),
-                "answer_depth": str(
+    with transaction.atomic():
+        locked_dna = ProductDNA.objects.select_for_update().get(pk=dna.pk)
+        existing = list(locked_dna.questions.all())
+        if existing:
+            return existing
+
+        section_keys = set(PRODUCT_LAYER_KEYS)
+        used_codes = set()
+        for raw_question in product_questions:
+            section_key = raw_question.get("section_key", "identita_tecnica")
+            if section_key not in section_keys:
+                section_key = "identita_tecnica"
+            code = _unique_question_code(raw_question.get("code"), used_codes, "D?")
+            pool = raw_question.get("pool", ProductQuestion.POOL_TEMPLATE)
+            if pool not in (ProductQuestion.POOL_TEMPLATE, ProductQuestion.POOL_KB_ANCHORED):
+                pool = ProductQuestion.POOL_TEMPLATE
+            ProductQuestion.objects.create(
+                dna=locked_dna,
+                code=code,
+                product=product,
+                plan_slug=plan_slug,
+                section_key=section_key,
+                principle=str(raw_question.get("principle", "D1-D20"))[:120],
+                question=str(raw_question.get("question", "")).strip(),
+                answer_depth=str(
                     raw_question.get("answer_depth") or profile["answer_depth"]
                 )[:40],
-                "answer_guidance": str(raw_question.get("answer_guidance", "")).strip(),
-                "pool": pool,
-            },
-        )
-    return list(dna.questions.all())
+                answer_guidance=str(raw_question.get("answer_guidance", "")).strip(),
+                pool=pool,
+            )
+        return list(locked_dna.questions.all())
 
 
 def _global_product_dna_synthesis(product, pre_dna_content, questions):
@@ -4055,14 +4060,6 @@ def product_questions(request, pk):
     questions = list(pre_dna.questions.filter(question_round=1).order_by("id"))
 
     if not questions:
-        if request.headers.get("HX-Request") != "true":
-            tenant_schema = getattr(request, "tenant", None)
-            from apps.companies.tasks import generate_product_questions_task
-            generate_product_questions_task.delay(
-                product.id,
-                pre_dna.id,
-                tenant_schema=tenant_schema.schema_name if tenant_schema else None,
-            )
         return render(request, "core/product_questions_loading.html", {
             "product": product,
             "pre_dna": pre_dna,

@@ -22,6 +22,13 @@ from apps.companies.scraper import get_scraper
 logger = logging.getLogger(__name__)
 
 
+def _run_in_schema(tenant_schema, func, *args):
+    if tenant_schema:
+        with schema_context(tenant_schema):
+            return func(*args)
+    return func(*args)
+
+
 def _available_sources(source, company) -> dict:
     """Describe the sources actually available to the LLM for evidence checks."""
     files = [
@@ -488,7 +495,7 @@ Output: SOLO il testo della sezione {key}, nessun JSON, nessun preambolo.
     return result.text.strip()
 
 
-def _refine_sections_parallel(merged_content, concept_map, product, company):
+def _refine_sections_parallel(merged_content, concept_map, product, company, tenant_schema=None):
     """Refine all 6 sections independently in parallel to eliminate anchoring bias."""
     from apps.companies.dna_schemas import PRODUCT_LAYER_KEYS
 
@@ -498,7 +505,14 @@ def _refine_sections_parallel(merged_content, concept_map, product, company):
         for key in PRODUCT_LAYER_KEYS:
             current_text = merged_content.get(key, "")
             future = pool.submit(
-                _refine_single_section, key, current_text, concept_map, product, company
+                _run_in_schema,
+                tenant_schema,
+                _refine_single_section,
+                key,
+                current_text,
+                concept_map,
+                product,
+                company,
             )
             future_to_key[future] = key
         for future in as_completed(future_to_key):
@@ -512,7 +526,7 @@ def _refine_sections_parallel(merged_content, concept_map, product, company):
     return refined
 
 
-def _generate_product_dna(product: Product, company):
+def _generate_product_dna(product: Product, company, tenant_schema=None):
     """Generate ProductDNA: concept map → 3 seed variants (parallel) → merge."""
     concept_map = _extract_concept_map(product, company)
 
@@ -520,7 +534,15 @@ def _generate_product_dna(product: Product, company):
     errors = []
     with ThreadPoolExecutor(max_workers=3) as pool:
         future_to_angle = {
-            pool.submit(_generate_seed_variant, concept_map, company, product, angle): angle
+            pool.submit(
+                _run_in_schema,
+                tenant_schema,
+                _generate_seed_variant,
+                concept_map,
+                company,
+                product,
+                angle,
+            ): angle
             for angle in _SEED_ANGLES
         }
         for future in as_completed(future_to_angle):
@@ -546,7 +568,7 @@ def _generate_product_dna(product: Product, company):
     else:
         content, llm_call = _merge_seed_variants(variants, concept_map, company, product)
 
-    content = _refine_sections_parallel(content, concept_map, product, company)
+    content = _refine_sections_parallel(content, concept_map, product, company, tenant_schema)
 
     from apps.companies.dna_schemas import PRODUCT_LAYER_KEYS as PLK
     missing = [k for k in PLK if not content.get(k)]
@@ -974,7 +996,7 @@ def generate_product_dna_task(product_id, tenant_schema=None):
 
         company = product.company
         try:
-            dna, _ = _generate_product_dna(product, company)
+            dna, _ = _generate_product_dna(product, company, tenant_schema=tenant_schema)
             logger.info("Pre-DNA generated for product %s, dispatching questions", product.pk)
             generate_product_questions_task.delay(
                 product.id, dna.id, tenant_schema=tenant_schema,

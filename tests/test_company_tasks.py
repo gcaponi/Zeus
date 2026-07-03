@@ -183,7 +183,7 @@ class TestProductDNATaskPipeline:
         def fake_merge(variants, concept_map, company_arg, product_arg):
             return _specialist_content("merged"), _make_llm_call(company_arg, "merge")
 
-        def fake_refine(content, concept_map, product_arg, company_arg):
+        def fake_refine(content, concept_map, product_arg, company_arg, tenant_schema=None):
             return _specialist_content("refined")
 
         monkeypatch.setattr(tasks, "_generate_seed_variant", fake_seed)
@@ -328,7 +328,7 @@ class TestAsyncCompanyTasks:
         product = _make_product(company)
         dispatched = {}
 
-        def fake_generate(product_arg, company_arg):
+        def fake_generate(product_arg, company_arg, tenant_schema=None):
             dna = ProductDNA.objects.create(
                 product=product_arg,
                 version=1,

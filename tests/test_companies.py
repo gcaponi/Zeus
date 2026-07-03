@@ -1754,6 +1754,24 @@ class TestProductViews:
         assert len(questions) == 10
         assert len({question.code for question in questions}) == 10
 
+    def test_product_questions_loading_does_not_dispatch_duplicate_task(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_PRE,
+            content={"identita_tecnica": "Pre DNA in preparazione"},
+        )
+        request = rf_with_tenant("get", reverse("product-questions", args=[product.pk]))
+
+        with patch("apps.companies.tasks.generate_product_questions_task.delay") as delay:
+            response = views.product_questions(request, product.pk)
+
+        assert response.status_code == 200
+        assert b"ZEUS sta generando le domande" in response.content
+        delay.assert_not_called()
+
     def test_complete_product_dna_rewrites_sections_instead_of_appending_answers(self):
         user = User.objects.create_user(username="p", email="p@x.it", password="pw")
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
