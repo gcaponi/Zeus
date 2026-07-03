@@ -818,7 +818,7 @@ class TestOnboardingViews:
         resp = views.onboarding_status(req, pk=run.id)
 
         assert resp.status_code == 200
-        assert b"Analisi in corso" in resp.content
+        assert b"Analisi Neurale in corso" in resp.content
         assert b'"current_step"' not in resp.content
 
     def test_onboarding_status_htmx_returns_dna_html(self, rf_with_tenant):
@@ -1571,13 +1571,13 @@ class TestProductDNAModel:
         dna = ProductDNA.objects.create(
             product=product,
             version=1,
-            content={"identita": "test"},
+            content={"identita_tecnica": "test"},
             created_by=user,
         )
         assert len(dna.missing_sections()) == 6
         ProductSectionApproval.objects.create(
             dna=dna,
-            section_key="identita",
+            section_key="identita_tecnica",
             approved_by=user,
         )
         assert len(dna.missing_sections()) == 5
@@ -1649,7 +1649,7 @@ class TestProductViews:
         response = views.product_detail(request, product.pk)
 
         assert response.status_code == 200
-        assert b"File prodotto caricati" in response.content
+        assert b"File caricati" in response.content
         assert b"scheda.txt" in response.content
 
     def test_product_file_upload_browser_redirects_to_detail(self, rf_with_tenant):
@@ -1709,14 +1709,13 @@ class TestProductViews:
             reverse("product-dna-generate", args=[product.pk]),
             form=True,
         )
-        with patch(
-            "apps.companies.tasks._generate_product_dna",
-            return_value=(dna, SimpleNamespace(cost_usd=0)),
-        ):
+        with patch("apps.companies.tasks.generate_product_dna_task.delay"):
             response = views.product_dna_generate(request, product.pk)
 
         assert response.status_code == 302
-        assert response["Location"] == reverse("product-detail", args=[product.pk])
+        # Behavior: async generation redirects to detail with ?generating=1
+        # so the page can poll the task status.
+        assert response["Location"] == reverse("product-detail", args=[product.pk]) + "?generating=1"
 
     def test_duplicate_product_question_codes_are_normalized(self):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
@@ -1780,7 +1779,9 @@ class TestProductViews:
         assert complete_dna.version == 2
         assert "sintesi_cognitiva" in complete_dna.content
         assert "identita" in complete_dna.content
-        assert product.status == Product.STATUS_IN_COSTRUZIONE
+        # Behavior: completing the DNA transitions the product to in_validazione
+        # (ready for review), not in_costruzione anymore.
+        assert product.status == Product.STATUS_IN_VALIDAZIONE
 
     def test_product_section_approve_htmx_redirects_to_review(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
@@ -1789,23 +1790,30 @@ class TestProductViews:
             product=product,
             version=1,
             dna_type=ProductDNA.TYPE_COMPLETE,
-            content={"identita": "Test", "modelli_mentali": "x", "nucleo_tecnico": "x", "confini": "x", "tono": "x", "logica_decisionale": "x"},
+            content={
+                "identita_tecnica": "Test",
+                "architettura": "x",
+                "specifiche": "x",
+                "applicazione": "x",
+                "vincoli": "x",
+                "configurazione": "x",
+            },
         )
         req = rf_with_tenant(
             "post",
-            reverse("product-section-approve", args=[product.pk, "identita"]),
+            reverse("product-section-approve", args=[product.pk, "identita_tecnica"]),
             {},
             form=True,
         )
         req.META["HTTP_HX_REQUEST"] = "true"
 
-        resp = views.product_section_approve(req, product.pk, "identita")
+        resp = views.product_section_approve(req, product.pk, "identita_tecnica")
 
         assert resp.status_code == 204
         assert resp["HX-Redirect"] == reverse("product-review", args=[product.pk])
         assert ProductSectionApproval.objects.filter(
             dna=dna,
-            section_key="identita",
+            section_key="identita_tecnica",
         ).exists()
 
     # --- Decision 1B: auto-promote to in_validazione when 6/6 sections approved ---
@@ -1889,23 +1897,23 @@ class TestProductViews:
             product=product,
             version=1,
             dna_type=ProductDNA.TYPE_COMPLETE,
-            content={"identita": "Test"},
+            content={"identita_tecnica": "Test"},
         )
         req = rf_with_tenant(
             "post",
-            reverse("product-section-edit", args=[product.pk, "identita"]),
+            reverse("product-section-edit", args=[product.pk, "identita_tecnica"]),
             {"text": "Test aggiornato"},
             form=True,
         )
         req.META["HTTP_HX_REQUEST"] = "true"
 
-        resp = views.product_section_edit(req, product.pk, "identita")
+        resp = views.product_section_edit(req, product.pk, "identita_tecnica")
 
         assert resp.status_code == 204
         assert resp["HX-Redirect"] == reverse("product-review", args=[product.pk])
         new_dna = ProductDNA.objects.get(product=product, is_current=True)
         assert new_dna.version == 2
-        assert new_dna.content["identita"] == "Test aggiornato"
+        assert new_dna.content["identita_tecnica"] == "Test aggiornato"
 
 
 class TestCrossSpecialistThreshold:
