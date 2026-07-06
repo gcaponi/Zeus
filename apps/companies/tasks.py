@@ -1034,3 +1034,55 @@ def generate_product_dna_task(product_id, tenant_schema=None):
             _run()
     else:
         _run()
+
+
+@shared_task(soft_time_limit=600, time_limit=660)
+def generate_specialist_feedback_task(product_id, specialist_dna_id, company_dna_id, tenant_schema=None):
+    """Generate Specialist→General feedback proposals asynchronously.
+
+    The LLM call that compares the Specialist DNA with the Company DNA can take
+    up to 2 minutes; running it synchronously in the HTTP request caused 504s
+    and a terrible UX. This task stores the proposals (or an empty list when
+    the Specialist adds nothing new) in the Specialist DNA content under the
+    ``_feedback_proposals`` key so the GET view can serve them without any LLM
+    call and the POST apply view can read them from the DB instead of session.
+    """
+    def _run():
+        try:
+            product = Product.objects.get(pk=product_id)
+            specialist_dna = ProductDNA.objects.get(pk=specialist_dna_id)
+            company_dna = CompanyDNA.objects.get(pk=company_dna_id)
+        except (Product.DoesNotExist, ProductDNA.DoesNotExist, CompanyDNA.DoesNotExist):
+            logger.error(
+                "generate_specialist_feedback_task: missing product/specialist/company DNA "
+                "(product=%s specialist=%s company=%s)",
+                product_id, specialist_dna_id, company_dna_id,
+            )
+            return
+
+        from apps.companies.views import _generate_specialist_feedback_proposals
+
+        try:
+            proposals = _generate_specialist_feedback_proposals(
+                product, specialist_dna, company_dna,
+            )
+        except Exception:
+            logger.exception(
+                "Specialist feedback generation failed for product %s", product_id,
+            )
+            proposals = []
+
+        # Persist proposals on the Specialist DNA content (not audit-hashed, like
+        # _critique and _cross_specialist). Empty list is a valid result.
+        specialist_dna.content["_feedback_proposals"] = proposals
+        specialist_dna.save(update_fields=["content"])
+        logger.info(
+            "Specialist feedback generated for product %s: %d proposals",
+            product_id, len(proposals) if isinstance(proposals, list) else 0,
+        )
+
+    if tenant_schema and hasattr(connection, "tenant"):
+        with schema_context(tenant_schema):
+            _run()
+    else:
+        _run()
