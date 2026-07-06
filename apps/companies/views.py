@@ -2622,6 +2622,18 @@ def _consistency_state(company):
     }
 
 
+def _mark_consistency_audit_pending(company_dna, scope, product=None):
+    content = dict(company_dna.content) if isinstance(company_dna.content, dict) else {}
+    content["_consistency_audit_pending"] = {
+        "scope": scope,
+        "requested_at": timezone.now().isoformat(),
+        "product_id": product.pk if product else None,
+        "product_name": product.name if product else "",
+    }
+    company_dna.content = content
+    company_dna.save(update_fields=["content"])
+
+
 def _normalize_cross_specialist_analysis(raw, company_dna, records):
     valid_layers = set(LAYER_KEYS)
     raw = raw if isinstance(raw, dict) else {}
@@ -3041,15 +3053,28 @@ def consistency_report(request):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
+    company_dna = company.dna_versions.filter(
+        dna_type=CompanyDNA.TYPE_COMPLETE,
+        is_current=True,
+    ).first()
     issues = company.consistency_issues.select_related(
         "company_dna", "product", "product_dna",
     )
-    return render(request, "core/consistency_report.html", {
+    context = {
         "company": company,
+        "company_dna": company_dna,
+        "audit_pending": (
+            company_dna.content.get("_consistency_audit_pending")
+            if company_dna and isinstance(company_dna.content, dict)
+            else None
+        ),
         "open_issues": issues.filter(status=ConsistencyIssue.STATUS_OPEN).order_by("-created_at"),
         "closed_issues": issues.exclude(status=ConsistencyIssue.STATUS_OPEN).order_by("-created_at")[:30],
         "latest": company.consistency_issues.order_by("-created_at").first(),
-    })
+    }
+    if request.headers.get("HX-Request") == "true":
+        return render(request, "core/partials/consistency_report_content.html", context)
+    return render(request, "core/consistency_report.html", context)
 
 
 @login_required
@@ -3058,10 +3083,12 @@ def consistency_audit_run(request):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    if not company.dna_versions.filter(dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True).exists():
+    company_dna = company.dna_versions.filter(dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True).first()
+    if not company_dna:
         return HttpResponse("DNA Generale non trovato", status=404)
     from apps.companies.tasks import run_consistency_audit
 
+    _mark_consistency_audit_pending(company_dna, ConsistencyIssue.SCOPE_PERIODIC)
     tenant = getattr(request, "tenant", None)
     run_consistency_audit.delay(
         company.pk,
@@ -3104,8 +3131,12 @@ def product_consistency_check(request, pk):
         return HttpResponse("Audit coerenza disponibile solo per specialisti attivi", status=400)
     if not product.dna_versions.filter(dna_type=ProductDNA.TYPE_COMPLETE, is_current=True).exists():
         return HttpResponse("DNA specialista non trovato", status=404)
+    company_dna = company.dna_versions.filter(dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True).first()
+    if not company_dna:
+        return HttpResponse("DNA Generale non trovato", status=404)
     from apps.companies.tasks import run_consistency_audit
 
+    _mark_consistency_audit_pending(company_dna, ConsistencyIssue.SCOPE_SPECIALIST, product)
     tenant = getattr(request, "tenant", None)
     run_consistency_audit.delay(
         company.pk,
@@ -4406,6 +4437,12 @@ def product_promote(request, pk):
     if active_count and active_count % 3 == 0:
         from apps.companies.tasks import run_consistency_audit
 
+        company_dna = company.dna_versions.filter(
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            is_current=True,
+        ).first()
+        if company_dna:
+            _mark_consistency_audit_pending(company_dna, ConsistencyIssue.SCOPE_PERIODIC)
         tenant = getattr(request, "tenant", None)
         run_consistency_audit.delay(
             company.pk,

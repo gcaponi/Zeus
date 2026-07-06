@@ -2066,6 +2066,7 @@ class TestConsistencyMotor:
         self, rf_with_tenant, monkeypatch,
     ):
         company = self._make_company_with_dna()
+        company_dna = company.dna_versions.get(dna_type=CompanyDNA.TYPE_COMPLETE)
         self._make_product(company, "A", "a", "A", Product.STATUS_ATTIVO)
         self._make_product(company, "B", "b", "B", Product.STATUS_ATTIVO)
         product = self._make_product(company, "C", "c", "C", Product.STATUS_IN_VALIDAZIONE)
@@ -2085,13 +2086,89 @@ class TestConsistencyMotor:
         resp = views.product_promote(req, product.pk)
 
         product.refresh_from_db()
+        company_dna.refresh_from_db()
         assert resp.status_code == 302
         assert product.status == Product.STATUS_ATTIVO
+        assert company_dna.content["_consistency_audit_pending"]["scope"] == ConsistencyIssue.SCOPE_PERIODIC
         assert called == {
             "company_id": company.pk,
             "scope": ConsistencyIssue.SCOPE_PERIODIC,
             "tenant_schema": "test-tenant",
         }
+
+    def test_consistency_audit_run_marks_pending_and_dispatches(self, rf_with_tenant, monkeypatch):
+        company = self._make_company_with_dna()
+        company_dna = company.dna_versions.get(dna_type=CompanyDNA.TYPE_COMPLETE)
+        called = {}
+
+        def fake_delay(company_id, **kwargs):
+            called["company_id"] = company_id
+            called.update(kwargs)
+
+        monkeypatch.setattr(tasks.run_consistency_audit, "delay", fake_delay)
+        req = rf_with_tenant(
+            "post",
+            reverse("consistency-audit-run"),
+            form=True,
+        )
+
+        resp = views.consistency_audit_run(req)
+
+        company_dna.refresh_from_db()
+        assert resp.status_code == 302
+        assert company_dna.content["_consistency_audit_pending"]["scope"] == ConsistencyIssue.SCOPE_PERIODIC
+        assert called == {
+            "company_id": company.pk,
+            "scope": ConsistencyIssue.SCOPE_PERIODIC,
+            "tenant_schema": "test-tenant",
+        }
+
+    def test_product_consistency_check_marks_specialist_pending(self, rf_with_tenant, monkeypatch):
+        company = self._make_company_with_dna()
+        company_dna = company.dna_versions.get(dna_type=CompanyDNA.TYPE_COMPLETE)
+        product = self._make_product(company, "A", "a", "A", Product.STATUS_ATTIVO)
+        called = {}
+
+        def fake_delay(company_id, **kwargs):
+            called["company_id"] = company_id
+            called.update(kwargs)
+
+        monkeypatch.setattr(tasks.run_consistency_audit, "delay", fake_delay)
+        req = rf_with_tenant(
+            "post",
+            reverse("product-consistency-check", args=[product.pk]),
+            form=True,
+        )
+
+        resp = views.product_consistency_check(req, product.pk)
+
+        company_dna.refresh_from_db()
+        pending = company_dna.content["_consistency_audit_pending"]
+        assert resp.status_code == 302
+        assert pending["scope"] == ConsistencyIssue.SCOPE_SPECIALIST
+        assert pending["product_id"] == product.pk
+        assert called == {
+            "company_id": company.pk,
+            "scope": ConsistencyIssue.SCOPE_SPECIALIST,
+            "product_id": product.pk,
+            "tenant_schema": "test-tenant",
+        }
+
+    def test_consistency_report_hx_returns_partial_with_pending(self, rf_with_tenant):
+        company = self._make_company_with_dna()
+        company_dna = company.dna_versions.get(dna_type=CompanyDNA.TYPE_COMPLETE)
+        company_dna.content["_consistency_audit_pending"] = {"scope": ConsistencyIssue.SCOPE_PERIODIC}
+        company_dna.save(update_fields=["content"])
+        req = rf_with_tenant("get", reverse("consistency-report"))
+        req.META["HTTP_HX_REQUEST"] = "true"
+
+        resp = views.consistency_report(req)
+
+        body = resp.content.decode()
+        assert resp.status_code == 200
+        assert "consistency-report-root" in body
+        assert "Audit in corso" in body
+        assert "<!DOCTYPE" not in body
 
     def test_consistency_issue_action_resolves_issue(self, rf_with_tenant):
         company = self._make_company_with_dna()

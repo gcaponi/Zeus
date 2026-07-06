@@ -441,6 +441,8 @@ class TestAsyncCompanyTasks:
     def test_run_consistency_audit_creates_issue_and_accumulated(self, monkeypatch):
         company = _make_company()
         company_dna = company.dna_versions.get(dna_type=CompanyDNA.TYPE_COMPLETE)
+        company_dna.content["_consistency_audit_pending"] = {"scope": "periodic"}
+        company_dna.save(update_fields=["content"])
         for index in range(3):
             product = _make_product(company, slug=f"canale-{index}", codice=f"CI-00{index}")
             product.status = Product.STATUS_ATTIVO
@@ -485,5 +487,6 @@ class TestAsyncCompanyTasks:
         assert issue.product_layer == "vincoli"
         assert issue.status == ConsistencyIssue.STATUS_OPEN
         company_dna.refresh_from_db()
+        assert "_consistency_audit_pending" not in company_dna.content
         assert company_dna.content["_accumulated"]["active_specialist_count"] == 3
         assert company_dna.content["_accumulated"]["last_consistency_audit"]["issue_count"] == 1

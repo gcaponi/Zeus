@@ -160,6 +160,7 @@ def _normalize_consistency_issues(raw, scope, company_dna, records):
 
 def _update_accumulated_structure(company_dna, records, audit_summary):
     content = dict(company_dna.content) if isinstance(company_dna.content, dict) else {}
+    content.pop("_consistency_audit_pending", None)
     accumulated = content.get("_accumulated") if isinstance(content.get("_accumulated"), dict) else {}
     accumulated.update({
         "schema_version": 1,
