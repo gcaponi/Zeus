@@ -108,5 +108,27 @@
             </div>
         </div>
     {% endif %}
+
+    {% if product.status == 'attivo' %}
+        <div class="mt-6 zeus-card p-6" style="border-color: rgba(34, 211, 238, 0.22); background: rgba(34, 211, 238, 0.04);">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <p class="zeus-label text-brand-cyan">Motore C — T2</p>
+                    <h2 class="mt-1 text-lg font-bold font-display">Verifica coerenza specialista</h2>
+                    <p class="mt-2 text-sm text-content-secondary">Controlla questo DNA Specialista contro il DNA Generale corrente.</p>
+                    {% if consistency_open_count %}
+                        <span class="zeus-badge mt-3" style="background: rgba(251,191,36,0.14); color: #fcd34d;">{{ consistency_open_count }} issue aperte</span>
+                    {% endif %}
+                </div>
+                <div class="flex flex-wrap gap-3">
+                    <form method="post" action="{% url 'product-consistency-check' product.pk %}">
+                        {% csrf_token %}
+                        <button type="submit" class="zeus-btn zeus-btn-secondary">Verifica coerenza</button>
+                    </form>
+                    <a href="{% url 'consistency-report' %}" class="zeus-btn zeus-btn-ghost">Report Motore C</a>
+                </div>
+            </div>
+        </div>
+    {% endif %}
 </div>
 {% endblock %}

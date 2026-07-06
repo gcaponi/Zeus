@@ -4,11 +4,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from celery import shared_task
-from django.db import connection
+from django.db import connection, transaction
 from django.utils import timezone
 from django_tenants.utils import schema_context
 
 from apps.companies.audit import compute_audit_hash
+from apps.companies.dna_schemas import LAYER_KEYS, PRODUCT_LAYER_KEYS
 from apps.companies.llm_client import (
     LLM_MODEL,
     LLM_MODEL_PRO,
@@ -16,7 +17,15 @@ from apps.companies.llm_client import (
     _generate_with_retry,
     get_llm_client,
 )
-from apps.companies.models import CompanyDNA, LLMCall, PipelineRun, Product, ProductDNA, Source
+from apps.companies.models import (
+    CompanyDNA,
+    ConsistencyIssue,
+    LLMCall,
+    PipelineRun,
+    Product,
+    ProductDNA,
+    Source,
+)
 from apps.companies.scraper import get_scraper
 
 logger = logging.getLogger(__name__)
@@ -64,6 +73,233 @@ def _compute_enrichment(content, company, source=None) -> dict:
     except Exception:
         logger.exception("Enrichment computation failed; saving DNA without full bundle")
         return {"error": "enrichment_computation_failed"}
+
+
+def _text(value, limit=5000):
+    if isinstance(value, (dict, list)):
+        text = json.dumps(value, ensure_ascii=False)
+    else:
+        text = str(value or "")
+    return text[:limit]
+
+
+def _consistency_specialist_records(company, product=None):
+    products = company.products.filter(status=Product.STATUS_ATTIVO).order_by("name")
+    if product is not None:
+        products = products.filter(pk=product.pk)
+    records = []
+    for specialist in products:
+        dna = specialist.dna_versions.filter(
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            is_current=True,
+        ).first()
+        if not dna:
+            continue
+        content = dna.content if isinstance(dna.content, dict) else {}
+        records.append({
+            "product_id": specialist.pk,
+            "product_name": specialist.name,
+            "tipologia": specialist.tipologia or "",
+            "codice": specialist.codice or "",
+            "dna_id": dna.pk,
+            "dna_version": dna.version,
+            "layers": {key: _text(content.get(key, "")) for key in PRODUCT_LAYER_KEYS},
+        })
+    return records
+
+
+def _normalize_consistency_issues(raw, scope, company_dna, records):
+    raw = raw if isinstance(raw, dict) else {}
+    raw_issues = raw.get("issues") or []
+    if not isinstance(raw_issues, list):
+        return []
+
+    valid_severities = {
+        ConsistencyIssue.SEVERITY_LOW,
+        ConsistencyIssue.SEVERITY_MEDIUM,
+        ConsistencyIssue.SEVERITY_HIGH,
+    }
+    valid_company_layers = set(LAYER_KEYS)
+    valid_product_layers = set(PRODUCT_LAYER_KEYS)
+    source_product_ids = {record["product_id"] for record in records}
+    source_dna_ids = {record["dna_id"] for record in records}
+
+    issues = []
+    for item in raw_issues[:12]:
+        if not isinstance(item, dict):
+            continue
+        title = _text(item.get("title"), limit=160).strip()
+        description = _text(item.get("description") or item.get("issue"), limit=4000).strip()
+        if not title or not description:
+            continue
+        severity = str(item.get("severity") or ConsistencyIssue.SEVERITY_MEDIUM).lower()
+        if severity not in valid_severities:
+            severity = ConsistencyIssue.SEVERITY_MEDIUM
+        company_layer = str(item.get("company_layer") or "")
+        product_layer = str(item.get("product_layer") or "")
+        evidence = item.get("evidence") if isinstance(item.get("evidence"), dict) else {}
+        evidence.update({
+            "company_dna_id": company_dna.pk,
+            "company_dna_version": company_dna.version,
+            "source_product_ids": sorted(source_product_ids),
+            "source_product_dna_ids": sorted(source_dna_ids),
+        })
+        issues.append({
+            "scope": scope,
+            "issue_type": _text(item.get("issue_type") or "coherence", limit=40).strip(),
+            "severity": severity,
+            "title": title,
+            "description": description,
+            "recommendation": _text(item.get("recommendation"), limit=4000).strip(),
+            "company_layer": company_layer if company_layer in valid_company_layers else "",
+            "product_layer": product_layer if product_layer in valid_product_layers else "",
+            "evidence": evidence,
+        })
+    return issues
+
+
+def _update_accumulated_structure(company_dna, records, audit_summary):
+    content = dict(company_dna.content) if isinstance(company_dna.content, dict) else {}
+    accumulated = content.get("_accumulated") if isinstance(content.get("_accumulated"), dict) else {}
+    accumulated.update({
+        "schema_version": 1,
+        "updated_at": timezone.now().isoformat(),
+        "company_dna_id": company_dna.pk,
+        "company_dna_version": company_dna.version,
+        "active_specialist_count": len(records),
+        "source_product_dna_ids": sorted(record["dna_id"] for record in records),
+        "last_consistency_audit": audit_summary,
+    })
+    content["_accumulated"] = accumulated
+    company_dna.content = content
+    company_dna.audit_hash = compute_audit_hash(content, company_dna.previous_hash or "")
+    company_dna.save(update_fields=["content", "audit_hash"])
+
+
+def _run_consistency_audit(company_id, scope=ConsistencyIssue.SCOPE_PERIODIC, product_id=None):
+    from apps.companies.models import Company
+
+    try:
+        company = Company.objects.get(pk=company_id)
+    except Company.DoesNotExist:
+        logger.error("run_consistency_audit: company %s not found", company_id)
+        return 0
+
+    company_dna = company.dna_versions.filter(
+        dna_type=CompanyDNA.TYPE_COMPLETE,
+        is_current=True,
+    ).first()
+    if not company_dna:
+        logger.error("run_consistency_audit: Company DNA not found for %s", company.schema_name)
+        return 0
+
+    product = None
+    product_dna = None
+    if product_id is not None:
+        try:
+            product = company.products.get(pk=product_id)
+        except Product.DoesNotExist:
+            logger.error("run_consistency_audit: product %s not found", product_id)
+            return 0
+        product_dna = product.dna_versions.filter(
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            is_current=True,
+        ).first()
+
+    records = _consistency_specialist_records(company, product=product)
+    if not records:
+        audit_summary = {
+            "scope": scope,
+            "generated_at": timezone.now().isoformat(),
+            "issue_count": 0,
+            "status": "no_active_specialists",
+        }
+        _update_accumulated_structure(company_dna, [], audit_summary)
+        return 0
+
+    prompt_path = Path(__file__).parent / "prompts" / "consistency_audit_v1.md"
+    prompt_template = prompt_path.read_text(encoding="utf-8")
+    prompt = prompt_template.replace(
+        "{{scope}}",
+        scope,
+    ).replace(
+        "{{company_dna}}",
+        json.dumps({key: company_dna.content.get(key, "") for key in LAYER_KEYS}, ensure_ascii=False, indent=2),
+    ).replace(
+        "{{specialist_records}}",
+        json.dumps(records, ensure_ascii=False, indent=2),
+    ).replace(
+        "{{company_layers}}",
+        ", ".join(LAYER_KEYS),
+    ).replace(
+        "{{product_layers}}",
+        ", ".join(PRODUCT_LAYER_KEYS),
+    )
+
+    raw = {"summary": "Audit non eseguito.", "issues": []}
+    try:
+        client = get_llm_client()
+        result, raw = _generate_with_retry(
+            client,
+            prompt,
+            model=LLM_MODEL_PRO,
+            system_prompt=ZEUS_SYSTEM_PROMPT,
+            temperatures=(0.25, 0.15, 0.05),
+            context="consistency-audit",
+        )
+        LLMCall.objects.create(
+            company=company,
+            model_name=LLM_MODEL_PRO,
+            prompt_text=prompt,
+            response_text=result.text,
+            tokens_in=result.tokens_in,
+            tokens_out=result.tokens_out,
+            cost_usd=result.cost,
+            latency_ms=result.latency_ms,
+        )
+    except Exception:
+        logger.exception("Consistency audit failed for company %s", company.schema_name)
+
+    issues = _normalize_consistency_issues(raw, scope, company_dna, records)
+    now = timezone.now()
+    with transaction.atomic():
+        previous = ConsistencyIssue.objects.filter(
+            company=company,
+            company_dna=company_dna,
+            scope=scope,
+            status=ConsistencyIssue.STATUS_OPEN,
+        )
+        if product is not None:
+            previous = previous.filter(product=product)
+        else:
+            previous = previous.filter(product__isnull=True)
+        previous.update(status=ConsistencyIssue.STATUS_ARCHIVED, resolved_at=now)
+
+        ConsistencyIssue.objects.bulk_create([
+            ConsistencyIssue(
+                company=company,
+                company_dna=company_dna,
+                product=product,
+                product_dna=product_dna,
+                **issue,
+            )
+            for issue in issues
+        ])
+
+    audit_summary = {
+        "scope": scope,
+        "generated_at": now.isoformat(),
+        "issue_count": len(issues),
+        "high_count": sum(1 for issue in issues if issue["severity"] == ConsistencyIssue.SEVERITY_HIGH),
+        "summary": _text(raw.get("summary"), limit=1000),
+        "source_product_dna_ids": sorted(record["dna_id"] for record in records),
+    }
+    _update_accumulated_structure(company_dna, records, audit_summary)
+    logger.info(
+        "Consistency audit completed for %s scope=%s issues=%d",
+        company.schema_name, scope, len(issues),
+    )
+    return len(issues)
 
 
 def _validate_dna_content(content, company, *, stage="pre-dna"):
@@ -1086,3 +1322,20 @@ def generate_specialist_feedback_task(product_id, specialist_dna_id, company_dna
             _run()
     else:
         _run()
+
+
+@shared_task(soft_time_limit=600, time_limit=660)
+def run_consistency_audit(
+    company_id,
+    scope=ConsistencyIssue.SCOPE_PERIODIC,
+    product_id=None,
+    tenant_schema=None,
+):
+    """Run Motore C coherence audit for Company DNA and active specialists."""
+    def _run():
+        return _run_consistency_audit(company_id, scope=scope, product_id=product_id)
+
+    if tenant_schema and hasattr(connection, "tenant"):
+        with schema_context(tenant_schema):
+            return _run()
+    return _run()

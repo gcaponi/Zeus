@@ -5,6 +5,7 @@ from apps.companies.models import (
     CompanyDNA,
     CompanyFile,
     CompanyQuestion,
+    ConsistencyIssue,
     DNAFeedback,
     LLMCall,
     PipelineRun,
@@ -114,3 +115,11 @@ class PipelineRunAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+
+@admin.register(ConsistencyIssue)
+class ConsistencyIssueAdmin(admin.ModelAdmin):
+    list_display = ["title", "company", "scope", "severity", "status", "created_at"]
+    list_filter = ["scope", "severity", "status"]
+    search_fields = ["title", "description", "company__name", "product__name"]
+    readonly_fields = ["created_at", "updated_at"]

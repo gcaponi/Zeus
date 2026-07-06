@@ -1,4 +1,6 @@
+import json
 from concurrent.futures import Future
+from types import SimpleNamespace
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -9,6 +11,7 @@ from apps.companies.llm_client import MockLLMClient
 from apps.companies.models import (
     Company,
     CompanyDNA,
+    ConsistencyIssue,
     LLMCall,
     PipelineRun,
     Product,
@@ -434,3 +437,53 @@ class TestAsyncCompanyTasks:
         assert new_dna.previous_hash == "abc123"
         assert "_pending_specialist_feedback" not in new_dna.content
         assert new_dna.audit_hash
+
+    def test_run_consistency_audit_creates_issue_and_accumulated(self, monkeypatch):
+        company = _make_company()
+        company_dna = company.dna_versions.get(dna_type=CompanyDNA.TYPE_COMPLETE)
+        for index in range(3):
+            product = _make_product(company, slug=f"canale-{index}", codice=f"CI-00{index}")
+            product.status = Product.STATUS_ATTIVO
+            product.save(update_fields=["status"])
+            ProductDNA.objects.create(
+                product=product,
+                version=1,
+                dna_type=ProductDNA.TYPE_COMPLETE,
+                content=_specialist_content(f"active {index}"),
+            )
+
+        fake_result = SimpleNamespace(
+            text=(
+                '{"summary":"warning confini","issues":[{"severity":"high",'
+                '"issue_type":"boundary","title":"Confine assolutizzato",'
+                '"description":"Un vincolo specialista sembra generalizzato.",'
+                '"recommendation":"Separare principio generale e limite prodotto.",'
+                '"company_layer":"confini","product_layer":"vincoli",'
+                '"evidence":{"products":["Canale Ispezionabile"]}}]}'
+            ),
+            tokens_in=10,
+            tokens_out=10,
+            cost=0,
+            latency_ms=1,
+        )
+
+        def fake_generate(*args, **kwargs):
+            return fake_result, json.loads(fake_result.text)
+
+        monkeypatch.setattr(
+            "apps.companies.tasks._generate_with_retry",
+            fake_generate,
+        )
+        monkeypatch.setattr("apps.companies.tasks.get_llm_client", lambda: None)
+
+        count = tasks._run_consistency_audit(company.id)
+
+        assert count == 1
+        issue = ConsistencyIssue.objects.get(company=company)
+        assert issue.severity == ConsistencyIssue.SEVERITY_HIGH
+        assert issue.company_layer == "confini"
+        assert issue.product_layer == "vincoli"
+        assert issue.status == ConsistencyIssue.STATUS_OPEN
+        company_dna.refresh_from_db()
+        assert company_dna.content["_accumulated"]["active_specialist_count"] == 3
+        assert company_dna.content["_accumulated"]["last_consistency_audit"]["issue_count"] == 1

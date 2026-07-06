@@ -39,6 +39,33 @@
         </div>
     </section>
 
+    <section class="zeus-card p-5 mb-6" style="border-color: rgba(34, 211, 238, 0.22); background: rgba(34, 211, 238, 0.04);">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+                <p class="zeus-label text-brand-cyan">Motore C — Coerenza</p>
+                <h2 class="mt-1 text-xl font-bold font-display text-content-primary">Audit DNA Generale ↔ Specialisti</h2>
+                <p class="mt-2 text-sm text-content-secondary">Controlla contraddizioni, generalizzazioni indebite e regole mancanti tra il DNA Generale e gli specialisti attivi.</p>
+                <div class="mt-3 flex flex-wrap gap-2">
+                    {% if consistency.open_count %}
+                        <span class="zeus-badge" style="background: rgba(251,191,36,0.14); color: #fcd34d;">{{ consistency.open_count }} issue aperte</span>
+                    {% else %}
+                        <span class="zeus-badge zeus-badge-lime">Nessuna issue aperta</span>
+                    {% endif %}
+                    {% if consistency.high_count %}
+                        <span class="zeus-badge" style="background: rgba(239,68,68,0.14); color: #fca5a5;">{{ consistency.high_count }} alte</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-3">
+                <a href="{% url 'consistency-report' %}" class="zeus-btn zeus-btn-secondary">Apri report</a>
+                <form method="post" action="{% url 'consistency-audit-run' %}">
+                    {% csrf_token %}
+                    <button type="submit" class="zeus-btn zeus-btn-ghost">Avvia audit T3</button>
+                </form>
+            </div>
+        </div>
+    </section>
+
     {% if cross_specialist.active_count %}
         <section class="zeus-card p-5 mb-6" style="border-color: rgba(167, 139, 250, 0.25); background: rgba(167, 139, 250, 0.05);">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

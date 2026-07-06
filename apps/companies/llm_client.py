@@ -443,6 +443,29 @@ class MockLLMClient(LLMClient):
                 latency_ms=1100,
             )
 
+        if "CONSISTENCY_AUDIT_V1" in prompt:
+            return LLMResult(
+                text=json.dumps({
+                    "summary": "Audit coerenza completato: un warning di perimetro rilevato.",
+                    "issues": [
+                        {
+                            "severity": "medium",
+                            "issue_type": "boundary",
+                            "title": "Confine specialista da non generalizzare",
+                            "description": "Un vincolo tecnico dello specialista va mantenuto come confine di prodotto, non come principio aziendale assoluto.",
+                            "recommendation": "Esplicitare nel DNA Generale che i limiti tecnici dipendono dalla famiglia specialistica.",
+                            "company_layer": "confini",
+                            "product_layer": "vincoli",
+                            "evidence": {"products": ["Specialista mock"], "quotes": ["limite tecnico specifico"]},
+                        }
+                    ],
+                }, ensure_ascii=False),
+                tokens_in=800,
+                tokens_out=350,
+                cost=0.0005,
+                latency_ms=900,
+            )
+
         if "GENERA_DOMANDE_A1_A20" in prompt:
             plan_slug = "starter"
             answer_depth = "generica"

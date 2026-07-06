@@ -618,3 +618,82 @@ class ProductSectionApproval(models.Model):
 
     def __str__(self):
         return f"{self.section_key} on ProductDNA {self.dna_id}"
+
+
+class ConsistencyIssue(models.Model):
+    SCOPE_PERIODIC = "periodic"
+    SCOPE_SPECIALIST = "specialist"
+    SCOPE_CHOICES = [
+        (SCOPE_PERIODIC, "Audit periodico"),
+        (SCOPE_SPECIALIST, "Audit specialista"),
+    ]
+
+    SEVERITY_LOW = "low"
+    SEVERITY_MEDIUM = "medium"
+    SEVERITY_HIGH = "high"
+    SEVERITY_CHOICES = [
+        (SEVERITY_LOW, "Bassa"),
+        (SEVERITY_MEDIUM, "Media"),
+        (SEVERITY_HIGH, "Alta"),
+    ]
+
+    STATUS_OPEN = "open"
+    STATUS_IGNORED = "ignored"
+    STATUS_RESOLVED = "resolved"
+    STATUS_ARCHIVED = "archived"
+    STATUS_CHOICES = [
+        (STATUS_OPEN, "Aperta"),
+        (STATUS_IGNORED, "Ignorata"),
+        (STATUS_RESOLVED, "Risolta"),
+        (STATUS_ARCHIVED, "Archiviata"),
+    ]
+
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name="consistency_issues",
+    )
+    company_dna = models.ForeignKey(
+        CompanyDNA,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="consistency_issues",
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="consistency_issues",
+    )
+    product_dna = models.ForeignKey(
+        ProductDNA,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="consistency_issues",
+    )
+    scope = models.CharField(max_length=20, choices=SCOPE_CHOICES)
+    issue_type = models.CharField(max_length=40, blank=True)
+    severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES, default=SEVERITY_MEDIUM)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default=STATUS_OPEN)
+    title = models.CharField(max_length=160)
+    description = models.TextField()
+    recommendation = models.TextField(blank=True)
+    company_layer = models.CharField(max_length=30, blank=True)
+    product_layer = models.CharField(max_length=30, blank=True)
+    evidence = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["company", "status", "scope"]),
+            models.Index(fields=["company", "severity", "status"]),
+        ]
+
+    def __str__(self):
+        return f"{self.get_scope_display()} - {self.title}"

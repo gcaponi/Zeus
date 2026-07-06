@@ -35,6 +35,7 @@ from apps.companies.models import (
     CompanyDNA,
     CompanyFile,
     CompanyQuestion,
+    ConsistencyIssue,
     DNAFeedback,
     LLMCall,
     PipelineRun,
@@ -2535,6 +2536,7 @@ def _dna_review_context(company, dna):
         "company_name": company.name,
         "blocking_flags": blocking_flags,
         "cross_specialist": cross_specialist,
+        "consistency": _consistency_state(company),
         "step": 3,
         "step_has_run": latest_run is not None,
         "step_has_dna": True,
@@ -2608,6 +2610,15 @@ def _cross_specialist_state(company, dna):
         "proposals": proposals,
         "can_analyze": bool(records),
         "can_consolidate": bool(proposals) and not requires_refresh,
+    }
+
+
+def _consistency_state(company):
+    open_issues = company.consistency_issues.filter(status=ConsistencyIssue.STATUS_OPEN)
+    return {
+        "open_count": open_issues.count(),
+        "high_count": open_issues.filter(severity=ConsistencyIssue.SEVERITY_HIGH).count(),
+        "latest": company.consistency_issues.order_by("-created_at").first(),
     }
 
 
@@ -3023,6 +3034,86 @@ def dna_cross_specialist_apply(request):
     new_dna.audit_hash = compute_audit_hash(new_content, new_dna.previous_hash or "")
     new_dna.save(update_fields=["_enrichment", "audit_hash"])
     return redirect("dna-review")
+
+
+@login_required
+def consistency_report(request):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    issues = company.consistency_issues.select_related(
+        "company_dna", "product", "product_dna",
+    )
+    return render(request, "core/consistency_report.html", {
+        "company": company,
+        "open_issues": issues.filter(status=ConsistencyIssue.STATUS_OPEN).order_by("-created_at"),
+        "closed_issues": issues.exclude(status=ConsistencyIssue.STATUS_OPEN).order_by("-created_at")[:30],
+        "latest": company.consistency_issues.order_by("-created_at").first(),
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def consistency_audit_run(request):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    if not company.dna_versions.filter(dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True).exists():
+        return HttpResponse("DNA Generale non trovato", status=404)
+    from apps.companies.tasks import run_consistency_audit
+
+    tenant = getattr(request, "tenant", None)
+    run_consistency_audit.delay(
+        company.pk,
+        scope=ConsistencyIssue.SCOPE_PERIODIC,
+        tenant_schema=tenant.schema_name if tenant else None,
+    )
+    return redirect("consistency-report")
+
+
+@login_required
+@require_http_methods(["POST"])
+def consistency_issue_action(request, pk, action):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    issue = get_object_or_404(ConsistencyIssue, pk=pk, company=company)
+    action_map = {
+        "ignore": ConsistencyIssue.STATUS_IGNORED,
+        "resolve": ConsistencyIssue.STATUS_RESOLVED,
+        "archive": ConsistencyIssue.STATUS_ARCHIVED,
+    }
+    if action not in action_map:
+        return HttpResponse("Azione non valida", status=400)
+    issue.status = action_map[action]
+    issue.resolved_at = timezone.now()
+    issue.save(update_fields=["status", "resolved_at", "updated_at"])
+    return redirect("consistency-report")
+
+
+@login_required
+@require_http_methods(["POST"])
+def product_consistency_check(request, pk):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    product = Product.objects.filter(pk=pk, company=company).first()
+    if not product:
+        return HttpResponse("Prodotto non trovato", status=404)
+    if product.status != Product.STATUS_ATTIVO:
+        return HttpResponse("Audit coerenza disponibile solo per specialisti attivi", status=400)
+    if not product.dna_versions.filter(dna_type=ProductDNA.TYPE_COMPLETE, is_current=True).exists():
+        return HttpResponse("DNA specialista non trovato", status=404)
+    from apps.companies.tasks import run_consistency_audit
+
+    tenant = getattr(request, "tenant", None)
+    run_consistency_audit.delay(
+        company.pk,
+        scope=ConsistencyIssue.SCOPE_SPECIALIST,
+        product_id=product.pk,
+        tenant_schema=tenant.schema_name if tenant else None,
+    )
+    return redirect("consistency-report")
 
 
 @login_required
@@ -4280,6 +4371,11 @@ def product_review(request, pk):
         (i, p) for i, p in enumerate(dna.content.get("_critique", []))
         if isinstance(p, dict) and p.get("status", "pending") == "pending"
     ]
+    consistency_open_count = ConsistencyIssue.objects.filter(
+        company=company,
+        product=product,
+        status=ConsistencyIssue.STATUS_OPEN,
+    ).count()
     return render(request, "core/product_review.html", {
         "product": product,
         "dna": dna,
@@ -4288,6 +4384,7 @@ def product_review(request, pk):
         "missing_keys": dna.missing_sections(),
         "is_fully_approved": dna.is_fully_approved(),
         "critique_proposals": critique_proposals,
+        "consistency_open_count": consistency_open_count,
         "product_step": 3,
     })
 
@@ -4305,6 +4402,16 @@ def product_promote(request, pk):
         return HttpResponse("Stato non valido per la promozione", status=400)
     product.status = Product.STATUS_ATTIVO
     product.save(update_fields=["status"])
+    active_count = company.products.filter(status=Product.STATUS_ATTIVO).count()
+    if active_count and active_count % 3 == 0:
+        from apps.companies.tasks import run_consistency_audit
+
+        tenant = getattr(request, "tenant", None)
+        run_consistency_audit.delay(
+            company.pk,
+            scope=ConsistencyIssue.SCOPE_PERIODIC,
+            tenant_schema=tenant.schema_name if tenant else None,
+        )
     return redirect("product-detail", pk=product.pk)
 
 

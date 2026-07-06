@@ -12,12 +12,13 @@ from django.test import RequestFactory
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.companies import views
+from apps.companies import tasks, views
 from apps.companies.models import (
     Company,
     CompanyDNA,
     CompanyFile,
     CompanyQuestion,
+    ConsistencyIssue,
     DNAFeedback,
     LLMCall,
     PipelineRun,
@@ -2030,3 +2031,86 @@ class TestCrossSpecialistThreshold:
         # When the gate passes and LLM returns empty analysis, the view still
         # stores the fallback and redirects to dna-review.
         assert resp.status_code == 302
+
+
+@pytest.mark.django_db
+class TestConsistencyMotor:
+    def _make_company_with_dna(self):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            content={"identita": "DNA generale", "confini": "Confini generali"},
+            is_current=True,
+        )
+        return company
+
+    def _make_product(self, company, name, slug, codice, status):
+        product = Product.objects.create(
+            company=company,
+            name=name,
+            slug=slug,
+            codice=codice,
+            status=status,
+        )
+        ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            content={key: f"{name} {key}" for key in views.PRODUCT_LAYER_KEYS},
+        )
+        return product
+
+    def test_product_promote_triggers_consistency_audit_every_third_active(
+        self, rf_with_tenant, monkeypatch,
+    ):
+        company = self._make_company_with_dna()
+        self._make_product(company, "A", "a", "A", Product.STATUS_ATTIVO)
+        self._make_product(company, "B", "b", "B", Product.STATUS_ATTIVO)
+        product = self._make_product(company, "C", "c", "C", Product.STATUS_IN_VALIDAZIONE)
+        called = {}
+
+        def fake_delay(company_id, **kwargs):
+            called["company_id"] = company_id
+            called.update(kwargs)
+
+        monkeypatch.setattr(tasks.run_consistency_audit, "delay", fake_delay)
+        req = rf_with_tenant(
+            "post",
+            reverse("product-promote", args=[product.pk]),
+            form=True,
+        )
+
+        resp = views.product_promote(req, product.pk)
+
+        product.refresh_from_db()
+        assert resp.status_code == 302
+        assert product.status == Product.STATUS_ATTIVO
+        assert called == {
+            "company_id": company.pk,
+            "scope": ConsistencyIssue.SCOPE_PERIODIC,
+            "tenant_schema": "test-tenant",
+        }
+
+    def test_consistency_issue_action_resolves_issue(self, rf_with_tenant):
+        company = self._make_company_with_dna()
+        issue = ConsistencyIssue.objects.create(
+            company=company,
+            scope=ConsistencyIssue.SCOPE_PERIODIC,
+            severity=ConsistencyIssue.SEVERITY_MEDIUM,
+            title="Warning confini",
+            description="Descrizione",
+        )
+        req = rf_with_tenant(
+            "post",
+            reverse("consistency-issue-action", args=[issue.pk, "resolve"]),
+            form=True,
+        )
+
+        resp = views.consistency_issue_action(req, issue.pk, "resolve")
+
+        issue.refresh_from_db()
+        assert resp.status_code == 302
+        assert issue.status == ConsistencyIssue.STATUS_RESOLVED
+        assert issue.resolved_at is not None
