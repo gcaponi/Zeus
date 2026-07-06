@@ -15,6 +15,10 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
+from apps.companies.dna_numeric import (
+    extract_all_layer_specs,
+    extract_technical_specs,
+)
 from apps.companies.dna_schemas import (
     LAYER_KEYS,
     LAYER_TITLES,
@@ -42,6 +46,7 @@ from apps.companies.models import (
     Product,
     ProductDNA,
     ProductFile,
+    ProductPublication,
     ProductQuestion,
     ProductSectionApproval,
     SectionApproval,
@@ -235,6 +240,8 @@ def _onboarding_context(request):
 
 def _dna_sections(content, old_content=None):
     sections = []
+    # Pre-extract specs across all layers for efficiency
+    all_specs = extract_all_layer_specs(content, LAYER_KEYS) if isinstance(content, dict) else {}
     for key in LAYER_KEYS:
         label = LAYER_TITLES[key]
         raw_value = _as_text(content.get(key) if isinstance(content, dict) else None)
@@ -250,6 +257,7 @@ def _dna_sections(content, old_content=None):
             "paragraphs": _document_paragraphs(value),
             "old_value": old_value or "",
             "changed": bool(old_value and old_value != value),
+            "specs": all_specs.get(key, []),
         })
     return sections
 
@@ -447,6 +455,30 @@ def _public_content(content):
 
 def _strip_source_markers(text):
     return _strip_instruction_prefixes(SOURCE_MARKER_RE.sub("", str(text or "")))
+
+
+def _strip_markdown(text):
+    """Strip lightweight markdown formatting to plain text for PDF output.
+
+    Handles the subset that the LLM generates in DNA fields.
+    """
+    text = str(text or "")
+    # Remove bold/italic markers
+    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+    text = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"\1", text)
+    # Remove inline code backticks
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    # Convert markdown links to plain "text (url)"
+    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1 (\2)", text)
+    # Remove heading markers
+    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+    # Convert unordered list markers to plain dash
+    text = re.sub(r"^\s*[-*+]\s+", "• ", text, flags=re.MULTILINE)
+    # Convert ordered list markers to keep number + dot
+    text = re.sub(r"^\s*(\d+[.)])\s+", r"\1 ", text, flags=re.MULTILINE)
+    # Remove horizontal rules
+    text = re.sub(r"^[-*_]{3,}\s*$", "", text, flags=re.MULTILINE)
+    return text.strip()
 
 
 def _section_context(content, section_key):
@@ -974,7 +1006,7 @@ def _create_product_gap_followups(product, dna, followups_data, current_round, p
         plan_slug, QUESTION_GENERATION_PROFILES[Plan.SLUG_STARTER]
     )
     existing_codes = set(dna.questions.values_list("code", flat=True))
-    section_keys = set(LAYER_KEYS)
+    section_keys = set(PRODUCT_LAYER_KEYS)
     parent_map = {q.code: q for q in dna.questions.all()}
 
     for index, raw in enumerate(followups_data, start=1):
@@ -1566,6 +1598,10 @@ def _create_complete_dna(company, pre_dna, user):
         "answer_depth": questions[0].answer_depth if questions else "generica",
     }
 
+    # A2 — normalize punctuation before save
+    from apps.companies.dna_validator import normalize_dna_punctuation
+    content = normalize_dna_punctuation(content)
+
     last_version = company.dna_versions.order_by("-version").first()
     next_version = (last_version.version + 1) if last_version else 1
     company.dna_versions.filter(is_current=True).update(is_current=False)
@@ -1582,6 +1618,18 @@ def _create_complete_dna(company, pre_dna, user):
     # content keys (questionario, profilo) are preserved unchanged.
     _apply_self_critique(dna, company)
     _finalize_complete_dna(dna, pre_dna, company)
+
+    # A1 — editorial leakage check on complete DNA (blocking: logs ERROR)
+    try:
+        from apps.companies.dna_validator import validate_no_editorial_leakage
+        leaks = validate_no_editorial_leakage(dna.content)
+        if leaks:
+            logger.error(
+                "COMPLETE DNA EDITORIAL LEAKAGE for %s: %d fragments. First: %s",
+                company.schema_name, len(leaks), leaks[0][:200],
+            )
+    except Exception:
+        logger.exception("Editorial leakage check failed for company %s", company.schema_name)
 
     return dna
 
@@ -1603,6 +1651,9 @@ def _apply_self_critique(dna, company):
         # Re-apply only the 6 layers; keep the rest of content intact.
         new_content = dict(dna.content)
         new_content.update(refined.model_dump())
+        # A2 — normalize punctuation on refined content
+        from apps.companies.dna_validator import normalize_dna_punctuation
+        new_content = normalize_dna_punctuation(new_content)
         dna.content = new_content
         dna.save(update_fields=["content"])
     except Exception:
@@ -1935,6 +1986,59 @@ def onboarding_status(request, pk):
         "source_status": run.source.status if run.source else None,
         "dna_id": dna.id if dna else None,
     })
+
+
+def generation_progress(request, pk):
+    """Shared HTMX progress endpoint for all generation tasks.
+    
+    Reads a PipelineRun by pk and returns _generation_progress.html partial.
+    Expects current_step in format: \"step_num/total: Label\"
+    e.g. \"3/10: Generazione layer cognitivo\"
+    """
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    run = PipelineRun.objects.filter(
+        pk=pk, company=company,
+    ).first()
+    if not run:
+        return JsonResponse({"error": "not found"}, status=404)
+
+    # Parse structured current_step
+    step_num = None
+    steps_total = None
+    step_label = run.current_step or ""
+    if ":" in step_label:
+        prefix, step_label = step_label.split(":", 1)
+        step_label = step_label.strip()
+        if "/" in prefix:
+            parts = prefix.split("/", 1)
+            try:
+                step_num = int(parts[0].strip())
+                steps_total = int(parts[1].strip())
+            except (ValueError, IndexError):
+                pass
+
+    progress_pct = 0
+    if steps_total and steps_total > 0 and step_num:
+        progress_pct = min(int(step_num / steps_total * 100), 100)
+    elif run.status == PipelineRun.STATUS_COMPLETED:
+        progress_pct = 100
+
+    ctx = {
+        "status": run.status,
+        "error_msg": run.error_msg,
+        "step_label": step_label,
+        "progress_pct": progress_pct,
+        "current_step_num": step_num,
+        "steps_total": steps_total,
+        "title": "Elaborazione in corso",
+        "description": "ZEUS sta elaborando i dati.",
+        "retry_url": request.path,
+        "phases": None,
+    }
+
+    return render(request, "core/partials/_generation_progress.html", ctx)
 
 
 @login_required
@@ -2284,6 +2388,10 @@ def dna_create(request):
     if not content:
         return JsonResponse({"error": "content is required"}, status=400)
 
+    # A2 — normalize punctuation before save
+    from apps.companies.dna_validator import normalize_dna_punctuation
+    content = normalize_dna_punctuation(content)
+
     last_version = company.dna_versions.order_by("-version").first()
     next_version = (last_version.version + 1) if last_version else 1
 
@@ -2469,7 +2577,20 @@ def dna_generating(request):
     if complete_dna:
         _clear_pending_complete_generation(request)
         return redirect("dna-review")
-    return render(request, "core/dna_generating.html")
+    phases = [
+        {"label": "Lettura di tutte le risposte", "status": "active"},
+        {"label": "Sintesi cognitiva globale", "status": "pending"},
+        {"label": "Riformulazione dei 6 layer", "status": "pending"},
+        {"label": "Self-critique e validazione", "status": "pending"},
+    ]
+    return render(request, "core/dna_generating.html", {
+        "task_status": "running",
+        "phases": phases,
+        "steps_total": 4,
+        "current_step_num": 1,
+        "step_label": "Lettura risposte",
+        "progress_pct": 25,
+    })
 
 
 @login_required
@@ -2632,6 +2753,53 @@ def _mark_consistency_audit_pending(company_dna, scope, product=None):
     }
     company_dna.content = content
     company_dna.save(update_fields=["content"])
+
+
+def _consistency_periodic_threshold(company):
+    plan_slug = _plan_slug_for_company(company)
+    return {
+        Plan.SLUG_STARTER: 3,
+        Plan.SLUG_PROFESSIONAL: 2,
+        Plan.SLUG_ENTERPRISE: 1,
+    }.get(plan_slug, 3)
+
+
+def _dispatch_specialist_consistency_audit(request, company, product):
+    company_dna = company.dna_versions.filter(
+        dna_type=CompanyDNA.TYPE_COMPLETE,
+        is_current=True,
+    ).first()
+    if not company_dna:
+        return False
+    if not product.dna_versions.filter(
+        dna_type=ProductDNA.TYPE_COMPLETE,
+        is_current=True,
+    ).exists():
+        return False
+
+    from apps.companies.tasks import run_consistency_audit
+
+    _mark_consistency_audit_pending(company_dna, ConsistencyIssue.SCOPE_SPECIALIST, product)
+    tenant = getattr(request, "tenant", None)
+    run_consistency_audit.delay(
+        company.pk,
+        scope=ConsistencyIssue.SCOPE_SPECIALIST,
+        product_id=product.pk,
+        tenant_schema=tenant.schema_name if tenant else None,
+    )
+    return True
+
+
+def _maybe_trigger_product_upload_consistency_audit(request, company, product):
+    if product.status != Product.STATUS_ATTIVO:
+        return False
+    product.status = Product.STATUS_UPDATING
+    product.save(update_fields=["status"])
+    try:
+        return _dispatch_specialist_consistency_audit(request, company, product)
+    except Exception:
+        logger.exception("T2 consistency audit dispatch failed for product %s", product.pk)
+        return False
 
 
 def _normalize_cross_specialist_analysis(raw, company_dna, records):
@@ -3028,6 +3196,10 @@ def dna_cross_specialist_apply(request):
         analysis,
     )
 
+    # A2 — normalize punctuation before save
+    from apps.companies.dna_validator import normalize_dna_punctuation
+    new_content = normalize_dna_punctuation(new_content)
+
     last_version = company.dna_versions.order_by("-version").first()
     next_version = (last_version.version + 1) if last_version else 1
     company.dna_versions.filter(is_current=True).update(is_current=False)
@@ -3127,23 +3299,10 @@ def product_consistency_check(request, pk):
     product = Product.objects.filter(pk=pk, company=company).first()
     if not product:
         return HttpResponse("Prodotto non trovato", status=404)
-    if product.status != Product.STATUS_ATTIVO:
-        return HttpResponse("Audit coerenza disponibile solo per specialisti attivi", status=400)
     if not product.dna_versions.filter(dna_type=ProductDNA.TYPE_COMPLETE, is_current=True).exists():
         return HttpResponse("DNA specialista non trovato", status=404)
-    company_dna = company.dna_versions.filter(dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True).first()
-    if not company_dna:
+    if not _dispatch_specialist_consistency_audit(request, company, product):
         return HttpResponse("DNA Generale non trovato", status=404)
-    from apps.companies.tasks import run_consistency_audit
-
-    _mark_consistency_audit_pending(company_dna, ConsistencyIssue.SCOPE_SPECIALIST, product)
-    tenant = getattr(request, "tenant", None)
-    run_consistency_audit.delay(
-        company.pk,
-        scope=ConsistencyIssue.SCOPE_SPECIALIST,
-        product_id=product.pk,
-        tenant_schema=tenant.schema_name if tenant else None,
-    )
     return redirect("consistency-report")
 
 
@@ -3245,6 +3404,10 @@ def dna_section_edit(request, pk, section_key):
     content = dict(old_dna.content) if isinstance(old_dna.content, dict) else {}
     content[section_key] = new_text
 
+    # A2 — normalize punctuation before save
+    from apps.companies.dna_validator import normalize_dna_punctuation
+    content = normalize_dna_punctuation(content)
+
     # Mark old current as False
     company.dna_versions.filter(is_current=True).update(is_current=False)
 
@@ -3334,6 +3497,7 @@ def _render_dna_pdf(company, dna, final_document):
     def write_paragraphs(document, size=10.5, color=(0.08, 0.08, 0.08), width=88):
         nonlocal y
         paragraphs = _document_paragraphs(document) or ["Non disponibile"]
+        paragraphs = [_strip_markdown(p) for p in paragraphs]
         for index, paragraph in enumerate(paragraphs):
             if index and y > 760:
                 new_page()
@@ -3361,6 +3525,8 @@ def _render_dna_pdf(company, dna, final_document):
 
 def _product_dna_sections(content, old_content=None):
     sections = []
+    # Pre-extract specs for all product layers
+    all_specs = extract_all_layer_specs(content, PRODUCT_LAYER_KEYS) if isinstance(content, dict) else {}
     for key in PRODUCT_LAYER_KEYS:
         label = PRODUCT_LAYER_TITLES[key]
         raw_value = _as_text(content.get(key) if isinstance(content, dict) else None)
@@ -3375,6 +3541,7 @@ def _product_dna_sections(content, old_content=None):
             "raw_value": raw_value or "",
             "old_value": old_value or "",
             "changed": bool(old_value and old_value != value),
+            "specs": all_specs.get(key, []),
         })
     return sections
 
@@ -3827,6 +3994,10 @@ def _create_complete_product_dna(product, pre_dna, user):
         "answer_depth": questions[0].answer_depth if questions else "generica",
     }
 
+    # A2 — normalize punctuation before save
+    from apps.companies.dna_validator import normalize_dna_punctuation
+    content = normalize_dna_punctuation(content)
+
     last_version = product.dna_versions.order_by("-version").first()
     next_version = (last_version.version + 1) if last_version else 1
     product.dna_versions.filter(is_current=True).update(is_current=False)
@@ -3841,6 +4012,18 @@ def _create_complete_product_dna(product, pre_dna, user):
     # PIANO 4 — self-critique + audit chain + enrichment (duplicato temporaneo)
     _apply_product_self_critique(dna, product)
     _finalize_complete_product_dna(dna, pre_dna, product)
+
+    # A1 — editorial leakage check on complete product DNA
+    try:
+        from apps.companies.dna_validator import validate_no_editorial_leakage
+        leaks = validate_no_editorial_leakage(dna.content)
+        if leaks:
+            logger.error(
+                "COMPLETE PRODUCT DNA EDITORIAL LEAKAGE for %s (%s): %d fragments. First: %s",
+                product.company.schema_name, product.name, len(leaks), leaks[0][:200],
+            )
+    except Exception:
+        logger.exception("Editorial leakage check failed for product %s", product.pk)
 
     # Transition status to in_validazione (DNA complete, ready for review)
     product.status = Product.STATUS_IN_VALIDAZIONE
@@ -4004,6 +4187,7 @@ def _product_detail_context(product, error=None):
     bytes_used = _product_file_bytes_used(product)
     max_mb = subscription.plan.max_product_files_mb if subscription and subscription.plan else 5
     unlimited = subscription.plan.unlimited_product_files if subscription and subscription.plan else False
+    company_dna = CompanyDNA.objects.filter(company=product.company, is_current=True).first()
     return {
         "product": product,
         "dna": dna,
@@ -4013,8 +4197,10 @@ def _product_detail_context(product, error=None):
         "product_files_bytes_used": bytes_used,
         "max_product_files_mb": max_mb,
         "unlimited_product_files": unlimited,
+        "is_updating": product.status == Product.STATUS_UPDATING,
         "product_step": 1,
         "error": error,
+        "company_dna": company_dna,
     }
 
 
@@ -4030,8 +4216,20 @@ def product_detail(request, pk):
     generating = request.GET.get("generating") == "1"
     pre_dna = product.dna_versions.filter(dna_type=ProductDNA.TYPE_PRE).order_by("-version").first()
     if generating and not pre_dna and product.product_files.exists():
+        product_phases = [
+            {"label": "Concept Map — estrazione entità e parametri", "status": "active"},
+            {"label": "Multi-seed — 3 angoli di lettura paralleli", "status": "pending"},
+            {"label": "Merge — unificazione delle varianti", "status": "pending"},
+            {"label": "Refinement — 6 sezioni raffinate indipendentemente", "status": "pending"},
+        ]
         return render(request, "core/product_dna_loading.html", {
             "product": product,
+            "task_status": "running",
+            "product_phases": product_phases,
+            "steps_total": 4,
+            "current_step_num": 1,
+            "step_label": "Concept Map",
+            "progress_pct": 25,
         })
 
     return render(request, "core/product_detail.html", _product_detail_context(product))
@@ -4113,6 +4311,8 @@ def product_file_upload(request, pk):
     if subscription:
         subscription.product_files_bytes_used = _product_file_bytes_used(product)
         subscription.save(update_fields=["product_files_bytes_used"])
+
+    _maybe_trigger_product_upload_consistency_audit(request, company, product)
 
     if not _wants_json(request):
         return redirect("product-detail", pk=product.pk)
@@ -4378,12 +4578,20 @@ def product_gap_processing(request, pk, round_number):
     if request.headers.get("HX-Request") == "true" and state.get("status") != "failed":
         return HttpResponse(status=204)
 
+    gap_phases = [
+        {"label": "Lettura delle risposte del round " + str(round_number), "status": "active"},
+        {"label": "Verifica lacune, ambiguità e contraddizioni", "status": "pending"},
+        {"label": "Creazione follow-up oppure sintesi finale", "status": "pending"},
+    ]
     return render(request, "core/product_gap_processing.html", {
         "product": product,
         "pre_dna": pre_dna,
         "round_number": round_number,
         "state": state,
         "product_step": 2,
+        "task_status": "failed" if state.get("status") == "failed" else "running",
+        "task_error": state.get("error"),
+        "gap_phases": gap_phases,
     })
 
 
@@ -4407,6 +4615,7 @@ def product_review(request, pk):
         product=product,
         status=ConsistencyIssue.STATUS_OPEN,
     ).count()
+    publications = product.publications.filter(status=ProductPublication.STATUS_PUBLISHED)
     return render(request, "core/product_review.html", {
         "product": product,
         "dna": dna,
@@ -4416,6 +4625,8 @@ def product_review(request, pk):
         "is_fully_approved": dna.is_fully_approved(),
         "critique_proposals": critique_proposals,
         "consistency_open_count": consistency_open_count,
+        "publications": publications,
+        "publication_channels": ProductPublication.CHANNEL_CHOICES,
         "product_step": 3,
     })
 
@@ -4434,7 +4645,8 @@ def product_promote(request, pk):
     product.status = Product.STATUS_ATTIVO
     product.save(update_fields=["status"])
     active_count = company.products.filter(status=Product.STATUS_ATTIVO).count()
-    if active_count and active_count % 3 == 0:
+    threshold = _consistency_periodic_threshold(company)
+    if active_count and active_count % threshold == 0:
         from apps.companies.tasks import run_consistency_audit
 
         company_dna = company.dna_versions.filter(
@@ -4450,6 +4662,71 @@ def product_promote(request, pk):
             tenant_schema=tenant.schema_name if tenant else None,
         )
     return redirect("product-detail", pk=product.pk)
+
+
+@login_required
+@require_http_methods(["POST"])
+def product_publish(request, pk):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    product = Product.objects.filter(pk=pk, company=company).first()
+    if not product:
+        return HttpResponse("Prodotto non trovato", status=404)
+    if product.status != Product.STATUS_ATTIVO:
+        return HttpResponse("Pubblicazione disponibile solo per specialisti attivi", status=400)
+    dna = product.dna_versions.filter(
+        dna_type=ProductDNA.TYPE_COMPLETE,
+        is_current=True,
+    ).first()
+    if not dna or not dna.is_fully_approved():
+        return HttpResponse("DNA Specialista approvato non trovato", status=404)
+
+    channel = request.POST.get("channel", ProductPublication.CHANNEL_WEBSITE)
+    valid_channels = {value for value, _label in ProductPublication.CHANNEL_CHOICES}
+    if channel not in valid_channels:
+        return HttpResponse("Canale non valido", status=400)
+
+    from apps.companies.dna_renderer import render_product_publication
+
+    content_md = render_product_publication(product, dna, channel)
+    with transaction.atomic():
+        product.publications.filter(
+            channel=channel,
+            status=ProductPublication.STATUS_PUBLISHED,
+        ).update(
+            status=ProductPublication.STATUS_ARCHIVED,
+            archived_at=timezone.now(),
+        )
+        ProductPublication.objects.create(
+            product=product,
+            product_dna=dna,
+            channel=channel,
+            content_md=content_md,
+            created_by=request.user if request.user.is_authenticated else None,
+        )
+    return redirect("product-review", pk=product.pk)
+
+
+@login_required
+@require_http_methods(["POST"])
+def product_publication_archive(request, pk, publication_pk):
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    product = Product.objects.filter(pk=pk, company=company).first()
+    if not product:
+        return HttpResponse("Prodotto non trovato", status=404)
+    publication = get_object_or_404(
+        ProductPublication,
+        pk=publication_pk,
+        product=product,
+        status=ProductPublication.STATUS_PUBLISHED,
+    )
+    publication.status = ProductPublication.STATUS_ARCHIVED
+    publication.archived_at = timezone.now()
+    publication.save(update_fields=["status", "archived_at"])
+    return redirect("product-review", pk=product.pk)
 
 
 def _get_critique_proposal(dna, index):
@@ -4570,7 +4847,7 @@ def product_section_approve(request, pk, section_key):
             # Decision 1B: auto-promote product to in_validazione once the
             # specialist DNA is fully approved. The final attivo transition
             # stays manual (product_promote view) as the human gate.
-            if product.status == Product.STATUS_IN_COSTRUZIONE:
+            if product.status in {Product.STATUS_IN_COSTRUZIONE, Product.STATUS_UPDATING}:
                 product.status = Product.STATUS_IN_VALIDAZIONE
                 product.save(update_fields=["status"])
 
@@ -4616,6 +4893,10 @@ def product_section_edit(request, pk, section_key):
 
     content = dict(old_dna.content) if isinstance(old_dna.content, dict) else {}
     content[section_key] = new_text
+
+    # A2 — normalize punctuation before save
+    from apps.companies.dna_validator import normalize_dna_punctuation
+    content = normalize_dna_punctuation(content)
 
     product.dna_versions.filter(is_current=True).update(is_current=False)
 
@@ -4974,9 +5255,17 @@ def product_dna_feedback(request, pk):
         # Task in flight (proposals is None): render loading page with HTMX
         # polling. The browser polls this same URL; once the Celery task
         # completes and replaces None with a list, the branch above fires.
+        feedback_phases = [
+            {"label": "Lettura del DNA Specialista", "status": "active"},
+            {"label": "Confronto con il DNA Generale", "status": "pending"},
+            {"label": "Identificazione delle novità emerse", "status": "pending"},
+            {"label": "Preparazione delle proposte", "status": "pending"},
+        ]
         return render(request, "core/product_dna_feedback_loading.html", {
             "product": product,
             "product_step": 5,
+            "task_status": "running",
+            "feedback_phases": feedback_phases,
         })
 
     # First visit: dispatch the Celery task and mark the slot as pending.

@@ -26,6 +26,9 @@ from typing import Any
 
 from apps.companies.dna_schemas import PRODUCT_LAYER_KEYS
 
+# Reuse editorial leak detection from the Generale validator.
+from apps.companies.dna_validator import validate_no_editorial_leakage
+
 # Score deltas per severity (mirrors dna_validator.py).
 _PENALTY = {"CRITICAL": 100, "HIGH": 15, "MEDIUM": 8}
 
@@ -224,6 +227,24 @@ def _guard_application_depth(content: dict) -> ProductValidationFlag | None:
     )
 
 
+def _guard_editorial_leakage(content: dict) -> ProductValidationFlag | None:
+    """Guard 7 — no editorial fragments in published Specialist DNA.
+
+    Reuses the same leak detector as the Generale (A1) — it already
+    scans PRODUCT_LAYER_KEYS content.  CRITICAL if any found.
+    """
+    matches = validate_no_editorial_leakage(content)
+    if matches:
+        return ProductValidationFlag(
+            guard="editorial_leakage",
+            severity="CRITICAL",
+            layer="global",
+            message=f"Trovati {len(matches)} frammenti editoriali nel DNA: {matches[0][:120]}",
+            suggestion="Rigenera il DNA con una pipeline che filtri i marker interni.",
+        )
+    return None
+
+
 _GUARDS = [
     _guard_layer_completeness,
     _guard_numeric_density,
@@ -231,6 +252,7 @@ _GUARDS = [
     _guard_boundary_precision,
     _guard_config_awareness,
     _guard_application_depth,
+    _guard_editorial_leakage,
 ]
 
 _GUARD_NAMES = tuple(g.__name__.replace("_guard_", "") for g in _GUARDS)

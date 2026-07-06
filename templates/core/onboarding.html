@@ -6,37 +6,40 @@
 <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 {% endblock %}
 
-{% block content %}
-<div class="zeus-page-wrap">
-    <header class="mb-8">
-        <p class="zeus-badge zeus-badge-cyan mb-3">ZEUS</p>
-        <h1 class="text-3xl font-bold tracking-tight sm:text-4xl">Onboarding</h1>
-        <p class="mt-2 text-content-secondary">Costruisci il DNA della tua azienda in 4 passaggi.</p>
-    </header>
+{% block page_header %}
+<header class="mb-8">
+    <p class="zeus-badge zeus-badge-cyan mb-3">ZEUS</p>
+    <h1 class="text-3xl font-bold tracking-tight sm:text-4xl">Onboarding</h1>
+    <p class="mt-2 text-content-secondary">Costruisci il DNA della tua azienda in 4 passaggi.</p>
+</header>
+{% endblock %}
 
-    <div class="zeus-page-grid">
-        <section class="zeus-card p-6 sm:p-8">
-            {% include "core/onboarding/_step_indicator.html" with current_step=step|default:1 %}
+{% block step_indicator_area %}
+{% include "core/onboarding/_step_indicator.html" with current_step=step|default:1 %}
+{% endblock %}
 
-            <div id="onboarding-step">
-                {% if show_source_form %}
-                    {% include "core/onboarding/_source_form.html" %}
-                {% elif dna %}
-                    {% include "core/onboarding/_dna.html" %}
-                {% elif run and run.status in "running pending" %}
-                    {% include "core/onboarding/_progress.html" %}
-                {% else %}
-                    {% include "core/onboarding/_source_form.html" %}
-                {% endif %}
-            </div>
-        </section>
-
-        <div class="zeus-page-sidebar">
-            {% include "core/onboarding/_step_sidebar.html" %}
-        </div>
+{% block main_content %}
+<section class="zeus-card p-6 sm:p-8">
+    <div id="onboarding-step">
+        {% if show_source_form %}
+            {% include "core/onboarding/_source_form.html" %}
+        {% elif dna %}
+            {% include "core/onboarding/_dna.html" %}
+        {% elif run and run.status in "running pending" %}
+            {% include "core/onboarding/_progress.html" %}
+        {% else %}
+            {% include "core/onboarding/_source_form.html" %}
+        {% endif %}
     </div>
-</div>
+</section>
+{% endblock %}
 
+{% block sidebar_content %}
+{% include "core/onboarding/_step_sidebar.html" %}
+{% endblock %}
+
+{% block content %}
+{{ block.super }}
 <!-- Popup glass "Stiamo generando le domande..." -->
 <div id="generating-popup" class="fixed inset-0 z-50 hidden items-center justify-center" style="background: rgba(2,6,23,0.5); backdrop-filter: blur(6px);">
     <div class="zeus-card p-8 text-center mx-4" style="max-width: min(360px, calc(100vw - 2rem)); background: rgba(255,255,255,0.08); backdrop-filter: blur(40px) saturate(180%); border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 24px 80px rgba(0,0,0,0.4);">

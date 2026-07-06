@@ -24,10 +24,22 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from apps.companies.dna_schemas import DNAGeneraleSchema, coerce_dna_generale_content
+from apps.companies.dna_schemas import (
+    DNAGeneraleSchema,
+    LAYER_KEYS,
+    PRODUCT_LAYER_KEYS,
+    coerce_dna_generale_content,
+)
 
 # Score deltas per severity.
 _PENALTY = {"CRITICAL": 100, "HIGH": 15, "MEDIUM": 8}
+
+# Fields in the DNA content dict that contain user-facing prose.
+_DNA_TEXT_FIELDS = (
+    "sintesi_cognitiva",
+    "identita", "modelli_mentali", "nucleo_tecnico",
+    "confini", "tono", "logica_decisionale",
+)
 
 # Registers considered generic / unanchored — tone is not specific.
 _GENERIC_REGISTERS = {
@@ -76,7 +88,7 @@ def _layer_is_empty(layer: Any) -> bool:
     """A layer is empty when every field is blank or an empty collection."""
     if layer is None:
         return True
-    if isinstance(layer, BaseModel := type(layer)) and hasattr(layer, "model_dump"):
+    if hasattr(layer, "model_dump"):
         values = layer.model_dump().values()
     elif isinstance(layer, dict):
         values = layer.values()
@@ -224,7 +236,6 @@ def _guard_identity_coherence(dna) -> DNAValidationFlag | None:
     registro = _text(_field(dna.tono, "registro", ""))
     is_leading = any(tok in postura for tok in _LEADING_TOKENS)
     is_deferent = any(tok in registro for tok in _DEFERENT_TOKENS)
-    is_guiding_postura = any(tok in postura for tok in ("affianca", "affianchiamo", "side", "affianco"))
     if is_leading and is_deferent:
         return DNAValidationFlag(
             guard="identity_coherence",
@@ -236,6 +247,137 @@ def _guard_identity_coherence(dna) -> DNAValidationFlag | None:
     return None
 
 
+# ---------------------------------------------------------------------------
+# Editorial leakage detection (A1 — blocks fragments in published DNA)
+# ---------------------------------------------------------------------------
+
+_EDITORIAL_PATTERNS = re.compile(
+    r"(?im)^\s*(?:"
+    r"Aggiungere:|Da aggiungere:|TODO:|NOTA INTERNA:|FIXME:|"
+    r"Problema di Zeus|Problema ZEUS|"
+    r"Pattern \d|Seed \d|"
+    r"Integrare:|Inserire:|Aggiornare:|Sostituire:|Riscrivere:|Proposta:"
+    r")\s*",
+)
+
+
+def validate_no_editorial_leakage(content: dict) -> list[str]:
+    """Scan all strings in the 6 DNA layers + sintesi_cognitiva for editorial
+    fragments that should never appear in published DNA.
+
+    Returns a list of matching strings (empty = clean).
+    """
+    found: list[str] = []
+    keys_to_scan = LAYER_KEYS + PRODUCT_LAYER_KEYS + ["sintesi_cognitiva"]
+
+    def _scan(value: Any, path: str = "") -> None:
+        if isinstance(value, str):
+            for match in _EDITORIAL_PATTERNS.finditer(value):
+                context = value[max(0, match.start() - 20):match.end() + 40]
+                found.append(f"[{path}] {context.strip()}")
+        elif isinstance(value, dict):
+            for k, v in value.items():
+                _scan(v, f"{path}.{k}" if path else str(k))
+        elif isinstance(value, list):
+            for i, item in enumerate(value):
+                _scan(item, f"{path}[{i}]")
+
+    for key in keys_to_scan:
+        if key in content:
+            _scan(content[key], key)
+    return found
+
+
+def _guard_editorial_leakage(dna) -> DNAValidationFlag | None:
+    """Guard 8 — no editorial fragments in published DNA.
+
+    Scan all layer values for leaked internal markers (Aggiungere:, TODO:,
+    Problema di Zeus, etc.). CRITICAL if any found.
+    """
+    content = dna.model_dump() if hasattr(dna, "model_dump") else {}
+    matches = validate_no_editorial_leakage(content)
+    if matches:
+        return DNAValidationFlag(
+            guard="editorial_leakage",
+            severity="CRITICAL",
+            layer="global",
+            message=f"Trovati {len(matches)} frammenti editoriali nel DNA: {matches[0][:120]}",
+            suggestion="Rigenera il DNA con una pipeline che filtri i marker interni.",
+        )
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Punctuation normalisation (A2 — standardised punctuation in DNA text)
+# ---------------------------------------------------------------------------
+
+def normalize_dna_punctuation(content: dict) -> dict:
+    """Normalise punctuation in all DNA content string fields.
+
+    Applies standardised punctuation rules (see ZEUS_STYLE_GUIDE_UX.md §A2)
+    to every string value in the content dict — recursive, handles both
+    Company and Specialist (Product) layer structures.  Skips technical
+    data inside parentheses (e.g. ``(in mm: 14, 40, 99)``).
+
+    This is a deterministic, zero-LLM post-processing step.
+    """
+    # Also scan product/specialist layer keys.
+    _all_dna_text_fields = _DNA_TEXT_FIELDS + tuple(PRODUCT_LAYER_KEYS)
+
+    def _normalize(text: str) -> str:
+        if not text:
+            return text
+
+        placeholders: dict[str, str] = {}
+        def _protect_technical(m: re.Match) -> str:
+            token = f"\x00TECH_{len(placeholders)}\x00"
+            placeholders[token] = m.group(0)
+            return token
+
+        text = re.sub(
+            r"\([^)]*(?:\bmm\b|cm|kg|g|ml|kW|°C|codice|ref\b|id\b)[^)]*\)",
+            _protect_technical,
+            text,
+            flags=re.IGNORECASE,
+        )
+
+        text = re.sub(r"\s*·\s*", " — ", text)
+        text = re.sub(r"\s*–\s*", " — ", text)
+        text = re.sub(r"(?<=[^\s])\s*—\s*(?=[^\s])", " — ", text)
+        text = re.sub(r"\s-\s(?=[a-zA-Zàèéìòù])", " — ", text)
+
+        text = re.sub(
+            r"(^|\s)['\u2018\u2032]([a-zA-Zàèéìòù][^'\u2018\u2032]{3,}?)['\u2019\u2032](\s|[.,!?;]|$)",
+            lambda m: f'{m.group(1)}"{m.group(2)}"{m.group(3)}',
+            text,
+        )
+        text = re.sub(
+            r"\B['\u2018\u2032]([a-zA-Zàèéìòù][^'\u2018\u2032]{3,}?)['\u2019\u2032]\B",
+            lambda m: f'"{m.group(1)}"',
+            text,
+        )
+
+        for token, original in placeholders.items():
+            text = text.replace(token, original)
+
+        return text
+
+    def _normalize_value(value: Any) -> Any:
+        if isinstance(value, str):
+            return _normalize(value)
+        if isinstance(value, dict):
+            return {k: _normalize_value(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [_normalize_value(item) for item in value]
+        return value
+
+    for field_name in _all_dna_text_fields:
+        if field_name in content:
+            content[field_name] = _normalize_value(content[field_name])
+
+    return content
+
+
 _GUARDS = [
     _guard_layer_completeness,
     _guard_cognitive_tension,
@@ -244,6 +386,7 @@ _GUARDS = [
     _guard_boundary_realism,
     _guard_decisional_depth,
     _guard_identity_coherence,
+    _guard_editorial_leakage,
 ]
 
 _GUARD_NAMES = tuple(g.__name__.replace("_guard_", "") for g in _GUARDS)

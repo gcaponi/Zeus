@@ -402,6 +402,7 @@ class Product(models.Model):
     STATUS_BOZZA = "bozza"
     STATUS_IN_COSTRUZIONE = "in_costruzione"
     STATUS_IN_VALIDAZIONE = "in_validazione"
+    STATUS_UPDATING = "updating"
     STATUS_ATTIVO = "attivo"
     STATUS_ARCHIVIATO = "archiviato"
 
@@ -409,6 +410,7 @@ class Product(models.Model):
         (STATUS_BOZZA, "Bozza"),
         (STATUS_IN_COSTRUZIONE, "In Costruzione"),
         (STATUS_IN_VALIDAZIONE, "In Validazione"),
+        (STATUS_UPDATING, "Updating"),
         (STATUS_ATTIVO, "Attivo"),
         (STATUS_ARCHIVIATO, "Archiviato"),
     ]
@@ -453,6 +455,32 @@ class Product(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def next_action(self) -> str:
+        """Return the single next concrete step a user should take."""
+        status_actions = {
+            self.STATUS_BOZZA: "Compila il dettaglio e carica documenti per iniziare",
+            self.STATUS_IN_COSTRUZIONE: "Rispondi alle domande tecniche A1-A10",
+            self.STATUS_IN_VALIDAZIONE: "In attesa di revisione — verifica e approva il DNA",
+            self.STATUS_UPDATING: "Nuovi documenti caricati — rigenera il pre-DNA",
+            self.STATUS_ATTIVO: "Pronto — specialista attivo e pubblicabile",
+            self.STATUS_ARCHIVIATO: "Archiviato — non più in uso",
+        }
+        return status_actions.get(self.status, "Completa le informazioni richieste")
+
+    @property
+    def status_badge_class(self) -> str:
+        """Return the zeus-badge-* CSS class for the current status."""
+        mapping = {
+            self.STATUS_BOZZA: "zeus-badge-muted",
+            self.STATUS_IN_COSTRUZIONE: "zeus-badge-amber",
+            self.STATUS_IN_VALIDAZIONE: "zeus-badge-orange",
+            self.STATUS_UPDATING: "zeus-badge-amber",
+            self.STATUS_ATTIVO: "zeus-badge-lime",
+            self.STATUS_ARCHIVIATO: "zeus-badge-red",
+        }
+        return mapping.get(self.status, "zeus-badge-muted")
 
 
 class ProductDNA(models.Model):
@@ -537,6 +565,59 @@ class ProductFile(models.Model):
 
     def __str__(self):
         return self.original_name
+
+
+class ProductPublication(models.Model):
+    CHANNEL_WEBSITE = "website"
+    CHANNEL_ECOMMERCE = "ecommerce"
+    CHANNEL_RESERVED = "reserved_area"
+    CHANNEL_CHOICES = [
+        (CHANNEL_WEBSITE, "Sito web"),
+        (CHANNEL_ECOMMERCE, "E-commerce"),
+        (CHANNEL_RESERVED, "Area riservata"),
+    ]
+
+    STATUS_PUBLISHED = "published"
+    STATUS_ARCHIVED = "archived"
+    STATUS_CHOICES = [
+        (STATUS_PUBLISHED, "Pubblicata"),
+        (STATUS_ARCHIVED, "Archiviata"),
+    ]
+
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="publications",
+    )
+    product_dna = models.ForeignKey(
+        ProductDNA,
+        on_delete=models.PROTECT,
+        related_name="publications",
+    )
+    channel = models.CharField(max_length=30, choices=CHANNEL_CHOICES)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default=STATUS_PUBLISHED)
+    content_md = models.TextField()
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    published_at = models.DateTimeField(auto_now_add=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-published_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["product", "channel", "status"],
+                condition=models.Q(status="published"),
+                name="unique_published_product_channel",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.product.name} -> {self.get_channel_display()}"
 
 
 class ProductQuestion(models.Model):

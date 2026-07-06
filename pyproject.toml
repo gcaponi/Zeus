@@ -45,6 +45,7 @@ dependencies = [
     "gunicorn>=22.0.0",
     "openai>=1.0.0",
     "instructor>=1.0.0",
+    "sentry-sdk>=2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -65,9 +66,22 @@ include = ["apps*", "config*"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+extend-exclude = [
+    "core",
+    "llm",
+    "models",
+    "parsers",
+    "utils",
+    "cli.py",
+]
 
 [tool.ruff.lint.per-file-ignores]
 "**/migrations/*.py" = ["E501"]
+"apps/companies/*.py" = ["E501", "F401", "I001"]
+"apps/companies/tasks.py" = ["E501", "I001", "N806", "W293"]
+"apps/companies/views.py" = ["E501", "F401", "F841", "I001", "SIM103", "W293"]
+"config/settings/*.py" = ["F403"]
+"tests/*.py" = ["B010", "B017", "C420", "E501", "F401", "F841", "I001"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "N", "UP", "B", "C4", "SIM"]

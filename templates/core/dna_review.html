@@ -4,49 +4,20 @@
 
 {% block extra_head %}
 <script src="https://unpkg.com/htmx.org@1.9.12"></script>
-<style>
-    #dna-popup-overlay .dna-popup-panel {
-        color: #f8fafc;
-        margin: 1rem;
-    }
+{% endblock %}
 
-    #dna-popup-overlay .dna-popup-title,
-    #dna-popup-overlay .dna-popup-meta,
-    #dna-popup-overlay .dna-popup-close,
-    #dna-popup-overlay .dna-popup-section-text {
-        color: #f8fafc !important;
-    }
+{% block main_content %}
+<section class="zeus-card p-6 sm:p-8">
+    {% include "core/partials/dna_review_content.html" %}
+</section>
+{% endblock %}
 
-    @media (max-width: 480px) {
-        #dna-popup-overlay .dna-popup-panel { max-height: 92vh; }
-        #dna-popup-overlay .sticky.top-0,
-        #dna-popup-overlay .sticky.bottom-0 { padding-left: 1.25rem; padding-right: 1.25rem; }
-        #dna-popup-overlay .overflow-y-auto { padding-left: 1.25rem; padding-right: 1.25rem; }
-    }
-
-    #dna-popup-overlay .dna-popup-meta {
-        opacity: 0.72;
-    }
-
-    #dna-popup-overlay .dna-popup-section-text {
-        opacity: 0.94;
-        text-shadow: 0 1px 18px rgba(0, 0, 0, 0.35);
-    }
-</style>
+{% block sidebar_content %}
+{% include "core/onboarding/_step_sidebar.html" %}
 {% endblock %}
 
 {% block content %}
-<div class="zeus-page-wrap">
-    <div class="zeus-page-grid">
-        <section class="zeus-card p-6 sm:p-8">
-            {% include "core/partials/dna_review_content.html" %}
-        </section>
-
-        <div class="zeus-page-sidebar">
-            {% include "core/onboarding/_step_sidebar.html" %}
-        </div>
-    </div>
-</div>
+{{ block.super }}
 
 <script>
 function openDnaPopup() {
@@ -57,7 +28,6 @@ function openDnaPopup() {
 }
 
 function closeDnaPopup() {
-    var overlay = document.getElementById('dna-popup-overlay');
     overlay.classList.add('hidden');
     overlay.classList.remove('flex');
     document.body.style.overflow = '';

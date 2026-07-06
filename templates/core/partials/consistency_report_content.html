@@ -58,7 +58,7 @@
                     <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div>
                             <div class="flex flex-wrap items-center gap-2">
-                                <span class="zeus-badge" style="background: rgba(251,191,36,0.14); color: #fcd34d;">{{ issue.severity }}</span>
+                                <span class="zeus-badge zeus-badge-amber">{{ issue.severity }}</span>
                                 <span class="zeus-badge zeus-badge-violet">{{ issue.get_scope_display }}</span>
                                 {% if issue.product %}<span class="text-xs text-content-muted">{{ issue.product.name }}</span>{% endif %}
                             </div>
@@ -68,9 +68,9 @@
                             <p class="mt-3 text-xs text-content-muted">Layer: {{ issue.company_layer|default:"generale" }}{% if issue.product_layer %} ↔ {{ issue.product_layer }}{% endif %}</p>
                         </div>
                         <div class="flex flex-wrap gap-2 sm:justify-end">
-                            <form method="post" action="{% url 'consistency-issue-action' issue.pk 'resolve' %}">{% csrf_token %}<button type="submit" class="zeus-btn" style="background:#22c55e;color:white;min-height:2.4rem;padding:0.45rem 1rem;font-size:0.8rem;">Risolta</button></form>
-                            <form method="post" action="{% url 'consistency-issue-action' issue.pk 'ignore' %}">{% csrf_token %}<button type="submit" class="zeus-btn zeus-btn-ghost" style="min-height:2.4rem;padding:0.45rem 1rem;font-size:0.8rem;">Ignora</button></form>
-                            <form method="post" action="{% url 'consistency-issue-action' issue.pk 'archive' %}">{% csrf_token %}<button type="submit" class="zeus-btn zeus-btn-ghost" style="min-height:2.4rem;padding:0.45rem 1rem;font-size:0.8rem;">Archivia</button></form>
+                            <form method="post" action="{% url 'consistency-issue-action' issue.pk 'resolve' %}">{% csrf_token %}<button type="submit" class="zeus-btn zeus-btn-secondary zeus-btn-sm">Risolta</button></form>
+                            <form method="post" action="{% url 'consistency-issue-action' issue.pk 'ignore' %}">{% csrf_token %}<button type="submit" class="zeus-btn zeus-btn-ghost zeus-btn-sm">Ignora</button></form>
+                            <form method="post" action="{% url 'consistency-issue-action' issue.pk 'archive' %}">{% csrf_token %}<button type="submit" class="zeus-btn zeus-btn-ghost zeus-btn-sm">Archivia</button></form>
                         </div>
                     </div>
                 </article>

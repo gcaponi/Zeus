@@ -25,6 +25,7 @@ from apps.companies.models import (
     Product,
     ProductDNA,
     ProductFile,
+    ProductPublication,
     ProductQuestion,
     ProductSectionApproval,
     SectionApproval,
@@ -518,7 +519,7 @@ class TestPipelineTask:
 
         run.refresh_from_db()
         assert run.status == PipelineRun.STATUS_COMPLETED
-        assert run.current_step == "done"
+        assert run.current_step == "4/4: Completamento"
         assert company.dna_versions.count() == 1
         assert LLMCall.objects.count() == 1
 
@@ -2153,6 +2154,185 @@ class TestConsistencyMotor:
             "product_id": product.pk,
             "tenant_schema": "test-tenant",
         }
+
+    def test_product_consistency_check_allows_complete_draft_specialist(
+        self, rf_with_tenant, monkeypatch,
+    ):
+        company = self._make_company_with_dna()
+        company_dna = company.dna_versions.get(dna_type=CompanyDNA.TYPE_COMPLETE)
+        product = self._make_product(company, "A", "a", "A", Product.STATUS_IN_COSTRUZIONE)
+        called = {}
+
+        def fake_delay(company_id, **kwargs):
+            called["company_id"] = company_id
+            called.update(kwargs)
+
+        monkeypatch.setattr(tasks.run_consistency_audit, "delay", fake_delay)
+        req = rf_with_tenant(
+            "post",
+            reverse("product-consistency-check", args=[product.pk]),
+            form=True,
+        )
+
+        resp = views.product_consistency_check(req, product.pk)
+
+        company_dna.refresh_from_db()
+        assert resp.status_code == 302
+        assert company_dna.content["_consistency_audit_pending"]["product_id"] == product.pk
+        assert called["scope"] == ConsistencyIssue.SCOPE_SPECIALIST
+
+    def test_product_file_upload_active_specialist_triggers_t2_audit(
+        self, rf_with_tenant, monkeypatch,
+    ):
+        company = self._make_company_with_dna()
+        company_dna = company.dna_versions.get(dna_type=CompanyDNA.TYPE_COMPLETE)
+        product = self._make_product(company, "A", "a", "A", Product.STATUS_ATTIVO)
+        called = {}
+
+        def fake_delay(company_id, **kwargs):
+            called["company_id"] = company_id
+            called.update(kwargs)
+
+        monkeypatch.setattr(tasks.run_consistency_audit, "delay", fake_delay)
+        req = rf_with_tenant(
+            "post",
+            reverse("product-file-upload", args=[product.pk]),
+            {"notes": "Nuovo documento tecnico"},
+            form=True,
+        )
+
+        resp = views.product_file_upload(req, product.pk)
+
+        product.refresh_from_db()
+        company_dna.refresh_from_db()
+        assert resp.status_code == 302
+        assert product.status == Product.STATUS_UPDATING
+        assert product.product_files.filter(original_name="note-prodotto.txt").exists()
+        assert company_dna.content["_consistency_audit_pending"]["scope"] == "specialist"
+        assert called == {
+            "company_id": company.pk,
+            "scope": ConsistencyIssue.SCOPE_SPECIALIST,
+            "product_id": product.pk,
+            "tenant_schema": "test-tenant",
+        }
+
+    def test_product_promote_uses_professional_consistency_threshold(
+        self, rf_with_tenant, monkeypatch,
+    ):
+        monkeypatch.setattr(Client, "auto_create_schema", False)
+        tenant = Client.objects.create(schema_name="test-tenant", name="Test Tenant")
+        plan, _ = Plan.objects.update_or_create(
+            slug=Plan.SLUG_PROFESSIONAL,
+            defaults=Plan.default_values(Plan.SLUG_PROFESSIONAL),
+        )
+        WorkspaceSubscription.objects.create(client=tenant, plan=plan)
+        company = self._make_company_with_dna()
+        self._make_product(company, "A", "a", "A", Product.STATUS_ATTIVO)
+        product = self._make_product(company, "B", "b", "B", Product.STATUS_IN_VALIDAZIONE)
+        called = {}
+
+        def fake_delay(company_id, **kwargs):
+            called["company_id"] = company_id
+            called.update(kwargs)
+
+        monkeypatch.setattr(tasks.run_consistency_audit, "delay", fake_delay)
+        req = rf_with_tenant(
+            "post",
+            reverse("product-promote", args=[product.pk]),
+            form=True,
+        )
+
+        resp = views.product_promote(req, product.pk)
+
+        assert resp.status_code == 302
+        assert called["scope"] == ConsistencyIssue.SCOPE_PERIODIC
+        assert called["tenant_schema"] == "test-tenant"
+
+    def test_updating_specialist_returns_to_validation_after_reapproval(self, rf_with_tenant):
+        company = self._make_company_with_dna()
+        product = self._make_product(company, "A", "a", "A", Product.STATUS_UPDATING)
+        dna = product.dna_versions.get(dna_type=ProductDNA.TYPE_COMPLETE)
+
+        for section_key in views.PRODUCT_LAYER_KEYS:
+            req = rf_with_tenant(
+                "post",
+                reverse("product-section-approve", args=[product.pk, section_key]),
+                form=True,
+            )
+            resp = views.product_section_approve(req, product.pk, section_key)
+            assert resp.status_code == 200
+
+        product.refresh_from_db()
+        dna.refresh_from_db()
+        assert dna.is_fully_approved() is True
+        assert product.status == Product.STATUS_IN_VALIDAZIONE
+
+    def test_product_publish_creates_channel_snapshot(self, rf_with_tenant):
+        company = self._make_company_with_dna()
+        product = self._make_product(company, "A", "a", "A", Product.STATUS_ATTIVO)
+        dna = product.dna_versions.get(dna_type=ProductDNA.TYPE_COMPLETE)
+        dna.is_approved = timezone.now()
+        dna.save(update_fields=["is_approved"])
+        req = rf_with_tenant(
+            "post",
+            reverse("product-publish", args=[product.pk]),
+            {"channel": ProductPublication.CHANNEL_WEBSITE},
+            form=True,
+        )
+
+        resp = views.product_publish(req, product.pk)
+
+        publication = ProductPublication.objects.get(product=product)
+        assert resp.status_code == 302
+        assert publication.channel == ProductPublication.CHANNEL_WEBSITE
+        assert publication.status == ProductPublication.STATUS_PUBLISHED
+        assert f"product_dna_version: {dna.version}" in publication.content_md
+        assert "# A — DNA Specialista" in publication.content_md
+
+    def test_product_publish_archives_existing_channel_snapshot(self, rf_with_tenant):
+        company = self._make_company_with_dna()
+        product = self._make_product(company, "A", "a", "A", Product.STATUS_ATTIVO)
+        dna = product.dna_versions.get(dna_type=ProductDNA.TYPE_COMPLETE)
+        dna.is_approved = timezone.now()
+        dna.save(update_fields=["is_approved"])
+        ProductPublication.objects.create(
+            product=product,
+            product_dna=dna,
+            channel=ProductPublication.CHANNEL_WEBSITE,
+            content_md="old",
+        )
+        req = rf_with_tenant(
+            "post",
+            reverse("product-publish", args=[product.pk]),
+            {"channel": ProductPublication.CHANNEL_WEBSITE},
+            form=True,
+        )
+
+        resp = views.product_publish(req, product.pk)
+
+        assert resp.status_code == 302
+        assert ProductPublication.objects.filter(
+            product=product,
+            channel=ProductPublication.CHANNEL_WEBSITE,
+            status=ProductPublication.STATUS_PUBLISHED,
+        ).count() == 1
+        assert ProductPublication.objects.filter(status=ProductPublication.STATUS_ARCHIVED).count() == 1
+
+    def test_dna_renderer_outputs_product_markdown(self):
+        from apps.companies.dna_renderer import render_sintesi_cognitiva
+
+        content = {
+            "sintesi_cognitiva": "Sintesi breve",
+            "identita_tecnica": "Identita tecnica",
+            "specifiche": {"dimensioni": "100x50 mm"},
+        }
+
+        rendered = render_sintesi_cognitiva(content, "Canale", product=True)
+
+        assert rendered.startswith("# Canale")
+        assert "## Sintesi Cognitiva" in rendered
+        assert "Identita tecnica" in rendered
+        assert "dimensioni: 100x50 mm" in rendered
 
     def test_consistency_report_hx_returns_partial_with_pending(self, rf_with_tenant):
         company = self._make_company_with_dna()

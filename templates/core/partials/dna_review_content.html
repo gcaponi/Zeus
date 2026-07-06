@@ -1,3 +1,4 @@
+{% load zeus_filters %}
 <div id="dna-review-root">
     <header class="mb-8">
         <div class="flex flex-wrap items-center gap-3 text-sm mb-4">
@@ -32,7 +33,7 @@
         <p class="zeus-label text-brand-cyan">Sintesi Cognitiva</p>
         <div class="zeus-prose mt-4 break-words">
             {% for paragraph in public_paragraphs %}
-                <p>{{ paragraph }}</p>
+                {{ paragraph|markdownify }}
             {% empty %}
                 <p>Non disponibile</p>
             {% endfor %}
@@ -47,12 +48,12 @@
                 <p class="mt-2 text-sm text-content-secondary">Controlla contraddizioni, generalizzazioni indebite e regole mancanti tra il DNA Generale e gli specialisti attivi.</p>
                 <div class="mt-3 flex flex-wrap gap-2">
                     {% if consistency.open_count %}
-                        <span class="zeus-badge" style="background: rgba(251,191,36,0.14); color: #fcd34d;">{{ consistency.open_count }} issue aperte</span>
+                        <span class="zeus-badge zeus-badge-amber">{{ consistency.open_count }} issue aperte</span>
                     {% else %}
                         <span class="zeus-badge zeus-badge-lime">Nessuna issue aperta</span>
                     {% endif %}
                     {% if consistency.high_count %}
-                        <span class="zeus-badge" style="background: rgba(239,68,68,0.14); color: #fca5a5;">{{ consistency.high_count }} alte</span>
+                        <span class="zeus-badge zeus-badge-red">{{ consistency.high_count }} alte</span>
                     {% endif %}
                 </div>
             </div>
@@ -110,7 +111,7 @@
                                 {% for conflict in cross_specialist.conflicts %}
                                     <div class="rounded-2xl border border-amber-300/25 bg-amber-300/10 p-4">
                                         <div class="flex flex-wrap items-center gap-2">
-                                            <span class="zeus-badge" style="background: rgba(251,191,36,0.14); color: #fcd34d;">{{ conflict.severity }}</span>
+                                            <span class="zeus-badge zeus-badge-amber">{{ conflict.severity }}</span>
                                             <span class="text-xs text-content-muted">{{ conflict.products|join:", " }}</span>
                                         </div>
                                         <p class="mt-2 text-sm leading-6 text-content-primary">{{ conflict.issue }}</p>
@@ -179,16 +180,17 @@
                     {% if section.key in approved_keys %}
                         <span class="zeus-badge zeus-badge-lime">Approvato</span>
                     {% elif section.key in missing_keys %}
-                        <span class="zeus-badge" style="background: rgba(251, 191, 36, 0.1); color: #fcd34d;">Da approvare</span>
+                        <span class="zeus-badge zeus-badge-amber">Da approvare</span>
                     {% endif %}
                 </div>
                 <div class="zeus-prose mt-4 break-words">
                     {% for paragraph in section.paragraphs %}
-                        <p>{{ paragraph }}</p>
+                        {{ paragraph|markdownify }}
                     {% empty %}
                         <p>Non disponibile</p>
                     {% endfor %}
                 </div>
+                {% include "core/partials/_technical_specs.html" with specs=section.specs %}
 
                 {% if not is_fully_approved %}
                     <div class="mt-4 flex flex-wrap gap-3">
@@ -199,13 +201,12 @@
                                 hx-target="#dna-review-root"
                                 hx-swap="outerHTML"
                                 data-approve-button
-                                class="zeus-btn"
-                                style="background: #22c55e; color: white;"
+                                class="zeus-btn zeus-btn-secondary zeus-btn-sm"
                             >
                                 <span data-approve-label>Approva</span>
                             </button>
                         {% endif %}
-                        <button type="button" onclick="document.getElementById('edit-{{ section.key }}').classList.toggle('hidden')" class="zeus-btn zeus-btn-ghost">Modifica</button>
+                        <button type="button" onclick="document.getElementById('edit-{{ section.key }}').classList.toggle('hidden')" class="zeus-btn zeus-btn-ghost zeus-btn-sm">Modifica</button>
                     </div>
                     <form id="edit-{{ section.key }}" class="hidden mt-4" hx-post="{% url 'dna-section-edit' dna.pk section.key %}" hx-target="#dna-review-root" hx-swap="outerHTML">
                         {% csrf_token %}
@@ -248,7 +249,7 @@
             <div class="overflow-y-auto px-8 py-6" style="max-height: calc(85vh - 160px);">
                 <div class="zeus-prose">
                     {% for paragraph in final_paragraphs %}
-                        <p>{{ paragraph }}</p>
+                        {{ paragraph|markdownify }}
                     {% empty %}
                         <p>Non disponibile</p>
                     {% endfor %}

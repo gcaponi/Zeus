@@ -38,6 +38,21 @@ def _run_in_schema(tenant_schema, func, *args):
     return func(*args)
 
 
+def _set_progress(run_id, step_num, steps_total, label):
+    """Update PipelineRun.current_step with structured progress info.
+    
+    Format: \"step_num/steps_total: Label\"
+    Example: \"3/10: Generazione layer cognitivo\"
+    """
+    try:
+        run = PipelineRun.objects.get(pk=run_id)
+        run.current_step = f"{step_num}/{steps_total}: {label}"
+        run.status = PipelineRun.STATUS_RUNNING
+        run.save(update_fields=["current_step", "status"])
+    except PipelineRun.DoesNotExist:
+        logger.warning(f"PipelineRun {run_id} not found for progress update")
+
+
 def _available_sources(source, company) -> dict:
     """Describe the sources actually available to the LLM for evidence checks."""
     files = [
@@ -84,9 +99,10 @@ def _text(value, limit=5000):
 
 
 def _consistency_specialist_records(company, product=None):
-    products = company.products.filter(status=Product.STATUS_ATTIVO).order_by("name")
     if product is not None:
-        products = products.filter(pk=product.pk)
+        products = company.products.filter(pk=product.pk).order_by("name")
+    else:
+        products = company.products.filter(status=Product.STATUS_ATTIVO).order_by("name")
     records = []
     for specialist in products:
         dna = specialist.dna_versions.filter(
@@ -309,12 +325,15 @@ def _validate_dna_content(content, company, *, stage="pre-dna"):
     Non-blocking: logs a warning if the DNA is in safe_mode or structurally
     invalid, but never raises. Enrichment/validation are diagnostics; the
     pre-DNA stage still saves so the client can proceed to questions.
+
+    Also checks for editorial leakage (A1) — fragments like "Aggiungere:",
+    "TODO:", "Problema di Zeus" that should never appear in published DNA.
     """
     try:
         from pydantic import ValidationError
 
         from apps.companies.dna_schemas import coerce_dna_generale_content
-        from apps.companies.dna_validator import validate_dna
+        from apps.companies.dna_validator import validate_dna, validate_no_editorial_leakage
 
         coerce_dna_generale_content(content)
         result = validate_dna(content)
@@ -338,6 +357,20 @@ def _validate_dna_content(content, company, *, stage="pre-dna"):
             stage,
             getattr(company, "schema_name", "?"),
         )
+
+    # A1 — editorial leakage check for all DNA types
+    try:
+        leaks = validate_no_editorial_leakage(content)
+        if leaks:
+            logger.error(
+                "DNA %s EDITORIAL LEAKAGE for %s: %d fragments found. First: %s",
+                stage,
+                company.schema_name,
+                len(leaks),
+                leaks[0][:200],
+            )
+    except Exception:
+        logger.exception("Editorial leakage check failed for %s", company.schema_name)
 
 
 def _generate_dna(source: Source, company):
@@ -398,6 +431,10 @@ def _generate_dna(source: Source, company):
     )
 
     _validate_dna_content(content, company, stage="pre-dna")
+
+    # A2 — normalize punctuation before save
+    from apps.companies.dna_validator import normalize_dna_punctuation
+    content = normalize_dna_punctuation(content)
 
     last_version = company.dna_versions.order_by("-version").first()
     next_version = (last_version.version + 1) if last_version else 1
@@ -816,6 +853,22 @@ def _generate_product_dna(product: Product, company, tenant_schema=None):
             missing,
         )
 
+    # A1 — editorial leakage check for product DNA
+    try:
+        from apps.companies.dna_validator import validate_no_editorial_leakage
+        leaks = validate_no_editorial_leakage(content)
+        if leaks:
+            logger.error(
+                "Product pre-DNA EDITORIAL LEAKAGE for %s (%s): %d fragments. First: %s",
+                company.schema_name, product.name, len(leaks), leaks[0][:200],
+            )
+    except Exception:
+        logger.exception("Editorial leakage check failed for product %s", product.pk)
+
+    # A2 — normalize punctuation before save
+    from apps.companies.dna_validator import normalize_dna_punctuation
+    content = normalize_dna_punctuation(content)
+
     last_version = product.dna_versions.order_by("-version").first()
     next_version = (last_version.version + 1) if last_version else 1
     product.dna_versions.filter(is_current=True).update(is_current=False)
@@ -898,6 +951,22 @@ applicazione, vincoli, configurazione. Rispondi SOLO JSON.
     last_version = product.dna_versions.order_by("-version").first()
     next_version = (last_version.version + 1) if last_version else 1
     product.dna_versions.filter(is_current=True).update(is_current=False)
+    # A1 — editorial leakage check
+    try:
+        from apps.companies.dna_validator import validate_no_editorial_leakage
+        leaks = validate_no_editorial_leakage(content)
+        if leaks:
+            logger.error(
+                "Product singlepass EDITORIAL LEAKAGE for %s (%s): %d fragments. First: %s",
+                company.schema_name, product.name, len(leaks), leaks[0][:200],
+            )
+    except Exception:
+        logger.exception("Editorial leakage check failed for product %s", product.pk)
+
+    # A2 — normalize punctuation before save
+    from apps.companies.dna_validator import normalize_dna_punctuation
+    content = normalize_dna_punctuation(content)
+
     dna = ProductDNA.objects.create(
         product=product, version=next_version,
         dna_type=ProductDNA.TYPE_PRE, content=content,
@@ -947,26 +1016,26 @@ def run_pipeline(pipeline_run_id: int, tenant_schema: str | None = None):
             return
 
         run.status = PipelineRun.STATUS_RUNNING
-        run.current_step = "scrape"
-        run.save(update_fields=["status", "current_step"])
+        _set_progress(run.id, 1, 4, "Scraping sito web")
 
         source = run.source
         try:
             if source.status != Source.STATUS_SCRAPED:
-                run.current_step = "scrape"
-                run.save(update_fields=["current_step"])
+                _set_progress(run.id, 1, 4, "Scraping sito web")
                 scraper = get_scraper()
                 result = scraper.scrape(source.url)
                 source.scraped_data = result
                 source.status = Source.STATUS_SCRAPED
                 source.save(update_fields=["scraped_data", "status"])
 
-            run.current_step = "generate_dna"
-            run.save(update_fields=["current_step"])
+            _set_progress(run.id, 2, 4, "Generazione Pre-DNA")
             dna, llm_call = _generate_dna(source, run.company)
 
-            run.current_step = "done"
+            _set_progress(run.id, 3, 4, "Self-critique e validazione")
+
+            _set_progress(run.id, 4, 4, "Completamento")
             run.status = PipelineRun.STATUS_COMPLETED
+            run.current_step = "4/4: Completamento"
             run.completed_at = timezone.now()
             run.save(update_fields=["current_step", "status", "completed_at"])
             logger.info(
@@ -1218,6 +1287,10 @@ def apply_specialist_feedback_task(company_id, company_dna_id, tenant_schema=Non
             company, product, company_dna, specialist_dna, selected_proposals,
         )
         new_content.pop("_pending_specialist_feedback", None)
+
+        # A2 — normalize punctuation before save
+        from apps.companies.dna_validator import normalize_dna_punctuation
+        new_content = normalize_dna_punctuation(new_content)
 
         last_version = company.dna_versions.order_by("-version").first()
         next_version = (last_version.version + 1) if last_version else 1

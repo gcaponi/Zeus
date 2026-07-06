@@ -123,6 +123,33 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
         }
+
+        .zeus-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            min-height: 2rem;
+            padding: 0.4rem 0.8rem;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 10px;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            border: 1px solid transparent;
+        }
+
+        .zeus-btn-destructive {
+            border-color: rgba(248, 113, 113, 0.4);
+            background: rgba(239, 68, 68, 0.12);
+            color: #f87171;
+        }
+
+        .zeus-btn-destructive:hover {
+            background: rgba(239, 68, 68, 0.22);
+            border-color: rgba(248, 113, 113, 0.6);
+        }
     </style>
 </head>
 <body>
@@ -329,7 +356,7 @@
                                     <button type="button" data-open-content data-content-url="{{ dna.open_url }}" class="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-[10px] font-bold text-cyan-100 hover:bg-cyan-300/15">Apri</button>
                                     <form method="post" action="{{ dna.delete_url }}" onsubmit="return confirm('Eliminare questa versione DNA aziendale?');">
                                         {% csrf_token %}
-                                        <button type="submit" class="rounded-lg border border-[#fb7185]/20 bg-[#fb7185]/10 px-3 py-2 text-[10px] font-bold text-[#fb7185] hover:bg-[#fb7185]/15">Elimina</button>
+                                        <button type="submit" class="zeus-btn zeus-btn-destructive">Elimina</button>
                                     </form>
                                 </div>
                             </div>
@@ -357,7 +384,7 @@
                                         <button type="button" data-open-content data-content-url="{{ file.open_url }}" class="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-[10px] font-bold text-cyan-100 hover:bg-cyan-300/15">Apri</button>
                                         <form method="post" action="{{ file.delete_url }}" onsubmit="return confirm('Eliminare questo allegato aziendale?');">
                                             {% csrf_token %}
-                                            <button type="submit" class="rounded-lg border border-[#fb7185]/20 bg-[#fb7185]/10 px-3 py-2 text-[10px] font-bold text-[#fb7185] hover:bg-[#fb7185]/15">Elimina</button>
+                                            <button type="submit" class="zeus-btn zeus-btn-destructive">Elimina</button>
                                         </form>
                                     </div>
                                 </div>
@@ -402,7 +429,7 @@
                                                     <button type="button" data-open-content data-content-url="{{ dna.open_url }}" class="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-[10px] font-bold text-cyan-100 hover:bg-cyan-300/15">Apri</button>
                                                     <form method="post" action="{{ dna.delete_url }}" onsubmit="return confirm('Eliminare questa versione ProductDNA?');">
                                                         {% csrf_token %}
-                                                        <button type="submit" class="rounded-lg border border-[#fb7185]/20 bg-[#fb7185]/10 px-3 py-2 text-[10px] font-bold text-[#fb7185] hover:bg-[#fb7185]/15">Elimina</button>
+                                                        <button type="submit" class="zeus-btn zeus-btn-destructive">Elimina</button>
                                                     </form>
                                                 </div>
                                             </div>
@@ -422,7 +449,7 @@
                                                     <button type="button" data-open-content data-content-url="{{ file.open_url }}" class="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-[10px] font-bold text-cyan-100 hover:bg-cyan-300/15">Apri</button>
                                                     <form method="post" action="{{ file.delete_url }}" onsubmit="return confirm('Eliminare questo allegato prodotto?');">
                                                         {% csrf_token %}
-                                                        <button type="submit" class="rounded-lg border border-[#fb7185]/20 bg-[#fb7185]/10 px-3 py-2 text-[10px] font-bold text-[#fb7185] hover:bg-[#fb7185]/15">Elimina</button>
+                                                        <button type="submit" class="zeus-btn zeus-btn-destructive">Elimina</button>
                                                     </form>
                                                 </div>
                                             </div>

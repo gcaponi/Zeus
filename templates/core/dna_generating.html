@@ -8,50 +8,18 @@
 
 {% block content %}
 <div class="zeus-page-wrap">
-    <div class="zeus-card p-8 text-center mx-auto" style="max-width: 36rem; background: var(--glass-strong); border-color: var(--border-color); box-shadow: 0 32px 100px rgba(0,0,0,0.28); backdrop-filter: blur(40px) saturate(180%);">
-        <div class="mb-6 flex justify-center">
-            <div class="w-14 h-14 rounded-full border-4 border-brand-cyan-light border-t-transparent animate-spin"></div>
-        </div>
-        <h2 class="text-xl font-bold font-display text-content-primary">Stiamo generando il DNA</h2>
-        <p class="mt-3 text-sm text-content-secondary">
-            ZEUS sta riformulando le sezioni con le tue risposte.<br>
-            Questo puo richiedere fino a 2 minuti<span id="generating-dots"></span>
-        </p>
-        <div id="zeus-phases" class="mt-6 space-y-3 text-sm">
-            <div class="zeus-phase"><span class="zeus-phase-dot"></span>1. Lettura di tutte le risposte</div>
-            <div class="zeus-phase"><span class="zeus-phase-dot"></span>2. Sintesi cognitiva globale</div>
-            <div class="zeus-phase"><span class="zeus-phase-dot"></span>3. Riformulazione dei 6 layer</div>
-            <div class="zeus-phase"><span class="zeus-phase-dot"></span>4. Self-critique e validazione</div>
-        </div>
-        <div class="mt-8"
-              hx-get="{% url 'dna-generating' %}"
-              hx-trigger="every 4s"
-              hx-swap="none">
-        </div>
+    {% include "core/partials/_generation_progress.html" with
+        title="Stiamo generando il DNA"
+        description="ZEUS sta riformulando le sezioni con le tue risposte. Questo può richiedere fino a 2 minuti."
+        retry_url=retry_url
+        phases=phases
+        status=task_status
+        error_msg=task_error
+    %}
+    <div class="mt-8"
+          hx-get="{% url 'dna-generating' %}"
+          hx-trigger="every 4s"
+          hx-swap="none">
     </div>
 </div>
-
-<script>
-(function() {
-    var phases = document.querySelectorAll('#zeus-phases .zeus-phase');
-    var current = 0;
-    function tick() {
-        phases.forEach(function(p, i) {
-            p.classList.remove('zeus-phase-active', 'zeus-phase-done');
-            if (i < current) p.classList.add('zeus-phase-done');
-            if (i === current) p.classList.add('zeus-phase-active');
-        });
-        current++;
-        if (current > phases.length) current = 0;
-    }
-    tick();
-    setInterval(tick, 1800);
-    var n = 0;
-    setInterval(function() {
-        n = (n + 1) % 4;
-        var el = document.getElementById('generating-dots');
-        if (el) el.textContent = '.'.repeat(n);
-    }, 400);
-})();
-</script>
 {% endblock %}

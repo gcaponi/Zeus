@@ -258,7 +258,7 @@ class TestAsyncCompanyTasks:
 
         run.refresh_from_db()
         assert run.status == PipelineRun.STATUS_COMPLETED
-        assert run.current_step == "done"
+        assert run.current_step == "4/4: Completamento"
         assert run.completed_at is not None
 
     def test_generate_complete_dna_task_calls_view_helper(self, monkeypatch):

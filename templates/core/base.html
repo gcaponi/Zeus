@@ -39,6 +39,8 @@
                             'cyan-light': 'rgb(var(--accent-cyan-light-rgb) / <alpha-value>)',
                             violet: 'rgb(var(--accent-violet-rgb) / <alpha-value>)',
                             lime: 'rgb(var(--accent-lime-rgb) / <alpha-value>)',
+                            amber: 'rgb(var(--accent-amber-rgb) / <alpha-value>)',
+                            red: 'rgb(var(--accent-red-rgb) / <alpha-value>)',
                         },
                         surface: {
                             primary: 'rgb(var(--bg-primary-rgb) / <alpha-value>)',
@@ -98,6 +100,10 @@
             --accent-violet-rgb: 124 58 237;
             --accent-lime: #a3e635;
             --accent-lime-rgb: 163 230 53;
+            --accent-amber: #fbbf24;
+            --accent-amber-rgb: 251 191 36;
+            --accent-red: #fb7185;
+            --accent-red-rgb: 251 113 133;
             --accent-cyan-bg: rgba(8, 145, 178, 0.1);
             --glow-cyan: rgba(34, 211, 238, 0.34);
             --glow-violet: rgba(124, 58, 237, 0.28);
@@ -136,6 +142,10 @@
             --accent-violet-rgb: 167 139 250;
             --accent-lime: #bef264;
             --accent-lime-rgb: 190 242 100;
+            --accent-amber: #fcd34d;
+            --accent-amber-rgb: 252 211 77;
+            --accent-red: #fca5a5;
+            --accent-red-rgb: 252 165 165;
             --accent-cyan-bg: rgba(34, 211, 238, 0.12);
             --glow-cyan: rgba(34, 211, 238, 0.42);
             --glow-violet: rgba(167, 139, 250, 0.3);
@@ -451,19 +461,6 @@
             box-shadow: 0 28px 80px rgba(34, 211, 238, 0.32);
         }
 
-        .zeus-btn-ghost {
-            border-color: var(--border-color);
-            background: var(--glass);
-            color: var(--text-primary);
-            backdrop-filter: blur(16px);
-        }
-
-        .zeus-btn-ghost:hover {
-            border-color: var(--border-hover);
-            color: var(--accent-cyan-light);
-            transform: translateY(-1px);
-        }
-
         .zeus-btn-secondary {
             border-color: var(--border-color);
             background: var(--glass);
@@ -474,19 +471,71 @@
         .zeus-btn-secondary:hover {
             border-color: var(--border-hover);
             color: var(--accent-cyan-light);
+            transform: translateY(-1px);
         }
 
-        .zeus-btn-danger {
+        .zeus-btn-ghost {
+            border-color: transparent;
+            background: transparent;
+            color: var(--text-primary);
+        }
+
+        .zeus-btn-ghost:hover {
+            color: var(--accent-cyan-light);
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .zeus-btn-destructive {
             border-color: rgba(248, 113, 113, 0.4);
             background: rgba(239, 68, 68, 0.12);
             color: #f87171;
             backdrop-filter: blur(16px);
         }
 
-        .zeus-btn-danger:hover {
+        .zeus-btn-destructive:hover {
             background: rgba(239, 68, 68, 0.2);
             border-color: rgba(248, 113, 113, 0.7);
             transform: translateY(-2px);
+        }
+
+        /* Compact button size for inline / issue / critique actions */
+        .zeus-btn-sm {
+            min-height: 2.4rem;
+            padding: 0.45rem 1rem;
+            font-size: 0.82rem;
+            border-radius: 999px;
+        }
+
+        /* Styled file input wrapper — turns native file input into a pill */
+        .zeus-file-input {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .zeus-file-input input[type="file"] {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+        .zeus-file-input .zeus-file-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.6rem 1.2rem;
+            border: 1px solid var(--border-color);
+            border-radius: 999px;
+            background: var(--glass);
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .zeus-file-input .zeus-file-label:hover {
+            border-color: var(--border-hover);
+            background: rgba(255, 255, 255, 0.06);
         }
 
         .zeus-input {
@@ -542,6 +591,26 @@
         .zeus-badge-violet {
             background: rgba(124, 58, 237, 0.1);
             color: var(--accent-violet);
+        }
+
+        .zeus-badge-amber {
+            background: rgba(251, 191, 36, 0.14);
+            color: #fcd34d;
+        }
+
+        .zeus-badge-orange {
+            background: rgba(251, 146, 60, 0.14);
+            color: #fb923c;
+        }
+
+        .zeus-badge-red {
+            background: rgba(239, 68, 68, 0.14);
+            color: #fca5a5;
+        }
+
+        .zeus-badge-muted {
+            background: rgba(255, 255, 255, 0.06);
+            color: rgba(255, 255, 255, 0.5);
         }
 
         .hero-kicker {
@@ -820,6 +889,37 @@
             }
             .cursor-glow { display: none; }
         }
+
+        /* DNA Review Popup — consolidated from dna_review.html */
+        #dna-popup-overlay .dna-popup-panel {
+            color: #f8fafc;
+            margin: 1rem;
+        }
+        #dna-popup-overlay .dna-popup-title,
+        #dna-popup-overlay .dna-popup-meta,
+        #dna-popup-overlay .dna-popup-close,
+        #dna-popup-overlay .dna-popup-section-text {
+            color: #f8fafc !important;
+        }
+        @media (max-width: 480px) {
+            #dna-popup-overlay .dna-popup-panel { max-height: 92vh; }
+            #dna-popup-overlay .sticky.top-0,
+            #dna-popup-overlay .sticky.bottom-0 { padding-left: 1.25rem; padding-right: 1.25rem; }
+            #dna-popup-overlay .overflow-y-auto { padding-left: 1.25rem; padding-right: 1.25rem; }
+        }
+        #dna-popup-overlay .dna-popup-meta { opacity: 0.72; }
+        #dna-popup-overlay .dna-popup-section-text {
+            opacity: 0.94;
+            text-shadow: 0 1px 18px rgba(0, 0, 0, 0.35);
+        }
+
+        /* Neural Step Animation — consolidated from product_detail.html */
+        .neural-step.active { opacity: 1; }
+        .neural-step.active > div:first-child { border-color: #22d3ee; background: rgba(34,211,238,0.1); animation: pulse-neural 1s infinite; }
+        .neural-step.done { opacity: 0.6; }
+        .neural-step.done > div:first-child { border-color: #22c55e; background: rgba(34,197,94,0.1); }
+        .neural-step.done > div:first-child::after { content: '✓'; color: #22c55e; font-size: 12px; }
+        @keyframes pulse-neural { 0%, 100% { box-shadow: 0 0 0 0 rgba(34,211,238,0.3); } 50% { box-shadow: 0 0 0 6px rgba(34,211,238,0); } }
     </style>
     {% block extra_head %}{% endblock %}
 </head>
@@ -837,11 +937,11 @@
             <a href="{% url 'onboarding-index' %}">Onboarding</a>
             <a href="{% url 'product-list-create' %}">Specialisti</a>
         </div>
-        <button type="button" id="theme-toggle" class="zeus-btn zeus-btn-ghost" style="padding: 0.5rem 0.75rem; font-size: 0.82rem; min-height: 2.2rem;" aria-label="Cambia tema">
+        <button type="button" id="theme-toggle" class="zeus-btn zeus-btn-ghost zeus-btn-sm" aria-label="Cambia tema">
             <i data-lucide="sun" class="hidden dark:block" style="width:16px;height:16px;"></i>
             <i data-lucide="moon" class="block dark:hidden" style="width:16px;height:16px;"></i>
         </button>
-        <a href="{% url 'account_logout' %}" class="zeus-btn zeus-btn-ghost" style="padding: 0.5rem 1rem; font-size: 0.82rem;">
+        <a href="{% url 'account_logout' %}" class="zeus-btn zeus-btn-ghost zeus-btn-sm">
             Esci
         </a>
         <button type="button" class="zeus-hamburger" onclick="document.getElementById('zeus-mobile-menu').classList.toggle('open')" aria-label="Menu">
@@ -857,7 +957,25 @@
     {% endblock %}
 
     <main class="relative z-10 pt-24 pb-12 px-4 sm:px-6">
-        {% block content %}{% endblock %}
+        {% block content %}
+        {% block page_shell %}
+        <div class="zeus-page-wrap">
+            {% block page_header %}{% endblock %}
+            {% block step_indicator_area %}{% endblock %}
+            <div class="{% block layout_class %}zeus-page-grid{% endblock %}">
+                <section class="{% block main_column_class %}{% endblock %}">
+                    {% block main_content %}{% endblock %}
+                </section>
+                {% block sidebar_column %}
+                <div class="zeus-page-sidebar">
+                    {% block sidebar_content %}{% endblock %}
+                </div>
+                {% endblock sidebar_column %}
+            </div>
+            {% block bottom_nav_area %}{% endblock %}
+        </div>
+        {% endblock page_shell %}
+        {% endblock content %}
     </main>
 
     <script>

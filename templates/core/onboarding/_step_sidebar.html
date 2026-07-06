@@ -20,7 +20,7 @@
         <p class="zeus-label mb-3">Azioni</p>
         <form method="post" action="{% url 'onboarding-dna-reset' %}" onsubmit="return confirm('Sei sicuro? Questo cancellerà DNA, domande, file e source. Dovrai ricominciare da capo.');">
             {% csrf_token %}
-            <button type="submit" class="zeus-btn zeus-btn-danger w-full text-sm">
+            <button type="submit" class="zeus-btn zeus-btn-destructive w-full text-sm">
                 Riparti da capo
             </button>
         </form>

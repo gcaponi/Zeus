@@ -1,0 +1,18 @@
+{% load zeus_filters %}
+<section class="{% if card_style %}zeus-card p-5{% endif %}">
+    <h3 class="text-lg font-bold font-display text-brand-cyan{% if card_style %} mb-4{% else %} mt-8 mb-4{% endif %}">{{ label }}</h3>
+    {% if is_review %}
+        <div class="zeus-prose mt-4 break-words">
+            {% for paragraph in paragraphs %}
+                {{ paragraph|markdownify }}
+            {% empty %}
+                {{ value|markdownify|default:"<p>Non disponibile</p>" }}
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="text-sm leading-6 text-content-primary break-words{% if not card_style %} zeus-prose{% endif %}">
+            {{ value|markdownify|default:"<p>Non disponibile</p>" }}
+        </div>
+    {% endif %}
+    {% include "core/partials/_technical_specs.html" with specs=specs %}
+</section>

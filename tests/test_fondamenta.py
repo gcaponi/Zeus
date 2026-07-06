@@ -252,8 +252,8 @@ class TestDNAValidator:
         result = validate_dna(self._good_dna())
         assert result.valid is True
         assert result.flags == []
-        assert result.guards_passed == 7
-        assert result.guards_total == 7
+        assert result.guards_passed == 8
+        assert result.guards_total == 8
         assert result.safe_mode is False
         assert result.score >= 90
 
@@ -368,7 +368,7 @@ class TestDNAValidator:
         dna_dict = self._good_dna().model_dump()
         result = validate_dna(dna_dict)
         assert result.valid is True
-        assert result.guards_passed == 7
+        assert result.guards_passed == 8
 
     def test_malformed_dict_triggers_safe_mode(self):
         """A dict that fails schema validation → CRITICAL safe_mode result."""

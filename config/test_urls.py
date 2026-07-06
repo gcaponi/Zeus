@@ -6,6 +6,7 @@ from django.urls import include, path
 
 from apps.companies import onboarding_urls
 from apps.companies import urls as companies_urls
+from apps.core.metrics import metrics_view
 
 
 def health_check(_request):
@@ -14,6 +15,7 @@ def health_check(_request):
 
 urlpatterns = [
     path("health/", health_check, name="health-check"),
+    path("metrics/", metrics_view, name="metrics"),
     path("zeus-admin/", include("apps.zeus_admin.urls")),
     path("admin/", admin.site.urls),
     path("accounts/", include("allauth.urls")),

@@ -9,6 +9,7 @@ from apps.companies.models import (
     DNAFeedback,
     LLMCall,
     PipelineRun,
+    ProductPublication,
     Source,
 )
 
@@ -123,3 +124,11 @@ class ConsistencyIssueAdmin(admin.ModelAdmin):
     list_filter = ["scope", "severity", "status"]
     search_fields = ["title", "description", "company__name", "product__name"]
     readonly_fields = ["created_at", "updated_at"]
+
+
+@admin.register(ProductPublication)
+class ProductPublicationAdmin(admin.ModelAdmin):
+    list_display = ["product", "channel", "status", "published_at", "archived_at"]
+    list_filter = ["channel", "status"]
+    search_fields = ["product__name", "content_md"]
+    readonly_fields = ["content_md", "published_at", "archived_at"]

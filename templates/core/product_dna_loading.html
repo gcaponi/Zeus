@@ -13,43 +13,24 @@
         <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">{{ product.name }}</h1>
     </header>
 
+    {% include "core/partials/_generation_progress.html" with
+        title="Analisi Neurale in corso"
+        description="ZEUS sta elaborando i documenti del prodotto."
+        phases=product_phases
+        status=task_status
+        error_msg=task_error
+        steps_total=steps_total
+        current_step_num=current_step_num
+        step_label=step_label
+        progress_pct=progress_pct
+    %}
+
     <div
-        class="zeus-card p-8 text-center"
+        class="mt-8"
         hx-get="{% url 'product-detail' product.pk %}?generating=1"
-        hx-trigger="every 5s"
+        hx-trigger="every 4s"
         hx-target="body"
         hx-swap="outerHTML"
-    >
-        <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-brand-cyan/10">
-            <div class="w-8 h-8 rounded-full border-[3px] border-brand-cyan-light border-t-transparent animate-spin"></div>
-        </div>
-        <h3 class="text-lg font-bold font-display text-content-primary">Analisi Neurale in corso</h3>
-        <p class="mt-2 text-sm text-content-secondary">ZEUS sta elaborando i documenti del prodotto.</p>
-        <div id="zeus-phases" class="mt-6 space-y-3 text-sm">
-            <div class="zeus-phase"><span class="zeus-phase-dot"></span>1. Concept Map — estrazione entit&agrave; e parametri</div>
-            <div class="zeus-phase"><span class="zeus-phase-dot"></span>2. Multi-seed — 3 angoli di lettura paralleli</div>
-            <div class="zeus-phase"><span class="zeus-phase-dot"></span>3. Merge — unificazione delle varianti</div>
-            <div class="zeus-phase"><span class="zeus-phase-dot"></span>4. Refinement — 6 sezioni raffinate indipendentemente</div>
-        </div>
-        <p class="mt-4 text-xs text-content-muted">Aggiornamento automatico ogni 5 secondi...</p>
-    </div>
+    ></div>
 </div>
-
-<script>
-(function() {
-    var phases = document.querySelectorAll('#zeus-phases .zeus-phase');
-    var current = 0;
-    function tick() {
-        phases.forEach(function(p, i) {
-            p.classList.remove('zeus-phase-active', 'zeus-phase-done');
-            if (i < current) p.classList.add('zeus-phase-done');
-            if (i === current) p.classList.add('zeus-phase-active');
-        });
-        current++;
-        if (current > phases.length) current = 0;
-    }
-    tick();
-    setInterval(tick, 1800);
-})();
-</script>
 {% endblock %}

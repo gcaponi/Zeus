@@ -1,0 +1,34 @@
+{% comment %}
+Partial: _technical_specs.html
+Displays extracted technical specifications as a clean table, separate from prose.
+Used in DNA visualization (Generale and Specialista) for any section that has specs.
+{% endcomment %}
+
+{% if specs %}
+<div class="zeus-card p-4 mt-4 mb-6 rounded-2xl" style="background: rgba(108,99,255,0.04); border: 1px solid rgba(108,99,255,0.15);">
+    <h4 class="text-sm font-semibold text-brand-cyan uppercase tracking-wider mb-3">Specifiche Tecniche</h4>
+    <div class="overflow-hidden rounded-xl border border-white/5">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="border-b border-white/5 bg-white/[0.02]">
+                    <th class="px-3 py-2 text-left text-xs font-semibold text-content-muted uppercase tracking-wide">Parametro</th>
+                    <th class="px-3 py-2 text-left text-xs font-semibold text-content-muted uppercase tracking-wide">Valore</th>
+                    <th class="hidden sm:table-cell px-3 py-2 text-left text-xs font-semibold text-content-muted uppercase tracking-wide">Categoria</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-white/5">
+                {% for spec in specs %}
+                <tr class="hover:bg-white/[0.02] transition-colors">
+                    <td class="px-3 py-2 text-content-primary font-medium">{{ spec.label }}</td>
+                    <td class="px-3 py-2 text-content-secondary font-mono text-xs">{{ spec.value }}</td>
+                    <td class="hidden sm:table-cell px-3 py-2">
+                        <span class="zeus-badge zeus-badge-muted text-[10px]">{{ spec.category }}</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="mt-2 text-[10px] text-content-muted">Dati estratti automaticamente dal contenuto testuale. Verifica con le schede tecniche ufficiali.</p>
+</div>
+{% endif %}

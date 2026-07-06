@@ -11,5 +11,5 @@ DATABASES = {
         'PASSWORD': 'zeus',
         'HOST': 'localhost',
         'PORT': '5432',
-    }   
-}  
+    }
+}

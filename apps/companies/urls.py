@@ -70,6 +70,12 @@ urlpatterns = [
     ),
     path("products/<int:pk>/review/", views.product_review, name="product-review"),
     path("products/<int:pk>/promote/", views.product_promote, name="product-promote"),
+    path("products/<int:pk>/publish/", views.product_publish, name="product-publish"),
+    path(
+        "products/<int:pk>/publications/<int:publication_pk>/archive/",
+        views.product_publication_archive,
+        name="product-publication-archive",
+    ),
     path(
         "products/<int:pk>/consistency/check/",
         views.product_consistency_check,
@@ -99,4 +105,5 @@ urlpatterns = [
     path("sources/<int:pk>/", views.source_detail, name="source-detail"),
     path("pipeline/", views.pipeline_run_create, name="pipeline-run-create"),
     path("pipeline/<int:pk>/", views.pipeline_run_detail, name="pipeline-run-detail"),
+    path("generation-progress/<int:pk>/", views.generation_progress, name="generation-progress"),
 ]

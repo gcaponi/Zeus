@@ -1,4 +1,5 @@
 {% extends "core/base.html" %}
+{% load zeus_filters %}
 
 {% block title %}Revisione Specialista · {{ product.name }} — ZEUS{% endblock %}
 
@@ -6,49 +7,58 @@
 <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 {% endblock %}
 
-{% block content %}
-<div class="zeus-page-wrap">
-    <header class="mb-8">
-        <a href="{% url 'product-detail' product.pk %}" class="text-sm text-brand-cyan hover:underline">← {{ product.name }}</a>
-        <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">Revisione DNA Specialista</h1>
-        <p class="mt-2 text-content-secondary">Versione {{ dna.version }} · Approva ogni sezione per completare il DNA.</p>
-        {% if product.status == 'in_validazione' %}
-            <span class="zeus-badge mt-3" style="background: rgba(251, 191, 36, 0.1); color: #fcd34d;">In validazione</span>
-        {% elif product.status == 'attivo' %}
-            <span class="zeus-badge zeus-badge-lime mt-3">Specialista attivo</span>
-        {% endif %}
-    </header>
-
-    {% include "core/onboarding/_product_step_indicator.html" with product_step=product_step %}
-
-    {% if is_fully_approved %}
-        <div class="mb-6 zeus-card p-5" style="border-color: rgba(34, 197, 94, 0.3); background: rgba(34, 197, 94, 0.05);">
-            <p class="zeus-label text-brand-lime">DNA specialista approvato</p>
-            <p class="mt-2 text-lg font-bold font-display">Tutte le sezioni sono state approvate.</p>
-        </div>
+{% block page_header %}
+<header class="mb-8">
+    <a href="{% url 'product-detail' product.pk %}" class="text-sm text-brand-cyan hover:underline">← {{ product.name }}</a>
+    <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">Revisione DNA Specialista</h1>
+    <p class="mt-2 text-content-secondary">Versione {{ dna.version }} · Approva ogni sezione per completare il DNA.</p>
+    {% if product.status == 'in_validazione' %}
+        <span class="zeus-badge zeus-badge-amber mt-3">In validazione</span>
+    {% elif product.status == 'updating' %}
+        <span class="zeus-badge zeus-badge-amber mt-3">Updating</span>
+    {% elif product.status == 'attivo' %}
+        <span class="zeus-badge zeus-badge-lime mt-3">Specialista attivo</span>
     {% endif %}
+</header>
+{% endblock %}
 
-    <div class="space-y-4">
-        {% for section in sections %}
+{% block layout_class %}{% endblock %}
+{% block sidebar_column %}{% endblock %}
+
+{% block step_indicator_area %}
+{% include "core/onboarding/_product_step_indicator.html" with product_step=product_step %}
+{% endblock %}
+
+{% block main_content %}
+{% if is_fully_approved %}
+    <div class="mb-6 zeus-card p-5" style="border-color: rgba(34, 197, 94, 0.3); background: rgba(34, 197, 94, 0.05);">
+        <p class="zeus-label text-brand-lime">DNA specialista approvato</p>
+        <p class="mt-2 text-lg font-bold font-display">Tutte le sezioni sono state approvate.</p>
+    </div>
+{% endif %}
+
+<div class="space-y-4">
+    {% for section in sections %}
             <section class="zeus-card p-5">
                 <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                     <h3 class="text-lg font-bold font-display text-brand-cyan">{{ section.label }}</h3>
                     {% if section.key in approved_keys %}
                         <span class="zeus-badge zeus-badge-lime">Approvato</span>
                     {% elif section.key in missing_keys %}
-                        <span class="zeus-badge" style="background: rgba(251, 191, 36, 0.1); color: #fcd34d;">Da approvare</span>
+                        <span class="zeus-badge zeus-badge-amber">Da approvare</span>
                     {% endif %}
                 </div>
-                <p class="mt-4 text-sm leading-6 text-content-primary break-words" style="text-wrap: pretty;">{{ section.value|default:"Non disponibile" }}</p>
+                <div class="mt-4 text-sm leading-6 text-content-primary break-words" style="text-wrap: pretty;">{{ section.value|markdownify|default:"<p>Non disponibile</p>" }}</div>
+                {% include "core/partials/_technical_specs.html" with specs=section.specs %}
 
                 {% if section.key not in approved_keys and not is_fully_approved %}
                     <div class="mt-4 flex gap-3">
-                        <button hx-post="{% url 'product-section-approve' product.pk section.key %}" hx-swap="outerHTML" class="zeus-btn" style="background: #22c55e; color: white;">Approva</button>
-                        <button onclick="document.getElementById('edit-{{ section.key }}').classList.toggle('hidden')" class="zeus-btn zeus-btn-ghost">Modifica</button>
+                        <button hx-post="{% url 'product-section-approve' product.pk section.key %}" hx-swap="outerHTML" class="zeus-btn zeus-btn-secondary zeus-btn-sm">Approva</button>
+                        <button onclick="document.getElementById('edit-{{ section.key }}').classList.toggle('hidden')" class="zeus-btn zeus-btn-ghost zeus-btn-sm">Modifica</button>
                     </div>
                     <form id="edit-{{ section.key }}" class="hidden mt-4" hx-post="{% url 'product-section-edit' product.pk section.key %}" hx-swap="outerHTML" hx-target="closest section">
                         {% csrf_token %}
-                        <textarea name="text" rows="4" class="zeus-input">{{ section.value }}</textarea>
+                        <textarea name="text" rows="4" class="zeus-input font-mono text-xs">{{ section.value }}</textarea>
                         <button type="submit" class="zeus-btn zeus-btn-primary mt-3">Salva e crea nuova versione</button>
                     </form>
                 {% endif %}
@@ -66,23 +76,23 @@
                         <div class="flex items-center gap-2 mb-2">
                             <span class="zeus-badge zeus-badge-violet">{{ proposal.section_key }}</span>
                             {% if proposal.anti_memorization %}
-                                <span class="zeus-badge" style="background: rgba(251, 191, 36, 0.15); color: #fcd34d;">Sintesi migliorabile</span>
+                                <span class="zeus-badge zeus-badge-amber">Sintesi migliorabile</span>
                             {% endif %}
                             <span class="text-xs text-content-muted">Auto-critica ZEUS</span>
                         </div>
                         <p class="text-sm text-content-secondary mb-3">{{ proposal.issue }}</p>
                         <div class="rounded-lg border border-white/10 bg-white/5 p-3">
                             <p class="text-xs text-content-muted mb-1">Testo proposto:</p>
-                            <p class="text-sm leading-6 text-content-primary break-words">{{ proposal.proposed_text }}</p>
+                            <div class="text-sm leading-6 text-content-primary break-words">{{ proposal.proposed_text|markdownify }}</div>
                         </div>
                         <div class="mt-3 flex gap-3">
                             <form method="post" action="{% url 'product-critique-accept' product.pk index %}">
                                 {% csrf_token %}
-                                <button type="submit" class="zeus-btn" style="background: #22c55e; color: white; min-height: 2.5rem; padding: 0.5rem 1.2rem; font-size: 0.82rem;">Accetta</button>
+                                <button type="submit" class="zeus-btn zeus-btn-secondary zeus-btn-sm">Accetta</button>
                             </form>
                             <form method="post" action="{% url 'product-critique-reject' product.pk index %}">
                                 {% csrf_token %}
-                                <button type="submit" class="zeus-btn zeus-btn-ghost" style="min-height: 2.5rem; padding: 0.5rem 1.2rem; font-size: 0.82rem;">Rifiuta</button>
+                                <button type="submit" class="zeus-btn zeus-btn-ghost zeus-btn-sm">Rifiuta</button>
                             </form>
                         </div>
                     </div>
@@ -103,9 +113,43 @@
                 {% endif %}
                 <a href="{% url 'product-dna-visualize' product.pk %}" class="zeus-btn zeus-btn-secondary">Visualizza DNA completo</a>
                 <a href="{% url 'product-dna-download-pdf' product.pk %}" class="zeus-btn zeus-btn-secondary">Scarica PDF completo</a>
-                <a href="{% url 'product-dna-feedback' product.pk %}" class="zeus-btn zeus-btn-secondary" style="background: rgba(167, 139, 250, 0.15); border-color: rgba(167, 139, 250, 0.3);">Aggiorna DNA Generale</a>
+                <a href="{% url 'product-dna-feedback' product.pk %}" class="zeus-btn zeus-btn-secondary">Aggiorna DNA Generale</a>
                 <a href="{% url 'product-list-create' %}" class="zeus-btn zeus-btn-ghost">Torna agli specialisti</a>
             </div>
+        </div>
+    {% endif %}
+
+    {% if product.status == 'attivo' and is_fully_approved %}
+        <div class="mt-6 zeus-card p-6" style="border-color: rgba(167, 139, 250, 0.22); background: rgba(167, 139, 250, 0.04);">
+            <p class="zeus-label text-brand-violet">F15 — Pubblicazione</p>
+            <h2 class="mt-1 text-lg font-bold font-display">Canali pubblicati</h2>
+            {% if publications %}
+                <div class="mt-4 space-y-2">
+                    {% for publication in publications %}
+                        <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 p-3 text-sm">
+                            <div>
+                                <span class="font-semibold text-content-primary">{{ publication.get_channel_display }}</span>
+                                <span class="ml-2 text-content-muted">v{{ publication.product_dna.version }} · {{ publication.published_at|date:"d/m/Y H:i" }}</span>
+                            </div>
+                            <form method="post" action="{% url 'product-publication-archive' product.pk publication.pk %}">
+                                {% csrf_token %}
+                                <button type="submit" class="zeus-btn zeus-btn-ghost zeus-btn-sm">Archivia</button>
+                            </form>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="mt-3 text-sm text-content-secondary">Nessun canale pubblicato.</p>
+            {% endif %}
+            <form method="post" action="{% url 'product-publish' product.pk %}" class="mt-4 flex flex-col gap-3 sm:flex-row">
+                {% csrf_token %}
+                <select name="channel" class="zeus-input sm:max-w-xs">
+                    {% for value, label in publication_channels %}
+                        <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="zeus-btn zeus-btn-secondary">Pubblica snapshot</button>
+            </form>
         </div>
     {% endif %}
 
@@ -117,7 +161,7 @@
                     <h2 class="mt-1 text-lg font-bold font-display">Verifica coerenza specialista</h2>
                     <p class="mt-2 text-sm text-content-secondary">Controlla questo DNA Specialista contro il DNA Generale corrente.</p>
                     {% if consistency_open_count %}
-                        <span class="zeus-badge mt-3" style="background: rgba(251,191,36,0.14); color: #fcd34d;">{{ consistency_open_count }} issue aperte</span>
+                        <span class="zeus-badge zeus-badge-amber mt-3">{{ consistency_open_count }} issue aperte</span>
                     {% endif %}
                 </div>
                 <div class="flex flex-wrap gap-3">
@@ -130,5 +174,6 @@
             </div>
         </div>
     {% endif %}
-</div>
 {% endblock %}
+
+{% block content %}{{ block.super }}{% endblock %}

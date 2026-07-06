@@ -15,49 +15,27 @@
 
     {% include "core/onboarding/_product_step_indicator.html" with product_step=product_step %}
 
+    {% with phases_list=gap_phases|default:None %}
+    {% include "core/partials/_generation_progress.html" with
+        title="ZEUS sta valutando le risposte"
+        description="Il Gap Engine sta decidendo se servono altri approfondimenti o se può generare il DNA Specialista completo."
+        status=task_status
+        error_msg=task_error
+        phases=phases_list
+    %}
+    {% endwith %}
+
+    {% if state.status == "failed" %}
+        <div class="mt-5 rounded-xl border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-300">
+            Valutazione non completata. Riprova o torna allo specialista.
+        </div>
+    {% endif %}
+
     <div
-        class="zeus-card p-8 mt-6 text-center"
+        class="mt-8"
         hx-get="{% url 'product-gap-processing' product.pk round_number %}"
         hx-trigger="every 4s"
         hx-swap="none"
-    >
-        <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-brand-cyan/10">
-            <div class="w-8 h-8 rounded-full border-[3px] border-brand-cyan-light border-t-transparent animate-spin"></div>
-        </div>
-        <h3 class="text-lg font-bold font-display text-content-primary">ZEUS sta valutando le risposte</h3>
-        <p class="mt-2 text-sm text-content-secondary">
-            Il Gap Engine sta decidendo se servono altri approfondimenti o se puo generare il DNA Specialista completo.
-        </p>
-        <div id="zeus-phases" class="mt-6 space-y-3 text-sm">
-            <div class="zeus-phase"><span class="zeus-phase-dot"></span>1. Lettura delle risposte del round {{ round_number }}</div>
-            <div class="zeus-phase"><span class="zeus-phase-dot"></span>2. Verifica lacune, ambiguita e contraddizioni</div>
-            <div class="zeus-phase"><span class="zeus-phase-dot"></span>3. Creazione follow-up oppure sintesi finale</div>
-        </div>
-        {% if state.status == "failed" %}
-            <div class="mt-5 rounded-xl border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-300">
-                Valutazione non completata. Riprova o torna allo specialista.
-            </div>
-        {% else %}
-            <p class="mt-4 text-xs text-content-muted">Aggiornamento automatico ogni 4 secondi...</p>
-        {% endif %}
-    </div>
+    ></div>
 </div>
-
-<script>
-(function() {
-    var phases = document.querySelectorAll('#zeus-phases .zeus-phase');
-    var current = 0;
-    function tick() {
-        phases.forEach(function(p, i) {
-            p.classList.remove('zeus-phase-active', 'zeus-phase-done');
-            if (i < current) p.classList.add('zeus-phase-done');
-            if (i === current) p.classList.add('zeus-phase-active');
-        });
-        current++;
-        if (current > phases.length) current = 0;
-    }
-    tick();
-    setInterval(tick, 1800);
-})();
-</script>
 {% endblock %}
