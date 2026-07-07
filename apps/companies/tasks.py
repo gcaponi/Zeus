@@ -1106,7 +1106,7 @@ def generate_complete_product_dna(product_id, pre_dna_id, user_id, tenant_schema
     def _run():
         from django.contrib.auth import get_user_model
         from apps.companies.models import Product
-        from apps.companies.views import _create_complete_product_dna
+        from apps.companies.views import _create_complete_product_dna, _set_product_gap_processing
 
         try:
             product = Product.objects.get(pk=product_id)
@@ -1121,9 +1121,31 @@ def generate_complete_product_dna(product_id, pre_dna_id, user_id, tenant_schema
         user = User.objects.filter(pk=user_id).first() if user_id else None
 
         try:
+            _set_product_gap_processing(
+                pre_dna,
+                status="complete_generating",
+                step_num=3,
+                steps_total=4,
+                step_label="Sintesi DNA Specialista completo",
+            )
             _create_complete_product_dna(product, pre_dna, user)
+            _set_product_gap_processing(
+                pre_dna,
+                status="complete_ready",
+                step_num=4,
+                steps_total=4,
+                step_label="Revisione pronta",
+            )
             logger.info("Complete product DNA generated for product %s", product.pk)
-        except Exception:
+        except Exception as exc:
+            _set_product_gap_processing(
+                pre_dna,
+                status="failed",
+                error=str(exc)[:500],
+                step_num=3,
+                steps_total=4,
+                step_label="Sintesi DNA Specialista completo",
+            )
             logger.exception(
                 "Complete product DNA generation failed for product %s", product.pk
             )
@@ -1202,6 +1224,9 @@ def process_product_gap_round_task(
                 round=current_round,
                 status="complete_pending",
                 result="complete",
+                step_num=3,
+                steps_total=4,
+                step_label="Avvio DNA Specialista completo",
             )
             generate_complete_product_dna.delay(
                 product.id,
@@ -1213,6 +1238,14 @@ def process_product_gap_round_task(
         try:
             # max_rounds = number of follow-up rounds allowed (excluding round 1).
             # If current_round > max_rounds, we have used all allowed follow-ups.
+            _set_product_gap_processing(
+                pre_dna,
+                round=current_round,
+                status="evaluating",
+                step_num=2,
+                steps_total=4,
+                step_label="Verifica lacune e contraddizioni",
+            )
             if current_round > limits["max_rounds"] + 1:
                 _dispatch_complete()
                 return
@@ -1237,6 +1270,9 @@ def process_product_gap_round_task(
                 status="followups_ready",
                 result="followups",
                 target_round=current_round + 1,
+                step_num=4,
+                steps_total=4,
+                step_label="Follow-up pronti",
             )
             logger.info(
                 "Product gap follow-ups created for product %s round %s",
@@ -1255,6 +1291,9 @@ def process_product_gap_round_task(
                 status="complete_pending",
                 result="complete",
                 error=str(exc)[:500],
+                step_num=3,
+                steps_total=4,
+                step_label="Avvio DNA Specialista completo",
             )
             generate_complete_product_dna.delay(
                 product.id,
@@ -1390,21 +1429,55 @@ def generate_specialist_feedback_task(product_id, specialist_dna_id, company_dna
             )
             return
 
-        from apps.companies.views import _generate_specialist_feedback_proposals
+        from apps.companies.views import (
+            _generate_specialist_feedback_proposals,
+            _set_specialist_feedback_generation,
+        )
 
         try:
+            _set_specialist_feedback_generation(
+                specialist_dna,
+                status="running",
+                step_num=2,
+                steps_total=4,
+                step_label="Confronto con il DNA Generale",
+            )
             proposals = _generate_specialist_feedback_proposals(
                 product, specialist_dna, company_dna,
             )
-        except Exception:
+            _set_specialist_feedback_generation(
+                specialist_dna,
+                status="running",
+                step_num=4,
+                steps_total=4,
+                step_label="Preparazione proposte",
+            )
+            final_status = "completed"
+        except Exception as exc:
+            _set_specialist_feedback_generation(
+                specialist_dna,
+                status="failed",
+                step_num=2,
+                steps_total=4,
+                step_label="Confronto con il DNA Generale",
+                error=str(exc)[:500],
+            )
             logger.exception(
                 "Specialist feedback generation failed for product %s", product_id,
             )
             proposals = []
+            final_status = "completed"
 
         # Persist proposals on the Specialist DNA content (not audit-hashed, like
         # _critique and _cross_specialist). Empty list is a valid result.
         specialist_dna.content["_feedback_proposals"] = proposals
+        specialist_dna.content["_feedback_generation"] = {
+            "status": final_status,
+            "step_num": 4,
+            "steps_total": 4,
+            "step_label": "Proposte pronte",
+            "updated_at": timezone.now().isoformat(),
+        }
         specialist_dna.save(update_fields=["content"])
         logger.info(
             "Specialist feedback generated for product %s: %d proposals",

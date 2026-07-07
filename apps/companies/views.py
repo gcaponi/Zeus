@@ -1052,6 +1052,34 @@ def _product_gap_processing_state(pre_dna):
     return state if isinstance(state, dict) else {}
 
 
+def _product_gap_progress_context(round_number, state):
+    step_num = int(state.get("step_num") or 1)
+    steps_total = int(state.get("steps_total") or 4)
+    step_label = state.get("step_label") or f"Lettura risposte round {round_number}"
+    phase_labels = [
+        f"Lettura delle risposte del round {round_number}",
+        "Verifica lacune, ambiguità e contraddizioni",
+        "Generazione DNA Specialista completo",
+        "Preparazione pagina revisione",
+    ]
+    phases = []
+    for index, phase_label in enumerate(phase_labels, start=1):
+        if index < step_num:
+            status = "done"
+        elif index == step_num:
+            status = "active"
+        else:
+            status = "pending"
+        phases.append({"label": phase_label, "status": status})
+    return {
+        "gap_phases": phases,
+        "steps_total": steps_total,
+        "current_step_num": step_num,
+        "step_label": step_label,
+        "progress_pct": min(int(step_num / steps_total * 100), 95),
+    }
+
+
 def _latest_unanswered_product_round(pre_dna, after_round=0):
     return (
         pre_dna.questions.filter(answer="", question_round__gt=after_round)
@@ -1071,6 +1099,9 @@ def _start_product_gap_processing(request, product, pre_dna, current_round):
         round=current_round,
         status="running",
         expected_complete_version=expected_complete_version,
+        step_num=1,
+        steps_total=4,
+        step_label=f"Lettura risposte round {current_round}",
         started_at=timezone.now().isoformat(),
         error="",
     )
@@ -4622,14 +4653,7 @@ def product_gap_processing(request, pk, round_number):
             return response
         return redirect(target)
 
-    if request.headers.get("HX-Request") == "true" and state.get("status") != "failed":
-        return HttpResponse(status=204)
-
-    gap_phases = [
-        {"label": "Lettura delle risposte del round " + str(round_number), "status": "active"},
-        {"label": "Verifica lacune, ambiguità e contraddizioni", "status": "pending"},
-        {"label": "Creazione follow-up oppure sintesi finale", "status": "pending"},
-    ]
+    progress_context = _product_gap_progress_context(round_number, state)
     return render(request, "core/product_gap_processing.html", {
         "product": product,
         "pre_dna": pre_dna,
@@ -4638,7 +4662,7 @@ def product_gap_processing(request, pk, round_number):
         "product_step": 2,
         "task_status": "failed" if state.get("status") == "failed" else "running",
         "task_error": state.get("error"),
-        "gap_phases": gap_phases,
+        **progress_context,
     })
 
 
@@ -4993,6 +5017,7 @@ def product_dna_visualize(request, pk):
         "dna": dna,
         "sections": sections,
         "product_step": 4,
+        "feedback_available": bool(dna.is_approved or not dna.missing_sections()),
     })
 
 
@@ -5095,6 +5120,51 @@ Rispondi SOLO JSON, senza markdown.
 
 def _feedback_session_key(product, specialist_dna, company_dna):
     return f"specialist_feedback:{product.pk}:{specialist_dna.pk}:{company_dna.pk}"
+
+
+def _set_specialist_feedback_generation(specialist_dna, **data):
+    content = dict(specialist_dna.content) if isinstance(specialist_dna.content, dict) else {}
+    state = dict(content.get("_feedback_generation") or {})
+    state.update(data)
+    state["updated_at"] = timezone.now().isoformat()
+    content["_feedback_generation"] = state
+    specialist_dna.content = content
+    specialist_dna.save(update_fields=["content"])
+    return state
+
+
+def _specialist_feedback_progress_context(specialist_dna):
+    content = specialist_dna.content if isinstance(specialist_dna.content, dict) else {}
+    state = content.get("_feedback_generation") or {}
+    if not isinstance(state, dict):
+        state = {}
+    step_num = int(state.get("step_num") or 1)
+    steps_total = int(state.get("steps_total") or 4)
+    step_label = state.get("step_label") or "Lettura DNA Specialista"
+    phase_labels = [
+        "Lettura del DNA Specialista",
+        "Confronto con il DNA Generale",
+        "Identificazione delle novità emerse",
+        "Preparazione delle proposte",
+    ]
+    phases = []
+    for index, phase_label in enumerate(phase_labels, start=1):
+        if index < step_num:
+            status = "done"
+        elif index == step_num:
+            status = "active"
+        else:
+            status = "pending"
+        phases.append({"label": phase_label, "status": status})
+    return {
+        "task_status": state.get("status") or "running",
+        "task_error": state.get("error", ""),
+        "feedback_phases": phases,
+        "steps_total": steps_total,
+        "current_step_num": step_num,
+        "step_label": step_label,
+        "progress_pct": min(int(step_num / steps_total * 100), 95),
+    }
 
 
 def _selected_specialist_feedback_proposals(proposals, selected_indices):
@@ -5288,8 +5358,14 @@ def product_dna_feedback(request, pk):
 
     if isinstance(proposals, list):
         # Task completed: show the proposals (empty list = nothing to add).
-        request.session[_feedback_session_key(product, specialist_dna, company_dna)] = proposals
-        request.session.modified = True
+        if request.headers.get("HX-Request") == "true":
+            response = HttpResponse(status=204)
+            response["HX-Redirect"] = reverse("product-dna-feedback", args=[product.pk])
+            return response
+        if hasattr(request, "session"):
+            request.session[_feedback_session_key(product, specialist_dna, company_dna)] = proposals
+            if hasattr(request.session, "modified"):
+                request.session.modified = True
         return render(request, "core/product_dna_feedback.html", {
             "product": product,
             "specialist_dna": specialist_dna,
@@ -5302,22 +5378,24 @@ def product_dna_feedback(request, pk):
         # Task in flight (proposals is None): render loading page with HTMX
         # polling. The browser polls this same URL; once the Celery task
         # completes and replaces None with a list, the branch above fires.
-        feedback_phases = [
-            {"label": "Lettura del DNA Specialista", "status": "active"},
-            {"label": "Confronto con il DNA Generale", "status": "pending"},
-            {"label": "Identificazione delle novità emerse", "status": "pending"},
-            {"label": "Preparazione delle proposte", "status": "pending"},
-        ]
         return render(request, "core/product_dna_feedback_loading.html", {
             "product": product,
             "product_step": 5,
-            "task_status": "running",
-            "feedback_phases": feedback_phases,
+            **_specialist_feedback_progress_context(specialist_dna),
         })
 
     # First visit: dispatch the Celery task and mark the slot as pending.
     from apps.companies.tasks import generate_specialist_feedback_task
-    specialist_dna.content["_feedback_proposals"] = None
+    content = dict(specialist_dna.content) if isinstance(specialist_dna.content, dict) else {}
+    content["_feedback_proposals"] = None
+    content["_feedback_generation"] = {
+        "status": "running",
+        "step_num": 1,
+        "steps_total": 4,
+        "step_label": "Lettura DNA Specialista",
+        "started_at": timezone.now().isoformat(),
+    }
+    specialist_dna.content = content
     specialist_dna.save(update_fields=["content"])
     tenant_schema = getattr(request, "tenant", None)
     generate_specialist_feedback_task.delay(

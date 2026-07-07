@@ -1774,6 +1774,121 @@ class TestProductViews:
         assert b"ZEUS sta generando le domande" in response.content
         delay.assert_not_called()
 
+    def test_product_gap_processing_shows_persisted_progress(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_PRE,
+            content={
+                "identita_tecnica": "Pre DNA",
+                "_gap_processing": {
+                    "status": "complete_generating",
+                    "round": 1,
+                    "step_num": 3,
+                    "steps_total": 4,
+                    "step_label": "Sintesi DNA Specialista completo",
+                    "expected_complete_version": 2,
+                },
+            },
+        )
+        request = rf_with_tenant(
+            "get", reverse("product-gap-processing", args=[product.pk, 1])
+        )
+
+        response = views.product_gap_processing(request, product.pk, 1)
+
+        assert response.status_code == 200
+        assert b"Sintesi DNA Specialista completo" in response.content
+        assert b"75%" in response.content
+
+    def test_product_dna_feedback_loading_shows_persisted_progress(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            is_approved=timezone.now(),
+            content={
+                "identita_tecnica": "DNA completo",
+                "_feedback_proposals": None,
+                "_feedback_generation": {
+                    "status": "running",
+                    "step_num": 2,
+                    "steps_total": 4,
+                    "step_label": "Confronto con il DNA Generale",
+                },
+            },
+        )
+        CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            is_current=True,
+            content={"nucleo_tecnico": "DNA Generale"},
+        )
+        request = rf_with_tenant("get", reverse("product-dna-feedback", args=[product.pk]))
+
+        response = views.product_dna_feedback(request, product.pk)
+
+        assert response.status_code == 200
+        assert b"Confronto con il DNA Generale" in response.content
+        assert b"50%" in response.content
+
+    def test_product_dna_feedback_hx_redirects_when_proposals_ready(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            is_approved=timezone.now(),
+            content={
+                "identita_tecnica": "DNA completo",
+                "_feedback_proposals": [
+                    {
+                        "target_layer": "nucleo_tecnico",
+                        "current_value": "Attuale",
+                        "proposed_value": "Proposto",
+                        "rationale": "Motivo",
+                    }
+                ],
+            },
+        )
+        CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            is_current=True,
+            content={"nucleo_tecnico": "DNA Generale"},
+        )
+        request = rf_with_tenant("get", reverse("product-dna-feedback", args=[product.pk]))
+        request.META["HTTP_HX_REQUEST"] = "true"
+
+        response = views.product_dna_feedback(request, product.pk)
+
+        assert response.status_code == 204
+        assert response["HX-Redirect"] == reverse("product-dna-feedback", args=[product.pk])
+
+    def test_product_dna_visualize_links_to_feedback_when_approved(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            is_approved=timezone.now(),
+            content={"identita_tecnica": "DNA completo"},
+        )
+        request = rf_with_tenant("get", reverse("product-dna-visualize", args=[product.pk]))
+
+        response = views.product_dna_visualize(request, product.pk)
+
+        assert response.status_code == 200
+        assert b"Vai al Feedback" in response.content
+
     def test_complete_product_dna_rewrites_sections_instead_of_appending_answers(self):
         user = User.objects.create_user(username="p", email="p@x.it", password="pw")
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
