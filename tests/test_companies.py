@@ -1887,7 +1887,7 @@ class TestProductViews:
         response = views.product_dna_visualize(request, product.pk)
 
         assert response.status_code == 200
-        assert b"Vai al Feedback" in response.content
+        assert b"Aggiorna DNA Generale" in response.content
 
     def test_complete_product_dna_rewrites_sections_instead_of_appending_answers(self):
         user = User.objects.create_user(username="p", email="p@x.it", password="pw")
