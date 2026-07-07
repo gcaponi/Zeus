@@ -53,6 +53,15 @@ def _set_progress(run_id, step_num, steps_total, label):
         logger.warning(f"PipelineRun {run_id} not found for progress update")
 
 
+def _set_product_generation_progress(product_id, step_num, steps_total, label):
+    """Persist Specialist generation progress for the polling UI."""
+    Product.objects.filter(pk=product_id).update(
+        status=Product.STATUS_IN_COSTRUZIONE,
+        generation_step=f"{step_num}/{steps_total}: {label}",
+        updated_at=timezone.now(),
+    )
+
+
 def _available_sources(source, company) -> dict:
     """Describe the sources actually available to the LLM for evidence checks."""
     files = [
@@ -802,8 +811,10 @@ def _refine_sections_parallel(merged_content, concept_map, product, company, ten
 
 def _generate_product_dna(product: Product, company, tenant_schema=None):
     """Generate ProductDNA: concept map → 3 seed variants (parallel) → merge."""
+    _set_product_generation_progress(product.pk, 1, 5, "Concept Map")
     concept_map = _extract_concept_map(product, company)
 
+    _set_product_generation_progress(product.pk, 2, 5, "Multi-seed")
     variants = {}
     errors = []
     with ThreadPoolExecutor(max_workers=3) as pool:
@@ -840,8 +851,10 @@ def _generate_product_dna(product: Product, company, tenant_schema=None):
             tokens_in=0, tokens_out=0, cost_usd=0, latency_ms=0,
         )
     else:
+        _set_product_generation_progress(product.pk, 3, 5, "Merge")
         content, llm_call = _merge_seed_variants(variants, concept_map, company, product)
 
+    _set_product_generation_progress(product.pk, 4, 5, "Refinement")
     content = _refine_sections_parallel(content, concept_map, product, company, tenant_schema)
 
     from apps.companies.dna_schemas import PRODUCT_LAYER_KEYS as PLK
@@ -878,6 +891,7 @@ def _generate_product_dna(product: Product, company, tenant_schema=None):
         dna_type=ProductDNA.TYPE_PRE,
         content=content,
     )
+    _set_product_generation_progress(product.pk, 5, 5, "Generazione domande")
     return dna, llm_call
 
 
@@ -1135,9 +1149,14 @@ def generate_product_questions_task(product_id, pre_dna_id, tenant_schema=None):
             return
 
         try:
+            _set_product_generation_progress(product.pk, 5, 5, "Generazione domande")
             _generate_product_questions(product, pre_dna)
+            product.generation_step = "5/5: Domande pronte"
+            product.save(update_fields=["generation_step", "updated_at"])
             logger.info("Product questions generated for product %s", product.pk)
         except Exception:
+            product.generation_step = "5/5: Domande non completate"
+            product.save(update_fields=["generation_step", "updated_at"])
             logger.exception(
                 "Product question generation failed for product %s", product.pk
             )
@@ -1331,6 +1350,7 @@ def generate_product_dna_task(product_id, tenant_schema=None):
 
         company = product.company
         try:
+            _set_product_generation_progress(product.pk, 1, 5, "Concept Map")
             dna, _ = _generate_product_dna(product, company, tenant_schema=tenant_schema)
             logger.info("Pre-DNA generated for product %s, dispatching questions", product.pk)
             generate_product_questions_task.delay(

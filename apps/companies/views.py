@@ -4204,6 +4204,54 @@ def _product_detail_context(product, error=None):
     }
 
 
+def _product_generation_progress_context(product, pre_dna=None):
+    step_label = product.generation_step or "1/5: Concept Map"
+    step_num = 1
+    steps_total = 5
+    label = step_label
+    if ":" in step_label:
+        prefix, label = step_label.split(":", 1)
+        label = label.strip()
+        if "/" in prefix:
+            try:
+                raw_step, raw_total = prefix.split("/", 1)
+                step_num = int(raw_step.strip())
+                steps_total = int(raw_total.strip())
+            except ValueError:
+                pass
+    progress_pct = min(int(step_num / steps_total * 100), 100) if steps_total else 0
+    phase_labels = [
+        "Concept Map — estrazione entità e parametri",
+        "Multi-seed — 3 angoli di lettura paralleli",
+        "Merge — unificazione delle varianti",
+        "Refinement — 6 sezioni raffinate indipendentemente",
+        "Domande — preparazione intervista tecnica",
+    ]
+    phases = []
+    for index, phase_label in enumerate(phase_labels, start=1):
+        if index < step_num:
+            status = "done"
+        elif index == step_num:
+            status = "active"
+        else:
+            status = "pending"
+        phases.append({"label": phase_label, "status": status})
+    if pre_dna and pre_dna.questions.exists():
+        phases = [{**phase, "status": "done"} for phase in phases]
+        progress_pct = 100
+        step_num = steps_total
+        label = "Domande pronte"
+    return {
+        "product": product,
+        "task_status": "running",
+        "product_phases": phases,
+        "steps_total": steps_total,
+        "current_step_num": step_num,
+        "step_label": label,
+        "progress_pct": progress_pct,
+    }
+
+
 @login_required
 def product_detail(request, pk):
     company = _tenant_company(request)
@@ -4215,22 +4263,18 @@ def product_detail(request, pk):
 
     generating = request.GET.get("generating") == "1"
     pre_dna = product.dna_versions.filter(dna_type=ProductDNA.TYPE_PRE).order_by("-version").first()
-    if generating and not pre_dna and product.product_files.exists():
-        product_phases = [
-            {"label": "Concept Map — estrazione entità e parametri", "status": "active"},
-            {"label": "Multi-seed — 3 angoli di lettura paralleli", "status": "pending"},
-            {"label": "Merge — unificazione delle varianti", "status": "pending"},
-            {"label": "Refinement — 6 sezioni raffinate indipendentemente", "status": "pending"},
-        ]
-        return render(request, "core/product_dna_loading.html", {
-            "product": product,
-            "task_status": "running",
-            "product_phases": product_phases,
-            "steps_total": 4,
-            "current_step_num": 1,
-            "step_label": "Concept Map",
-            "progress_pct": 25,
-        })
+    if generating and product.product_files.exists():
+        if pre_dna and pre_dna.questions.exists():
+            if request.headers.get("HX-Request") == "true":
+                response = HttpResponse(status=204)
+                response["HX-Redirect"] = reverse("product-questions", args=[product.pk])
+                return response
+            return redirect("product-questions", pk=product.pk)
+        return render(
+            request,
+            "core/product_dna_loading.html",
+            _product_generation_progress_context(product, pre_dna),
+        )
 
     return render(request, "core/product_detail.html", _product_detail_context(product))
 
@@ -4375,6 +4419,9 @@ def product_dna_generate(request, pk):
 
     from apps.companies.tasks import generate_product_dna_task
     tenant_schema = getattr(request, "tenant", None)
+    product.status = Product.STATUS_IN_COSTRUZIONE
+    product.generation_step = "1/5: Concept Map"
+    product.save(update_fields=["status", "generation_step", "updated_at"])
     generate_product_dna_task.delay(
         product.id,
         tenant_schema=tenant_schema.schema_name if tenant_schema else None,

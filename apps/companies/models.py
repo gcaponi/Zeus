@@ -437,6 +437,7 @@ class Product(models.Model):
         choices=STATUS_CHOICES,
         default=STATUS_BOZZA,
     )
+    generation_step = models.CharField(max_length=80, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
