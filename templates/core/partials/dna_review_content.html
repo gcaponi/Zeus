@@ -103,23 +103,6 @@
     </details>
 
     {% if is_fully_approved %}
-        <div class="mt-8 zeus-card p-6 text-center">
-            <p class="text-content-secondary">DNA aziendale completo e approvato. Puoi visualizzarlo, scaricarlo o tornare all'inizio senza cancellare il lavoro già fatto.</p>
-            <div class="mt-4 flex flex-wrap justify-center gap-3">
-                {% if return_product %}
-                    <a href="{% url 'product-review' return_product.pk %}" class="zeus-btn zeus-btn-primary">Torna allo Specialista →</a>
-                    <a href="{% url 'product-dna-visualize' return_product.pk %}" class="zeus-btn zeus-btn-secondary">Visualizza Specialista</a>
-                {% else %}
-                    <a href="{% url 'product-list-create' %}" class="zeus-btn zeus-btn-primary">Vai agli Specialisti →</a>
-                {% endif %}
-                <a href="{% url 'dna-visualize' %}" class="zeus-btn zeus-btn-primary">Visualizza DNA completo →</a>
-                <a href="{% url 'dna-download-pdf' %}" class="zeus-btn zeus-btn-secondary">Scarica PDF completo</a>
-                <a href="{% url 'onboarding-index' %}?revise=1" class="zeus-btn zeus-btn-ghost">Rivedi dall'inizio</a>
-            </div>
-        </div>
-    {% endif %}
-
-    {% if is_fully_approved %}
         <div class="fixed bottom-0 left-0 right-0 z-40 px-4 py-3 sm:px-6" style="background: var(--glass-strong); backdrop-filter: blur(20px); border-top: 1px solid rgba(255,255,255,0.08);">
             <div class="max-w-3xl mx-auto flex flex-wrap justify-center gap-3">
                 {% if return_product %}

@@ -23,7 +23,7 @@
     </div>
     {% endif %}
 
-    <article class="zeus-card p-6 sm:p-8 lg:p-10 xl:p-12">
+    <div class="dna-visualize-scroll">
         <header class="mb-10 text-center">
             <h1 class="text-3xl sm:text-4xl font-bold tracking-tight font-display text-content-primary">DNA Specialista</h1>
             <p class="mt-3 text-content-secondary text-sm tracking-wide uppercase">
@@ -37,16 +37,16 @@
             <div class="mt-6 mx-auto w-16 h-px bg-gradient-to-r from-transparent via-brand-cyan/50 to-transparent"></div>
         </header>
 
-        <div class="zeus-prose break-words">
+        <div class="zeus-prose">
             {% for section in sections %}
-                <h2 class="text-xl font-bold font-display text-brand-cyan mt-8 mb-4">{{ section.label }}</h2>
+                <h2 class="section-title">{{ section.label }}</h2>
                 {{ section.value|markdownify|default:"<p>Non disponibile</p>" }}
                 {% include "core/partials/_technical_specs.html" with specs=section.specs %}
             {% empty %}
                 <p class="text-content-muted italic text-center">Documento non disponibile.</p>
             {% endfor %}
         </div>
-    </article>
+    </div>
 
     <div class="mt-10 mb-16 flex flex-wrap justify-center gap-4">
         {% if feedback_available %}
