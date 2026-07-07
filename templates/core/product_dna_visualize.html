@@ -23,10 +23,10 @@
     </div>
     {% endif %}
 
-    <div class="dna-visualize-scroll">
-        <header class="mb-10 text-center">
-            <h1 class="text-3xl sm:text-4xl font-bold tracking-tight font-display text-content-primary">DNA Specialista</h1>
-            <p class="mt-3 text-content-secondary text-sm tracking-wide uppercase">
+    <div class="zeus-card p-6 md:p-8 max-w-3xl mx-auto">
+        <header class="mb-8 text-center">
+            <h1 class="text-2xl sm:text-3xl font-bold font-display text-content-primary">DNA Specialista</h1>
+            <p class="mt-2 text-content-secondary text-sm tracking-wide uppercase">
                 {{ product.name }} · Versione {{ dna.version }}
             </p>
             {% if dna.created_at %}
@@ -34,14 +34,15 @@
                 Redatto il {{ dna.created_at|date:"d F Y" }}
             </p>
             {% endif %}
-            <div class="mt-6 mx-auto w-16 h-px bg-gradient-to-r from-transparent via-brand-cyan/50 to-transparent"></div>
         </header>
 
-        <div class="zeus-prose">
+        <div class="space-y-8">
             {% for section in sections %}
-                <h2 class="section-title">{{ section.label }}</h2>
-                {{ section.value|markdownify|default:"<p>Non disponibile</p>" }}
-                {% include "core/partials/_technical_specs.html" with specs=section.specs %}
+                <section>
+                    <h2 class="text-lg font-bold font-display text-brand-cyan pb-2 mb-3" style="border-bottom: 1px solid rgba(255,255,255,0.06);">{{ section.label }}</h2>
+                    <div class="text-sm leading-7 text-content-primary break-words">{{ section.value|markdownify|default:"<p>Non disponibile</p>" }}</div>
+                    {% include "core/partials/_technical_specs.html" with specs=section.specs %}
+                </section>
             {% empty %}
                 <p class="text-content-muted italic text-center">Documento non disponibile.</p>
             {% endfor %}
@@ -50,17 +51,13 @@
 
     <div class="mt-10 mb-16 flex flex-wrap justify-center gap-4">
         {% if feedback_available %}
-        <a href="{% url 'product-dna-feedback' product.pk %}" class="zeus-btn zeus-btn-primary">
-            Vai al Feedback →
-        </a>
+        <a href="{% url 'product-dna-feedback' product.pk %}" class="zeus-btn zeus-btn-primary">Vai al Feedback →</a>
         {% endif %}
         <a href="{% url 'product-dna-download-pdf' product.pk %}" class="zeus-btn zeus-btn-secondary">
             <svg class="w-4 h-4 mr-2 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
             Scarica PDF completo
         </a>
-        <a href="{% url 'product-review' product.pk %}" class="zeus-btn zeus-btn-ghost">
-            ← Torna alla revisione
-        </a>
+        <a href="{% url 'product-review' product.pk %}" class="zeus-btn zeus-btn-ghost">← Torna alla revisione</a>
     </div>
 </section>
 {% endblock %}

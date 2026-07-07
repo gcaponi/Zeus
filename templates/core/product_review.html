@@ -102,42 +102,18 @@
     {% endif %}
 
     {% if is_fully_approved %}
-        <div class="fixed bottom-0 left-0 right-0 z-40 px-4 py-3 sm:px-6" style="background: var(--glass-strong); backdrop-filter: blur(20px); border-top: 1px solid rgba(255,255,255,0.08);">
-            <div class="max-w-3xl mx-auto flex flex-wrap justify-center gap-3">
+        <div class="sticky bottom-4 zeus-card p-4" style="background: var(--glass-strong); backdrop-filter: blur(20px);">
+            <div class="flex flex-wrap justify-center gap-3">
                 {% if product.status == 'in_validazione' %}
                     <form method="post" action="{% url 'product-promote' product.pk %}" onsubmit="return confirm('Promuovere questo specialista ad attivo?');">
                         {% csrf_token %}
-                        <button type="submit" class="zeus-btn zeus-btn-primary zeus-btn-sm">Promuovi ad attivo →</button>
+                        <button type="submit" class="zeus-btn zeus-btn-primary">Promuovi ad attivo →</button>
                     </form>
                 {% endif %}
-                <a href="{% url 'product-dna-visualize' product.pk %}" class="zeus-btn zeus-btn-secondary zeus-btn-sm">Visualizza DNA</a>
-                <a href="{% url 'product-dna-download-pdf' product.pk %}" class="zeus-btn zeus-btn-secondary zeus-btn-sm">Scarica PDF</a>
-                <a href="{% url 'product-dna-feedback' product.pk %}" class="zeus-btn zeus-btn-secondary zeus-btn-sm">Aggiorna DNA Generale</a>
-                <a href="{% url 'product-list-create' %}" class="zeus-btn zeus-btn-ghost zeus-btn-sm">Torna agli specialisti</a>
-            </div>
-        </div>
-    {% endif %}
-
-    {% comment %}F15 Pubblicazione — rimosso temporaneamente, da ricollegare a deploy HERMES{% endcomment %}
-
-    {% if product.status == 'attivo' %}
-        <div class="mt-6 zeus-card p-6" style="border-color: rgba(34, 211, 238, 0.22); background: rgba(34, 211, 238, 0.04);">
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                    <p class="zeus-label text-brand-cyan">Motore C — T2</p>
-                    <h2 class="mt-1 text-lg font-bold font-display">Verifica coerenza specialista</h2>
-                    <p class="mt-2 text-sm text-content-secondary">Controlla questo DNA Specialista contro il DNA Generale corrente.</p>
-                    {% if consistency_open_count %}
-                        <span class="zeus-badge zeus-badge-amber mt-3">{{ consistency_open_count }} issue aperte</span>
-                    {% endif %}
-                </div>
-                <div class="flex flex-wrap gap-3">
-                    <form method="post" action="{% url 'product-consistency-check' product.pk %}">
-                        {% csrf_token %}
-                        <button type="submit" class="zeus-btn zeus-btn-secondary">Verifica coerenza</button>
-                    </form>
-                    <a href="{% url 'consistency-report' %}" class="zeus-btn zeus-btn-ghost">Report Motore C</a>
-                </div>
+                <a href="{% url 'product-dna-visualize' product.pk %}" class="zeus-btn zeus-btn-secondary">Visualizza DNA</a>
+                <a href="{% url 'product-dna-download-pdf' product.pk %}" class="zeus-btn zeus-btn-secondary">Scarica PDF</a>
+                <a href="{% url 'product-dna-feedback' product.pk %}" class="zeus-btn zeus-btn-secondary">Aggiorna DNA Generale</a>
+                <a href="{% url 'product-list-create' %}" class="zeus-btn zeus-btn-ghost">Torna agli specialisti</a>
             </div>
         </div>
     {% endif %}
