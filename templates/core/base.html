@@ -538,6 +538,19 @@
             background: rgba(255, 255, 255, 0.06);
         }
 
+        .zeus-file-input.has-file .zeus-file-label {
+            border-color: var(--border-hover);
+            background: var(--accent-cyan-bg);
+            color: var(--accent-cyan-light);
+        }
+
+        .zeus-file-text {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
         .zeus-input {
             width: 100%;
             padding: 0.85rem 1rem;
@@ -1017,6 +1030,30 @@
         if (window.lucide) {
             window.lucide.createIcons();
         }
+
+        function updateFileInputLabel(input) {
+            var wrapper = input.closest('.zeus-file-input');
+            if (!wrapper) return;
+            var text = wrapper.querySelector('.zeus-file-text');
+            if (!text) return;
+            if (!input.files || input.files.length === 0) {
+                wrapper.classList.remove('has-file');
+                text.textContent = 'Scegli file';
+                return;
+            }
+            wrapper.classList.add('has-file');
+            text.textContent = input.files.length === 1
+                ? input.files[0].name
+                : input.files.length + ' file selezionati';
+        }
+
+        document.addEventListener('change', function(event) {
+            if (event.target && event.target.matches('.zeus-file-input input[type="file"]')) {
+                updateFileInputLabel(event.target);
+            }
+        });
+
+        document.querySelectorAll('.zeus-file-input input[type="file"]').forEach(updateFileInputLabel);
 
         var themeToggle = document.getElementById('theme-toggle');
         if (themeToggle) {
