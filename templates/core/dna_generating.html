@@ -12,7 +12,12 @@
     <div class="mt-8"
           hx-get="{% url 'dna-generating' %}"
           hx-trigger="every 4s"
-          hx-swap="none">
+          hx-target="body"
+          hx-swap="outerHTML">
+    </div>
+    <div class="mt-6 flex flex-wrap justify-center gap-3 text-center">
+        <a href="{{ review_url }}" class="zeus-btn zeus-btn-secondary">Apri revisione se pronta</a>
+        <a href="{{ back_url }}" class="zeus-btn zeus-btn-ghost">Torna all'onboarding</a>
     </div>
 </div>
 {% endblock %}

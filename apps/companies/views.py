@@ -1184,6 +1184,15 @@ def _trigger_complete_dna(request, company, pre_dna):
     _set_pending_complete_generation(
         request,
         (latest_complete.version + 1) if latest_complete else 1,
+        source_dna_id=pre_dna.pk,
+    )
+    _set_company_generation_progress(
+        pre_dna,
+        1,
+        4,
+        "Lettura risposte",
+        status="running",
+        flow="company_complete_dna",
     )
     generate_complete_dna.delay(
         company.id,
@@ -1828,10 +1837,20 @@ def _redirect_after_htmx_action(request, viewname, *args):
     return redirect(url)
 
 
-def _set_pending_complete_generation(request, min_version):
+def _set_pending_complete_generation(
+    request,
+    min_version,
+    *,
+    source_dna_id=None,
+    return_product_id=None,
+):
     if not hasattr(request, "session"):
         return
     request.session["pending_complete_min_version"] = min_version
+    if source_dna_id:
+        request.session["pending_complete_source_dna_id"] = source_dna_id
+    if return_product_id:
+        request.session["specialist_feedback_return_product_id"] = return_product_id
     if hasattr(request.session, "modified"):
         request.session.modified = True
 
@@ -1842,11 +1861,90 @@ def _pending_complete_min_version(request):
     return request.session.get("pending_complete_min_version")
 
 
+def _pending_complete_source_dna(request):
+    if not hasattr(request, "session"):
+        return None
+    source_dna_id = request.session.get("pending_complete_source_dna_id")
+    if not source_dna_id:
+        return None
+    return CompanyDNA.objects.filter(pk=source_dna_id).first()
+
+
 def _clear_pending_complete_generation(request):
     if not hasattr(request, "session"):
         return
     if "pending_complete_min_version" in request.session:
         del request.session["pending_complete_min_version"]
+    if "pending_complete_source_dna_id" in request.session:
+        del request.session["pending_complete_source_dna_id"]
+    if hasattr(request.session, "modified"):
+        request.session.modified = True
+
+
+def _specialist_feedback_return_product(request, company):
+    if not hasattr(request, "session"):
+        return None
+    product_id = request.session.get("specialist_feedback_return_product_id")
+    if not product_id:
+        return None
+    return Product.objects.filter(pk=product_id, company=company).first()
+
+
+def _set_company_generation_progress(dna, step_num, steps_total, label, **extra):
+    content = dict(dna.content) if isinstance(dna.content, dict) else {}
+    state = dict(content.get("_complete_generation") or {})
+    state.update(extra)
+    state.update({
+        "step_num": step_num,
+        "steps_total": steps_total,
+        "step_label": label,
+        "updated_at": timezone.now().isoformat(),
+    })
+    content["_complete_generation"] = state
+    dna.content = content
+    dna.save(update_fields=["content"])
+    return state
+
+
+def _complete_generation_progress_context(source_dna):
+    state = {}
+    if source_dna and isinstance(source_dna.content, dict):
+        raw_state = source_dna.content.get("_complete_generation") or {}
+        state = raw_state if isinstance(raw_state, dict) else {}
+    step_num = int(state.get("step_num") or 1)
+    steps_total = int(state.get("steps_total") or 4)
+    step_label = state.get("step_label") or "Lettura risposte"
+    phase_labels = [
+        "Lettura di tutte le risposte",
+        "Sintesi cognitiva globale",
+        "Riformulazione dei 6 layer",
+        "Validazione e preparazione revisione",
+    ]
+    phases = []
+    for index, phase_label in enumerate(phase_labels, start=1):
+        if index < step_num:
+            status = "done"
+        elif index == step_num:
+            status = "active"
+        else:
+            status = "pending"
+        phases.append({"label": phase_label, "status": status})
+    return {
+        "task_status": "failed" if state.get("status") == "failed" else "running",
+        "task_error": state.get("error", ""),
+        "phases": phases,
+        "steps_total": steps_total,
+        "current_step_num": step_num,
+        "step_label": step_label,
+        "progress_pct": min(int(step_num / steps_total * 100), 95),
+    }
+
+
+def _clear_specialist_feedback_return(request):
+    if not hasattr(request, "session"):
+        return
+    if "specialist_feedback_return_product_id" in request.session:
+        del request.session["specialist_feedback_return_product_id"]
         if hasattr(request.session, "modified"):
             request.session.modified = True
 
@@ -2592,6 +2690,7 @@ def dna_generating(request):
         is_current=True,
     ).first()
     min_complete_version = _pending_complete_min_version(request)
+    source_dna = _pending_complete_source_dna(request)
     if min_complete_version:
         complete_dna = company.dna_versions.filter(
             dna_type=CompanyDNA.TYPE_COMPLETE,
@@ -2608,19 +2707,10 @@ def dna_generating(request):
     if complete_dna:
         _clear_pending_complete_generation(request)
         return redirect("dna-review")
-    phases = [
-        {"label": "Lettura di tutte le risposte", "status": "active"},
-        {"label": "Sintesi cognitiva globale", "status": "pending"},
-        {"label": "Riformulazione dei 6 layer", "status": "pending"},
-        {"label": "Self-critique e validazione", "status": "pending"},
-    ]
     return render(request, "core/dna_generating.html", {
-        "task_status": "running",
-        "phases": phases,
-        "steps_total": 4,
-        "current_step_num": 1,
-        "step_label": "Lettura risposte",
-        "progress_pct": 25,
+        **_complete_generation_progress_context(source_dna),
+        "review_url": reverse("dna-review"),
+        "back_url": reverse("onboarding-index"),
     })
 
 
@@ -2634,7 +2724,28 @@ def dna_review(request):
     if not dna:
         return HttpResponse("DNA not found", status=404)
 
-    return render(request, "core/dna_review.html", _dna_review_context(company, dna))
+    context = _dna_review_context(company, dna)
+    context["return_product"] = _specialist_feedback_return_product(request, company)
+    return render(request, "core/dna_review.html", context)
+
+
+@login_required
+def motore_b_report(request):
+    """Dedicated Motore B page: cross-specialist consolidation."""
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    dna = company.dna_versions.filter(
+        dna_type=CompanyDNA.TYPE_COMPLETE,
+        is_current=True,
+    ).first()
+    if not dna:
+        return HttpResponse("DNA Generale non trovato", status=404)
+    return render(request, "core/motore_b.html", {
+        "company": company,
+        "dna": dna,
+        "cross_specialist": _cross_specialist_state(company, dna),
+    })
 
 
 @login_required
@@ -2697,10 +2808,12 @@ def _dna_review_context(company, dna):
 
 
 def _render_dna_review_fragment(request, company, dna, status=200):
+    context = _dna_review_context(company, dna)
+    context["return_product"] = _specialist_feedback_return_product(request, company)
     return render(
         request,
         "core/partials/dna_review_content.html",
-        _dna_review_context(company, dna),
+        context,
         status=status,
     )
 
@@ -5463,7 +5576,22 @@ def product_dna_feedback_apply(request, pk):
 
     last_version = company.dna_versions.order_by("-version").first()
     expected_version = (last_version.version + 1) if last_version else 1
-    _set_pending_complete_generation(request, expected_version)
+    _set_pending_complete_generation(
+        request,
+        expected_version,
+        source_dna_id=company_dna.pk,
+        return_product_id=product.pk,
+    )
+    _set_company_generation_progress(
+        company_dna,
+        1,
+        4,
+        "Lettura feedback Specialista",
+        status="running",
+        flow="specialist_feedback",
+        product_id=product.pk,
+        product_name=product.name,
+    )
 
     tenant_schema = getattr(request, "tenant", None)
     from apps.companies.tasks import apply_specialist_feedback_task

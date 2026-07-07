@@ -26,6 +26,7 @@ urlpatterns = [
         views.dna_cross_specialist_apply,
         name="dna-cross-specialist-apply",
     ),
+    path("company/dna/motore-b/", views.motore_b_report, name="motore-b-report"),
     path("company/dna/consistency/", views.consistency_report, name="consistency-report"),
     path("company/dna/consistency/run/", views.consistency_audit_run, name="consistency-audit-run"),
     path(

@@ -1074,7 +1074,7 @@ def generate_complete_dna(company_id, pre_dna_id, user_id, tenant_schema=None):
     def _run():
         from django.contrib.auth import get_user_model
         from apps.companies.models import Company
-        from apps.companies.views import _create_complete_dna
+        from apps.companies.views import _create_complete_dna, _set_company_generation_progress
 
         try:
             company = Company.objects.get(pk=company_id)
@@ -1087,9 +1087,31 @@ def generate_complete_dna(company_id, pre_dna_id, user_id, tenant_schema=None):
         user = User.objects.filter(pk=user_id).first() if user_id else None
 
         try:
+            _set_company_generation_progress(
+                pre_dna,
+                2,
+                4,
+                "Sintesi cognitiva globale",
+                status="running",
+            )
             _create_complete_dna(company, pre_dna, user)
+            _set_company_generation_progress(
+                pre_dna,
+                4,
+                4,
+                "Revisione pronta",
+                status="completed",
+            )
             logger.info("Complete DNA generated for company %s", company.schema_name)
-        except Exception:
+        except Exception as exc:
+            _set_company_generation_progress(
+                pre_dna,
+                3,
+                4,
+                "Validazione DNA Generale",
+                status="failed",
+                error=str(exc)[:500],
+            )
             logger.exception(
                 "Complete DNA generation failed for company %s", company.schema_name
             )
@@ -1339,8 +1361,21 @@ def apply_specialist_feedback_task(company_id, company_dna_id, tenant_schema=Non
             logger.error("apply_specialist_feedback_task: product or specialist_dna not found")
             return
 
-        from apps.companies.views import _regenerate_company_dna_from_specialist_feedback
+        from apps.companies.views import (
+            _regenerate_company_dna_from_specialist_feedback,
+            _set_company_generation_progress,
+        )
 
+        _set_company_generation_progress(
+            company_dna,
+            2,
+            4,
+            "Riformulazione DNA Generale",
+            status="running",
+            flow="specialist_feedback",
+            product_id=product.pk,
+            product_name=product.name,
+        )
         new_content = _regenerate_company_dna_from_specialist_feedback(
             company, product, company_dna, specialist_dna, selected_proposals,
         )
@@ -1364,6 +1399,16 @@ def apply_specialist_feedback_task(company_id, company_dna_id, tenant_schema=Non
         )
         new_dna.audit_hash = compute_audit_hash(new_content, new_dna.previous_hash or "")
         new_dna.save(update_fields=["audit_hash"])
+        _set_company_generation_progress(
+            company_dna,
+            4,
+            4,
+            "Revisione pronta",
+            status="completed",
+            flow="specialist_feedback",
+            product_id=product.pk,
+            product_name=product.name,
+        )
 
         logger.info(
             "Specialist feedback applied: company %s DNA v%d",
