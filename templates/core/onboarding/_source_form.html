@@ -82,6 +82,7 @@
     </script>
 
     <form
+        id="source-main-form"
         method="post"
         action="{% url 'onboarding-source-create' %}"
         hx-post="{% url 'onboarding-source-create' %}"
@@ -171,14 +172,8 @@
                 <textarea name="company_notes" id="company_notes" rows="8" class="zeus-input" placeholder="Descrivi la tua azienda, i prodotti principali, il mercato di riferimento, i valori distintivi...">{{ company_notes|default:'' }}</textarea>
             </div>
 
-            <div class="flex flex-col gap-3 sm:flex-row">
-                <button type="submit" class="zeus-btn zeus-btn-primary flex-1">
-                    {% if review_mode %}Aggiorna dati e rigenera{% else %}Avvia analisi →{% endif %}
-                </button>
-                {% if has_existing_dna %}
-                    <a href="{% url 'dna-questions' %}" class="zeus-btn zeus-btn-secondary flex-1">Continua alle risposte</a>
-                {% endif %}
-            </div>
+            <button type="submit" id="source-submit-btn" class="hidden"></button>
+
         </div>
     </form>
 </div>

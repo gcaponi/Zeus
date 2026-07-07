@@ -18,6 +18,16 @@
     {% endif %}
     <div class="zeus-card p-5">
         <p class="zeus-label mb-3">Azioni</p>
+        {% if review_mode %}
+            <button type="button" onclick="document.getElementById('source-submit-btn').click()" class="zeus-btn zeus-btn-primary w-full text-sm mb-3">
+                Aggiorna dati e rigenera
+            </button>
+        {% endif %}
+        {% if has_existing_dna %}
+            <a href="{% url 'dna-questions' %}" class="zeus-btn zeus-btn-secondary w-full text-sm mb-3">
+                Continua alle risposte
+            </a>
+        {% endif %}
         <form method="post" action="{% url 'onboarding-dna-reset' %}" onsubmit="return confirm('Sei sicuro? Questo cancellerà DNA, domande, file e source. Dovrai ricominciare da capo.');">
             {% csrf_token %}
             <button type="submit" class="zeus-btn zeus-btn-destructive w-full text-sm">

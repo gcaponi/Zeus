@@ -7,19 +7,22 @@
     </div>
     {% endif %}
     <div class="zeus-card p-5 flex flex-col items-center gap-3">
-        {% if is_fully_approved and product.status == 'in_validazione' %}
-        <form method="post" action="{% url 'product-promote' product.pk %}" onsubmit="return confirm('Promuovere questo specialista ad attivo?');">
-            {% csrf_token %}
-            <button type="submit" class="zeus-btn zeus-btn-primary w-full">Promuovi ad attivo →</button>
-        </form>
-        {% endif %}
-        <a href="{% url 'product-dna-visualize' product.pk %}" class="zeus-btn zeus-btn-secondary w-full">
-            Visualizza DNA
-        </a>
         <a href="{% url 'product-dna-download-pdf' product.pk %}" class="zeus-btn zeus-btn-secondary w-full">
             Scarica PDF
         </a>
-        <a href="{% url 'product-dna-feedback' product.pk %}" class="zeus-btn zeus-btn-secondary w-full">
+        <a href="{% url 'product-dna-visualize' product.pk %}" class="zeus-btn zeus-btn-ghost w-full">
+            Visualizza DNA
+        </a>
+    </div>
+    <div class="zeus-card p-5">
+        <p class="zeus-label mb-3">Azioni</p>
+        {% if is_fully_approved and product.status == 'in_validazione' %}
+        <form method="post" action="{% url 'product-promote' product.pk %}" onsubmit="return confirm('Promuovere questo specialista ad attivo?');" class="mb-3">
+            {% csrf_token %}
+            <button type="submit" class="zeus-btn zeus-btn-primary w-full text-sm">Promuovi ad attivo →</button>
+        </form>
+        {% endif %}
+        <a href="{% url 'product-dna-feedback' product.pk %}" class="zeus-btn zeus-btn-secondary w-full text-sm mb-3">
             Aggiorna DNA Generale
         </a>
         <a href="{% url 'product-list-create' %}" class="zeus-btn zeus-btn-ghost w-full text-sm">
