@@ -20,7 +20,7 @@
     </div>
     {% endif %}
 
-    <div class="zeus-card p-6 md:p-8 max-w-3xl mx-auto">
+    <div class="zeus-card p-6 md:p-8">
         <header class="mb-8 text-center">
             <h1 class="text-2xl sm:text-3xl font-bold font-display text-content-primary">DNA Generale</h1>
             <p class="mt-2 text-content-secondary text-sm tracking-wide uppercase">
@@ -45,18 +45,46 @@
         {% endfor %}
     </div>
 
-    <div class="mt-10 mb-16 flex flex-wrap justify-center gap-4">
-        <a href="{% url 'dna-download-pdf' %}" class="zeus-btn zeus-btn-secondary">
-            <svg class="w-4 h-4 mr-2 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-            Scarica PDF completo
-        </a>
-        <a href="{% url 'dna-review' %}" class="zeus-btn zeus-btn-ghost">← Torna alla revisione</a>
-    </div>
 </section>
 {% endblock %}
 
 {% block sidebar_content %}
-{% include "core/onboarding/_step_sidebar.html" %}
+<aside class="space-y-4">
+    {% if company %}
+    <div class="zeus-card p-5">
+        <p class="zeus-label">Workspace</p>
+        <h2 class="mt-2 text-xl font-bold font-display truncate">{{ company.name }}</h2>
+        <p class="mt-2 text-sm text-content-muted font-mono truncate">{{ company.schema_name }}.zeus.cais.uno</p>
+    </div>
+    {% endif %}
+    {% if dna or complete_dna %}
+    <div class="zeus-card p-5 flex flex-col items-center gap-3">
+        <a href="{% url 'dna-download-pdf' %}" class="zeus-btn zeus-btn-secondary w-full">
+            Scarica PDF
+        </a>
+        <a href="{% url 'onboarding-index' %}?revise=1" class="zeus-btn zeus-btn-ghost w-full">
+            Rivedi dall'inizio
+        </a>
+    </div>
+    {% endif %}
+    <div class="zeus-card p-5">
+        <p class="zeus-label mb-3">Azioni</p>
+        <div class="flex flex-col items-center gap-3">
+            <a href="{% url 'dna-download-pdf' %}" class="zeus-btn zeus-btn-secondary w-full">
+                Scarica PDF completo
+            </a>
+            <a href="{% url 'dna-review' %}" class="zeus-btn zeus-btn-ghost w-full">
+                ← Torna alla revisione
+            </a>
+            <form method="post" action="{% url 'onboarding-dna-reset' %}" onsubmit="return confirm('Sei sicuro? Questo cancellerà DNA, domande, file e source. Dovrai ricominciare da capo.');">
+                {% csrf_token %}
+                <button type="submit" class="zeus-btn zeus-btn-destructive w-full text-sm">
+                    Riparti da capo
+                </button>
+            </form>
+        </div>
+    </div>
+</aside>
 {% endblock %}
 
 {% block content %}{{ block.super }}{% endblock %}

@@ -1,0 +1,29 @@
+<aside class="space-y-4">
+    {% if product %}
+    <div class="zeus-card p-5">
+        <p class="zeus-label">Specialista</p>
+        <h2 class="mt-2 text-xl font-bold font-display truncate">{{ product.name }}</h2>
+        <p class="mt-2 text-sm text-content-muted">Versione {{ dna.version }}</p>
+    </div>
+    {% endif %}
+    <div class="zeus-card p-5 flex flex-col items-center gap-3">
+        {% if is_fully_approved and product.status == 'in_validazione' %}
+        <form method="post" action="{% url 'product-promote' product.pk %}" onsubmit="return confirm('Promuovere questo specialista ad attivo?');">
+            {% csrf_token %}
+            <button type="submit" class="zeus-btn zeus-btn-primary w-full">Promuovi ad attivo →</button>
+        </form>
+        {% endif %}
+        <a href="{% url 'product-dna-visualize' product.pk %}" class="zeus-btn zeus-btn-secondary w-full">
+            Visualizza DNA
+        </a>
+        <a href="{% url 'product-dna-download-pdf' product.pk %}" class="zeus-btn zeus-btn-secondary w-full">
+            Scarica PDF
+        </a>
+        <a href="{% url 'product-dna-feedback' product.pk %}" class="zeus-btn zeus-btn-secondary w-full">
+            Aggiorna DNA Generale
+        </a>
+        <a href="{% url 'product-list-create' %}" class="zeus-btn zeus-btn-ghost w-full text-sm">
+            ← Torna agli specialisti
+        </a>
+    </div>
+</aside>

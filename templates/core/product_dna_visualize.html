@@ -3,9 +3,6 @@
 
 {% block title %}Visualizzazione DNA {{ product.name }} — ZEUS{% endblock %}
 
-{% block layout_class %}{% endblock %}
-{% block sidebar_column %}{% endblock %}
-
 {% block step_indicator_area %}
 <div class="mb-8">
     {% include "core/onboarding/_product_step_indicator.html" with product_step=4 %}
@@ -23,7 +20,7 @@
     </div>
     {% endif %}
 
-    <div class="zeus-card p-6 md:p-8 max-w-3xl mx-auto">
+    <div class="zeus-card p-6 md:p-8">
         <header class="mb-8 text-center">
             <h1 class="text-2xl sm:text-3xl font-bold font-display text-content-primary">DNA Specialista</h1>
             <p class="mt-2 text-content-secondary text-sm tracking-wide uppercase">
@@ -49,17 +46,11 @@
         </div>
     </div>
 
-    <div class="mt-10 mb-16 flex flex-wrap justify-center gap-4">
-        {% if feedback_available %}
-        <a href="{% url 'product-dna-feedback' product.pk %}" class="zeus-btn zeus-btn-primary">Vai al Feedback →</a>
-        {% endif %}
-        <a href="{% url 'product-dna-download-pdf' product.pk %}" class="zeus-btn zeus-btn-secondary">
-            <svg class="w-4 h-4 mr-2 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-            Scarica PDF completo
-        </a>
-        <a href="{% url 'product-review' product.pk %}" class="zeus-btn zeus-btn-ghost">← Torna alla revisione</a>
-    </div>
 </section>
+{% endblock %}
+
+{% block sidebar_content %}
+{% include "core/onboarding/_product_step_sidebar.html" %}
 {% endblock %}
 
 {% block content %}{{ block.super }}{% endblock %}

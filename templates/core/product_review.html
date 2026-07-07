@@ -22,9 +22,6 @@
 </header>
 {% endblock %}
 
-{% block layout_class %}{% endblock %}
-{% block sidebar_column %}{% endblock %}
-
 {% block step_indicator_area %}
 {% include "core/onboarding/_product_step_indicator.html" with product_step=product_step %}
 {% endblock %}
@@ -101,22 +98,10 @@
         </div>
     {% endif %}
 
-    {% if is_fully_approved %}
-        <div class="sticky bottom-4 zeus-card p-4" style="background: var(--glass-strong); backdrop-filter: blur(20px);">
-            <div class="flex flex-wrap justify-center gap-3">
-                {% if product.status == 'in_validazione' %}
-                    <form method="post" action="{% url 'product-promote' product.pk %}" onsubmit="return confirm('Promuovere questo specialista ad attivo?');">
-                        {% csrf_token %}
-                        <button type="submit" class="zeus-btn zeus-btn-primary">Promuovi ad attivo →</button>
-                    </form>
-                {% endif %}
-                <a href="{% url 'product-dna-visualize' product.pk %}" class="zeus-btn zeus-btn-secondary">Visualizza DNA</a>
-                <a href="{% url 'product-dna-download-pdf' product.pk %}" class="zeus-btn zeus-btn-secondary">Scarica PDF</a>
-                <a href="{% url 'product-dna-feedback' product.pk %}" class="zeus-btn zeus-btn-secondary">Aggiorna DNA Generale</a>
-                <a href="{% url 'product-list-create' %}" class="zeus-btn zeus-btn-ghost">Torna agli specialisti</a>
-            </div>
-        </div>
-    {% endif %}
+{% endblock %}
+
+{% block sidebar_content %}
+{% include "core/onboarding/_product_step_sidebar.html" %}
 {% endblock %}
 
 {% block content %}{{ block.super }}{% endblock %}
