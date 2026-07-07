@@ -591,7 +591,7 @@ class ProductPublication(models.Model):
     )
     product_dna = models.ForeignKey(
         ProductDNA,
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name="publications",
     )
     channel = models.CharField(max_length=30, choices=CHANNEL_CHOICES)

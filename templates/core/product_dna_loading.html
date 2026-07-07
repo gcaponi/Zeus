@@ -13,17 +13,7 @@
         <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">{{ product.name }}</h1>
     </header>
 
-    {% include "core/partials/_generation_progress.html" with
-        title="Analisi Neurale in corso"
-        description="ZEUS sta elaborando i documenti del prodotto."
-        phases=product_phases
-        status=task_status
-        error_msg=task_error
-        steps_total=steps_total
-        current_step_num=current_step_num
-        step_label=step_label
-        progress_pct=progress_pct
-    %}
+    {% include "core/partials/_generation_progress.html" with title="Analisi Neurale in corso" description="ZEUS sta elaborando i documenti dello specialista." phases=product_phases status=task_status error_msg=task_error steps_total=steps_total current_step_num=current_step_num step_label=step_label progress_pct=progress_pct %}
 
     <div
         class="mt-8"

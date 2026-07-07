@@ -8,14 +8,7 @@
 
 {% block content %}
 <div class="zeus-page-wrap">
-    {% include "core/partials/_generation_progress.html" with
-        title="Stiamo generando il DNA"
-        description="ZEUS sta riformulando le sezioni con le tue risposte. Questo può richiedere fino a 2 minuti."
-        retry_url=retry_url
-        phases=phases
-        status=task_status
-        error_msg=task_error
-    %}
+    {% include "core/partials/_generation_progress.html" with title="Stiamo generando il DNA" description="ZEUS sta riformulando le sezioni con le tue risposte. Questo può richiedere fino a 2 minuti." retry_url=retry_url phases=phases status=task_status error_msg=task_error %}
     <div class="mt-8"
           hx-get="{% url 'dna-generating' %}"
           hx-trigger="every 4s"

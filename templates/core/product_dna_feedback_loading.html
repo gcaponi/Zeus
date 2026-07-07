@@ -8,14 +8,7 @@
 
 {% block content %}
 <div class="zeus-page-wrap">
-    {% include "core/partials/_generation_progress.html" with
-        title="Analisi feedback Specialista"
-        description="ZEUS sta confrontando il DNA Specialista di &ldquo;{{ product.name }}&rdquo; con il DNA Generale. Questo può richiedere fino a 2 minuti."
-        phases=feedback_phases
-        status=task_status
-        error_msg=task_error
-        retry_url=retry_url
-    %}
+    {% include "core/partials/_generation_progress.html" with title="Analisi feedback Specialista" description="ZEUS sta confrontando il DNA Specialista con il DNA Generale. Questo può richiedere fino a 2 minuti." phases=feedback_phases status=task_status error_msg=task_error retry_url=retry_url %}
 
     <div class="mt-8"
           hx-get="{% url 'product-dna-feedback' product.pk %}"

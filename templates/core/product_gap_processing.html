@@ -16,13 +16,7 @@
     {% include "core/onboarding/_product_step_indicator.html" with product_step=product_step %}
 
     {% with phases_list=gap_phases|default:None %}
-    {% include "core/partials/_generation_progress.html" with
-        title="ZEUS sta valutando le risposte"
-        description="Il Gap Engine sta decidendo se servono altri approfondimenti o se può generare il DNA Specialista completo."
-        status=task_status
-        error_msg=task_error
-        phases=phases_list
-    %}
+    {% include "core/partials/_generation_progress.html" with title="ZEUS sta valutando le risposte" description="Il Gap Engine sta decidendo se servono altri approfondimenti o se può generare il DNA Specialista completo." status=task_status error_msg=task_error phases=phases_list %}
     {% endwith %}
 
     {% if state.status == "failed" %}
