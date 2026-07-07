@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZEUS — Flusso Completo di Lavoro</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: #0a0a0f;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+        
+        .hero {
+            text-align: center;
+            padding: 60px 40px 40px;
+            background: linear-gradient(180deg, rgba(34,211,238,0.08) 0%, transparent 100%);
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        
+        .hero h1 {
+            font-size: 48px;
+            font-weight: 800;
+            letter-spacing: -2px;
+            background: linear-gradient(135deg, #22d3ee, #a78bfa, #34d399);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 12px;
+        }
+        
+        .hero .subtitle {
+            font-size: 18px;
+            color: #94a3b8;
+            font-weight: 400;
+        }
+        
+        .hero .tagline {
+            font-size: 14px;
+            color: #64748b;
+            margin-top: 8px;
+            font-style: italic;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 32px;
+        }
+        
+        .section {
+            margin-bottom: 64px;
+        }
+        
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        
+        .section-number {
+            width: 48px;
+            height: 48px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+        
+        .section-title {
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+        
+        .section-desc {
+            font-size: 14px;
+            color: #94a3b8;
+            margin-top: 4px;
+        }
+        
+        .mermaid {
+            background: rgba(15,23,42,0.6);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 20px;
+            padding: 40px;
+            overflow-x: auto;
+        }
+        
+        .mermaid svg {
+            max-width: 100%;
+        }
+        
+        /* DNA Layers Table */
+        .dna-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+            gap: 20px;
+        }
+        
+        .dna-card {
+            background: rgba(15,23,42,0.6);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 16px;
+            padding: 28px;
+            transition: border-color 0.2s;
+        }
+        
+        .dna-card:hover {
+            border-color: rgba(34,211,238,0.3);
+        }
+        
+        .dna-card .label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 8px;
+        }
+        
+        .dna-card h3 {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .dna-card p {
+            font-size: 13px;
+            color: #94a3b8;
+            line-height: 1.6;
+        }
+        
+        .dna-card .fields {
+            margin-top: 12px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        
+        .dna-card .field {
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.06);
+            color: #cbd5e1;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+        }
+        
+        /* Engine Cards */
+        .engine-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+        
+        @media (max-width: 1024px) {
+            .engine-grid { grid-template-columns: 1fr; }
+        }
+        
+        .engine-card {
+            background: rgba(15,23,42,0.6);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 20px;
+            padding: 32px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .engine-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+        }
+        
+        .engine-card.motore-a::before { background: linear-gradient(90deg, #f59e0b, #f97316); }
+        .engine-card.motore-b::before { background: linear-gradient(90deg, #a78bfa, #8b5cf6); }
+        .engine-card.motore-c::before { background: linear-gradient(90deg, #22d3ee, #06b6d4); }
+        
+        .engine-card .engine-badge {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 12px;
+        }
+        
+        .engine-card.motore-a .engine-badge { color: #f59e0b; }
+        .engine-card.motore-b .engine-badge { color: #a78bfa; }
+        .engine-card.motore-c .engine-badge { color: #22d3ee; }
+        
+        .engine-card h3 {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+        
+        .engine-card .purpose {
+            font-size: 14px;
+            color: #94a3b8;
+            line-height: 1.7;
+            margin-bottom: 20px;
+        }
+        
+        .engine-card .io-section {
+            margin-bottom: 16px;
+        }
+        
+        .engine-card .io-label {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: #64748b;
+            margin-bottom: 8px;
+        }
+        
+        .engine-card .io-list {
+            list-style: none;
+        }
+        
+        .engine-card .io-list li {
+            font-size: 13px;
+            color: #cbd5e1;
+            padding: 4px 0;
+            padding-left: 16px;
+            position: relative;
+        }
+        
+        .engine-card .io-list li::before {
+            content: '→';
+            position: absolute;
+            left: 0;
+            color: #475569;
+        }
+        
+        .engine-card .plan-table {
+            width: 100%;
+            margin-top: 16px;
+            border-collapse: collapse;
+        }
+        
+        .engine-card .plan-table th,
+        .engine-card .plan-table td {
+            font-size: 12px;
+            padding: 6px 8px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        
+        .engine-card .plan-table th {
+            color: #64748b;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 10px;
+        }
+        
+        .engine-card .plan-table td {
+            color: #cbd5e1;
+        }
+        
+        /* Stats bar */
+        .stats-bar {
+            display: flex;
+            gap: 32px;
+            justify-content: center;
+            padding: 32px;
+            background: rgba(15,23,42,0.4);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 16px;
+            margin-bottom: 48px;
+            flex-wrap: wrap;
+        }
+        
+        .stat {
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 32px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #22d3ee, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 40px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+            color: #475569;
+            font-size: 13px;
+        }
+        
+        .footer a {
+            color: #22d3ee;
+            text-decoration: none;
+        }
+        
+        /* Print / Export */
+        @media print {
+            body { background: white; color: #1e293b; }
+            .hero { background: none; border-bottom: 2px solid #e2e8f0; }
+            .hero h1 { -webkit-text-fill-color: #0f172a; background: none; }
+            .hero .subtitle, .hero .tagline { color: #475569; }
+            .mermaid { background: #f8fafc; border: 1px solid #e2e8f0; }
+            .dna-card, .engine-card, .stats-bar { background: #f8fafc; border: 1px solid #e2e8f0; }
+            .section-number { color: white; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="hero">
+    <h1>ZEUS</h1>
+    <p class="subtitle">Flusso Completo di Lavoro — Dalla Scopo del Cliente al DNA Operativo</p>
+    <p class="tagline">"Zero ipotesi. Zero codice. Il tuo agente tecnico, nato dai tuoi dati."</p>
+</div>
+
+<div class="container">
+
+    <!-- Stats -->
+    <div class="stats-bar">
+        <div class="stat">
+            <div class="stat-value">3</div>
+            <div class="stat-label">Motori Cognitivi</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value">6+6</div>
+            <div class="stat-label">Layer DNA</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value">10</div>
+            <div class="stat-label">Domande Base</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value">∞</div>
+            <div class="stat-label">Follow-up Gap Engine</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value">2</div>
+            <div class="stat-label">Pass Self-Critique</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value">5</div>
+            <div class="stat-label">Loop Feedback</div>
+        </div>
+    </div>
+
+    <!-- SECTION 1: Complete Flow -->
+    <div class="section">
+        <div class="section-header">
+            <div class="section-number" style="background: linear-gradient(135deg, #22d3ee, #06b6d4);">1</div>
+            <div>
+                <div class="section-title">Flusso Completo</div>
+                <div class="section-desc">Lifecycle aziendale + Specialisti — dall'onboarding alla generazione DNA</div>
+            </div>
+        </div>
+        <div class="mermaid">
+%%{init: {'theme': 'dark', 'themeVariables': {'fontSize': '14px', 'fontFamily': 'Inter', 'primaryColor': '#22d3ee', 'primaryTextColor': '#e2e8f0', 'primaryBorderColor': '#22d3ee', 'lineColor': '#475569', 'secondaryColor': '#a78bfa', 'tertiaryColor': '#34d399', 'edgeLabelBackground': '#0f172a', 'clusterBkg': 'rgba(15,23,42,0.6)', 'clusterBorder': 'rgba(255,255,255,0.1)'}}}%%
+flowchart TB
+    subgraph ONBOARDING["🏢 ONBOARDING AZIENDALE"]
+        direction TB
+        A1["🌐 Inserimento URL sito web<br/>+ Profilo Operativo"]
+        A2["🔍 Scraping automatico<br/>FireCrawl + PyMuPDF"]
+        A3["📄 Pre-DNA Aziendale<br/>6 layer cognitivi (bozza)"]
+        A4["❓ 10 Domande A1-A10<br/>5 template + 3 kb-anchored + 2 meta"]
+        A5{"⚙️ MOTORE A<br/>Gap Engine<br/>Risposte sufficienti?"}
+        A6["📝 Follow-up Round 2+<br/>Domande mirate"]
+        A7["🧬 DNA Completo v1<br/>Synthesis + Self-Critique"]
+        A8["✅ Approvazione Sezioni<br/>6 layer approvabili"]
+    end
+
+    subgraph SPECIALIST["🔧 SPECIALISTI"]
+        direction TB
+        B1["📦 Creazione Specialista<br/>+ Upload Documenti"]
+        B2["🗺️ Concept Map<br/>Entità, relazioni, parametri"]
+        B3["🌱 3 Seed Variant<br/>Materials / Workflow / Decision<br/>(parallelo)"]
+        B4["🔀 Merge + Refinement<br/>6 sezioni in parallelo"]
+        B5["❓ 10 Domande D1-D10<br/>5 template + 3 kb-anchored + 2 meta"]
+        B6{"⚙️ MOTORE A<br/>Gap Engine<br/>Risposte sufficienti?"}
+        B7["📝 Follow-up Round 2+"]
+        B8["🧬 DNA Specialista<br/>6 layer tecnici"]
+        B9["🎯 Self-Critique<br/>Proposte accept/reject"]
+        B10["✅ Approvazione + Promozione<br/>in_validazione → attivo"]
+    end
+
+    subgraph MOTORS["⚙️ MOTORI COGNITIVI"]
+        direction LR
+        MA["🟡 MOTORE A<br/>Gap Engine<br/>Evalua risposte<br/>Genera follow-up"]
+        MB["🟣 MOTORE B<br/>Cross Specialist<br/>Consolida DNA<br/>2+ specialisti attivi"]
+        MC["🔵 MOTORE C<br/>Coerenza Audit<br/>T3 periodico<br/>Contraddizioni"]
+    end
+
+    subgraph FEEDBACK["🔄 LOOP FEEDBACK"]
+        direction TB
+        F1["📤 Feedback Specialista<br/>→ DNA Generale"]
+        F2["📊 Confidence Score<br/>Rating 1-5"]
+        F3["✏️ Edit Sezione<br/>→ Nuova versione"]
+        F4["🔗 Audit Chain<br/>HMAC-SHA256"]
+    end
+
+    subgraph OUTPUT["📦 OUTPUT"]
+        direction LR
+        O1["👁️ Visualizza DNA<br/>Sintesi Cognitiva"]
+        O2["📥 Scarica PDF<br/>DNA Generale"]
+        O3["🌐 Pubblicazione<br/>Sito / E-commerce"]
+        O4["🤖 Export HERMES<br/>Profilo Agente"]
+    end
+
+    A1 --> A2 --> A3 --> A4 --> A5
+    A5 -->|"Sufficienti"| A7
+    A5 -->|"Insufficienti"| A6 --> A5
+    A7 --> A8
+
+    B1 --> B2 --> B3 --> B4 --> B5 --> B6
+    B6 -->|"Sufficienti"| B8
+    B6 -->|"Insufficienti"| B7 --> B6
+    B8 --> B9 --> B10
+
+    A8 --> O1
+    B10 --> F1
+    F1 -->|Nuova versione| A7
+    A8 --> O2
+    B10 --> O3
+    A8 --> O4
+
+    A8 -.->|"2+ specialisti"| MB
+    A8 -.->|"Periodico"| MC
+    B10 -.->|"Upload su attivo"| MC
+
+    style ONBOARDING fill:rgba(34,211,238,0.06),stroke:#22d3ee,stroke-width:2px
+    style SPECIALIST fill:rgba(167,139,250,0.06),stroke:#a78bfa,stroke-width:2px
+    style MOTORS fill:rgba(245,158,11,0.06),stroke:#f59e0b,stroke-width:2px
+    style FEEDBACK fill:rgba(52,211,153,0.06),stroke:#34d399,stroke-width:2px
+    style OUTPUT fill:rgba(255,255,255,0.04),stroke:rgba(255,255,255,0.15),stroke-width:1px
+        </div>
+    </div>
+
+    <!-- SECTION 2: DNA Layers -->
+    <div class="section">
+        <div class="section-header">
+            <div class="section-number" style="background: linear-gradient(135deg, #a78bfa, #8b5cf6);">2</div>
+            <div>
+                <div class="section-title">Layer del DNA</div>
+                <div class="section-desc">6 layer cognitivi (Aziendale) + 6 layer tecnici (Specialista)</div>
+            </div>
+        </div>
+        
+        <h3 style="color: #22d3ee; margin-bottom: 16px; font-size: 18px;">🧬 DNA Aziendale — 6 Layer Cognitivi</h3>
+        <div class="dna-grid" style="margin-bottom: 32px;">
+            <div class="dna-card">
+                <div class="label" style="color: #22d3ee;">Layer 1</div>
+                <h3>Identità</h3>
+                <p>"Chi siamo e come ci poniamo" — postura aziendale, convinzioni fondamentali, posizionamento</p>
+                <div class="fields">
+                    <span class="field">postura</span>
+                    <span class="field">convinzioni</span>
+                </div>
+            </div>
+            <div class="dna-card">
+                <div class="label" style="color: #a78bfa;">Layer 2</div>
+                <h3>Modelli Mentali</h3>
+                <p>"Come ragioniamo" — pilastri cognitivi, sequenza di lettura del mercato</p>
+                <div class="fields">
+                    <span class="field">pilastri</span>
+                    <span class="field">sequenza_di_lettura</span>
+                </div>
+            </div>
+            <div class="dna-card">
+                <div class="label" style="color: #34d399;">Layer 3</div>
+                <h3>Nucleo Tecnico</h3>
+                <p>"Cosa ci rende unici" — approccio distintivo, trade-off scelti, famiglie prodotto</p>
+                <div class="fields">
+                    <span class="field">approccio_distintivo</span>
+                    <span class="field">trade_off_scelti</span>
+                    <span class="field">famiglie_prodotto</span>
+                </div>
+            </div>
+            <div class="dna-card">
+                <div class="label" style="color: #f59e0b;">Layer 4</div>
+                <h3>Confini</h3>
+                <p>"I nostri confini" — anti-pattern, richieste rifiutate, cosa NON facciamo</p>
+                <div class="fields">
+                    <span class="field">anti_pattern</span>
+                    <span class="field">richieste_rifiutate</span>
+                </div>
+            </div>
+            <div class="dna-card">
+                <div class="label" style="color: #f472b6;">Layer 5</div>
+                <h3>Tono</h3>
+                <p>"Il nostro tono" — registro comunicativo, esempi sbagliato/corretto</p>
+                <div class="fields">
+                    <span class="field">registro</span>
+                    <span class="field">esempi</span>
+                </div>
+            </div>
+            <div class="dna-card">
+                <div class="label" style="color: #fb923c;">Layer 6</div>
+                <h3>Logica Decisionale</h3>
+                <p>"Come prendiamo decisioni" — filosofia custom, escalation</p>
+                <div class="fields">
+                    <span class="field">filosofia_custom</span>
+                    <span class="field">escalation</span>
+                </div>
+            </div>
+        </div>
+
+        <h3 style="color: #a78bfa; margin-bottom: 16px; font-size: 18px;">🔧 DNA Specialista — 6 Layer Tecnici</h3>
+        <div class="dna-grid">
+            <div class="dna-card">
+                <div class="label" style="color: #a78bfa;">Layer 1</div>
+                <h3>Identità Tecnica</h3>
+                <p>Identità del prodotto, posizionamento di mercato, differenziazione</p>
+                <div class="fields">
+                    <span class="field">identita_prodotto</span>
+                    <span class="field">posizionamento</span>
+                </div>
+            </div>
+            <div class="dna-card">
+                <div class="label" style="color: #22d3ee;">Layer 2</div>
+                <h3>Architettura</h3>
+                <p>Materiali, componenti, costruzione, struttura fisica</p>
+                <div class="fields">
+                    <span class="field">materiali</span>
+                    <span class="field">componenti</span>
+                    <span class="field">struttura</span>
+                </div>
+            </div>
+            <div class="dna-card">
+                <div class="label" style="color: #34d399;">Layer 3</div>
+                <h3>Specifiche</h3>
+                <p>Tutti i numeri: dimensioni, tolleranze, standard, certificazioni</p>
+                <div class="fields">
+                    <span class="field">dimensioni</span>
+                    <span class="field">tolleranze</span>
+                    <span class="field">certificazioni</span>
+                </div>
+            </div>
+            <div class="dna-card">
+                <div class="label" style="color: #f59e0b;">Layer 4</div>
+                <h3>Applicazione</h3>
+                <p>Processo di installazione, strumenti, tempistiche, punti critici</p>
+                <div class="fields">
+                    <span class="field">installazione</span>
+                    <span class="field">strumenti</span>
+                    <span class="field">manutenzione</span>
+                </div>
+            </div>
+            <div class="dna-card">
+                <div class="label" style="color: #f472b6;">Layer 5</div>
+                <h3>Vincoli</h3>
+                <p>Limiti numerici (max/min), incompatibilità, controindicazioni</p>
+                <div class="fields">
+                    <span class="field">limiti_operativi</span>
+                    <span class="field">incompatibilita</span>
+                </div>
+            </div>
+            <div class="dna-card">
+                <div class="label" style="color: #fb923c;">Layer 6</div>
+                <h3>Configurazione</h3>
+                <p>Logica decisionale (if/soglia), varianti, tempi di consegna</p>
+                <div class="fields">
+                    <span class="field">regole_if</span>
+                    <span class="field">varianti</span>
+                    <span class="field">lead_time</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECTION 3: Engines -->
+    <div class="section">
+        <div class="section-header">
+            <div class="section-number" style="background: linear-gradient(135deg, #f59e0b, #f97316);">3</div>
+            <div>
+                <div class="section-title">I 3 Motori Cognitivi</div>
+                <div class="section-desc">Il cuore di ZEUS — come ogni motore trasforma dati in conoscenza</div>
+            </div>
+        </div>
+        
+        <div class="engine-grid">
+            <div class="engine-card motore-a">
+                <div class="engine-badge">Motore A</div>
+                <h3>Gap Engine</h3>
+                <p class="purpose">Valuta la sufficienza delle risposte del cliente. Identifica lacune, genericità e contraddizioni. Genera domande di approfondimento mirate.</p>
+                
+                <div class="io-section">
+                    <div class="io-label">Input</div>
+                    <ul class="io-list">
+                        <li>Pre-DNA (6 layer bozza)</li>
+                        <li>Risposte alle domande (tutti i round)</li>
+                        <li>Piano cliente (profondità)</li>
+                    </ul>
+                </div>
+                
+                <div class="io-section">
+                    <div class="io-label">Processo</div>
+                    <ul class="io-list">
+                        <li>LLM valuta ogni risposta su 3 criteri</li>
+                        <li>sufficiente / insufficiente / contradicts</li>
+                        <li>Genera follow-up per risposte deboli</li>
+                    </ul>
+                </div>
+                
+                <div class="io-section">
+                    <div class="io-label">Output</div>
+                    <ul class="io-list">
+                        <li>Valutazioni per domanda</li>
+                        <li>overall_sufficient: true/false</li>
+                        <li>Follow-up mirati (F1, F2...)</li>
+                    </ul>
+                </div>
+                
+                <table class="plan-table">
+                    <tr><th>Piano</th><th>Max Round</th><th>Max Follow-up</th></tr>
+                    <tr><td>Foundation</td><td>1</td><td>3</td></tr>
+                    <tr><td>Professional</td><td>2</td><td>5</td></tr>
+                    <tr><td>Legacy</td><td>3</td><td>20</td></tr>
+                </table>
+            </div>
+            
+            <div class="engine-card motore-b">
+                <div class="engine-badge">Motore B</div>
+                <h3>Cross Specialist</h3>
+                <p class="purpose">Confronta i DNA Specialisti attivi tra loro e con il DNA Generale. Identifica pattern condivisi, conflitti e propone consolidamenti.</p>
+                
+                <div class="io-section">
+                    <div class="io-label">Input</div>
+                    <ul class="io-list">
+                        <li>DNA Generale (completo, corrente)</li>
+                        <li>2+ DNA Specialisti (status: attivo)</li>
+                    </ul>
+                </div>
+                
+                <div class="io-section">
+                    <div class="io-label">Processo</div>
+                    <ul class="io-list">
+                        <li>LLM analizza convergenze/divergenze</li>
+                        <li>Identifica pattern trasversali</li>
+                        <li>Genera proposte di consolidamento</li>
+                    </ul>
+                </div>
+                
+                <div class="io-section">
+                    <div class="io-label">Output</div>
+                    <ul class="io-list">
+                        <li>Shared patterns (temi comuni)</li>
+                        <li>Conflicts (gravità + raccomandazione)</li>
+                        <li>Proposte (layer + valore proposto)</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="engine-card motore-c">
+                <div class="engine-badge">Motore C</div>
+                <h3>Coerenza Audit</h3>
+                <p class="purpose">Audit T3 periodico che confronta DNA Generale vs Specialisti. Trova contraddizioni, generalizzazioni indebite e regole mancanti.</p>
+                
+                <div class="io-section">
+                    <div class="io-label">Input</div>
+                    <ul class="io-list">
+                        <li>DNA Generale (completo)</li>
+                        <li>Tutti gli Specialisti attivi (o uno specifico)</li>
+                    </ul>
+                </div>
+                
+                <div class="io-section">
+                    <div class="io-label">Processo</div>
+                    <ul class="io-list">
+                        <li>LLM confronta layer cognitivi vs tecnici</li>
+                        <li>Max 12 issue per audit</li>
+                        <li>Temperatura bassa (0.25, 0.15, 0.05)</li>
+                    </ul>
+                </div>
+                
+                <div class="io-section">
+                    <div class="io-label">Output</div>
+                    <ul class="io-list">
+                        <li>ConsistencyIssue records</li>
+                        <li>contradiction / generalization / missing_rule</li>
+                        <li>stale_general / boundary</li>
+                    </ul>
+                </div>
+                
+                <table class="plan-table">
+                    <tr><th>Piano</th><th>Soglia Audit</th></tr>
+                    <tr><td>Foundation</td><td>Ogni 3 promozioni</td></tr>
+                    <tr><td>Professional</td><td>Ogni 2 promozioni</td></tr>
+                    <tr><td>Legacy</td><td>Ogni promozione</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECTION 4: Self-Critique -->
+    <div class="section">
+        <div class="section-header">
+            <div class="section-number" style="background: linear-gradient(135deg, #34d399, #10b981);">4</div>
+            <div>
+                <div class="section-title">Self-Critique & Validazione</div>
+                <div class="section-desc">Controllo qualità automatico — 2 pass Delphi-inspired (Aziendale) + proposte accept/reject (Specialista)</div>
+            </div>
+        </div>
+        <div class="mermaid">
+%%{init: {'theme': 'dark', 'themeVariables': {'fontSize': '14px', 'fontFamily': 'Inter', 'primaryColor': '#34d399', 'primaryTextColor': '#e2e8f0', 'lineColor': '#475569', 'edgeLabelBackground': '#0f172a'}}%%
+flowchart LR
+    subgraph PASS1["Pass 1: Conflict Matrix"]
+        direction TB
+        C1["confini → nucleo_tecnico<br/>Stai promettendo oltre i confini?"]
+        C2["logica_decisionale → identita<br/>Le decisioni sono coerenti con la postura?"]
+        C3["tono → confini<br/>Il tono riflette i limiti reali?"]
+        C4["nucleo_tecnico → modelli_mentali<br/>I pilastri guidano l'approccio tecnico?"]
+        C5["identita → tono<br/>La postura corrisponde al registro?"]
+    end
+
+    subgraph PASS2["Pass 2: Riformulazione"]
+        direction TB
+        R1["LLM riformula layer<br/>con TENSION/CONFLICT"]
+        R2["Risultato: DNA + critique<br/>integrata nei layer"]
+    end
+
+    subgraph SPECIALIST_CRITIQUE["Specialista: Proposte"]
+        direction TB
+        S1["LLM verifica ogni<br/>sezione contro i documenti"]
+        S2["Genera proposte<br/>accept/reject"]
+        S3["Utente decide<br/>accetta o rifiuta"]
+    end
+
+    C1 & C2 & C3 & C4 & C5 --> R1 --> R2
+    S1 --> S2 --> S3
+
+    style PASS1 fill:rgba(52,211,153,0.06),stroke:#34d399,stroke-width:2px
+    style PASS2 fill:rgba(52,211,153,0.06),stroke:#34d399,stroke-width:2px
+    style SPECIALIST_CRITIQUE fill:rgba(167,139,250,0.06),stroke:#a78bfa,stroke-width:2px
+        </div>
+    </div>
+
+    <!-- SECTION 5: Feedback Loops -->
+    <div class="section">
+        <div class="section-header">
+            <div class="section-number" style="background: linear-gradient(135deg, #fb923c, #f97316);">5</div>
+            <div>
+                <div class="section-title">Loop di Feedback</div>
+                <div class="section-desc">5 circuiti di retroazione che mantengono il DNA vivo e accurato</div>
+            </div>
+        </div>
+        <div class="mermaid">
+%%{init: {'theme': 'dark', 'themeVariables': {'fontSize': '13px', 'fontFamily': 'Inter', 'primaryColor': '#fb923c', 'primaryTextColor': '#e2e8f0', 'lineColor': '#475569', 'edgeLabelBackground': '#0f172a'}}%%
+flowchart TB
+    subgraph LOOP1["Loop 1: Feedback Specialista → DNA Generale"]
+        direction LR
+        L1A["DNA Specialista<br/>approvato"] --> L1B["Genera proposte<br/>feedback"]
+        L1B --> L1C["Utente seleziona<br/>proposte"]
+        L1C --> L1D["Rigenera DNA Generale<br/>v+1"]
+    end
+
+    subgraph LOOP2["Loop 2: Confidence Score"]
+        direction LR
+        L2A["Utente valuta<br/>DNA (1-5)"] --> L2B["Recency-weighted<br/>average"]
+        L2B --> L2C["confidence_score<br/>aggiornato"]
+    end
+
+    subgraph LOOP3["Loop 3: Edit → Nuova Versione"]
+        direction LR
+        L3A["Utente modifica<br/>sezione"] --> L3B["Nuova versione<br/>v+1"]
+        L3B --> L3C["Approvazioni<br/>trasferite"]
+    end
+
+    subgraph LOOP4["Loop 4: Audit Chain"]
+        direction LR
+        L4A["Ogni modifica"] --> L4B["HMAC-SHA256<br/>content + prev_hash"]
+        L4B --> L4C["Chain di<br/>integrità"]
+    end
+
+    subgraph LOOP5["Loop 5: Consistency → Issue"]
+        direction LR
+        L5A["Audit Motore C"] --> L5B["ConsistencyIssue<br/>records"]
+        L5B --> L5C["Utente ignora/<br/>risolve/archivia"]
+    end
+
+    style LOOP1 fill:rgba(251,146,60,0.06),stroke:#fb923c,stroke-width:2px
+    style LOOP2 fill:rgba(34,211,238,0.06),stroke:#22d3ee,stroke-width:2px
+    style LOOP3 fill:rgba(167,139,250,0.06),stroke:#a78bfa,stroke-width:2px
+    style LOOP4 fill:rgba(52,211,153,0.06),stroke:#34d399,stroke-width:2px
+    style LOOP5 fill:rgba(245,158,11,0.06),stroke:#f59e0b,stroke-width:2px
+        </div>
+    </div>
+
+    <!-- SECTION 6: Data Flow -->
+    <div class="section">
+        <div class="section-header">
+            <div class="section-number" style="background: linear-gradient(135deg, #22d3ee, #a78bfa);">6</div>
+            <div>
+                <div class="section-title">Flusso Dati e Modelli</div>
+                <div class="section-desc">Come i dati muovono tra modelli, task Celery e template</div>
+            </div>
+        </div>
+        <div class="mermaid">
+%%{init: {'theme': 'dark', 'themeVariables': {'fontSize': '12px', 'fontFamily': 'Inter', 'primaryColor': '#22d3ee', 'primaryTextColor': '#e2e8f0', 'lineColor': '#475569', 'edgeLabelBackground': '#0f172a', 'clusterBkg': 'rgba(15,23,42,0.4)', 'clusterBorder': 'rgba(255,255,255,0.08)'}}}%%
+flowchart TB
+    subgraph DB["🗄️ Database"]
+        direction LR
+        M1["Company<br/>schema_name, settore, profilo"]
+        M2["CompanyDNA<br/>version, content, audit_hash"]
+        M3["Product<br/>status, generation_step"]
+        M4["ProductDNA<br/>version, content"]
+        M5["Source<br/>url, scraped_data"]
+        M6["CompanyQuestion<br/>round, parent, pool"]
+        M7["ConsistencyIssue<br/>type, severity, status"]
+    end
+
+    subgraph CELERY["⚡ Celery Workers"]
+        direction LR
+        T1["run_pipeline<br/>scraping → pre-DNA"]
+        T2["generate_complete_dna<br/>synthesis + critique"]
+        T3["generate_product_dna_task<br/>concept → merge → refine"]
+        T4["generate_specialist_feedback_task<br/>proposte feedback"]
+        T5["apply_specialist_feedback_task<br/>rigenera DNA Generale"]
+        T6["run_consistency_audit<br/>audit T3"]
+        T7["process_product_gap_round_task<br/>Motore A specialist"]
+    end
+
+    subgraph LLM["🤖 LLM Layer"]
+        direction LR
+        L1["DeepSeek V4 Flash<br/>via OpenAI SDK"]
+        L2["3 temperature<br/>(0.5, 0.3, 0.2)"]
+        L3["MODEL_PRICING<br/>cost tracing"]
+    end
+
+    subgraph VIEWS["👁️ Views + Templates"]
+        direction LR
+        V1["onboarding<br/>3 step wizard"]
+        V2["product_detail<br/>5 step specialist"]
+        V3["dna_review<br/>approvazione layer"]
+        V4["motore_b_report<br/>cross specialist"]
+        V5["consistency_report<br/>audit issues"]
+    end
+
+    T1 --> M5 --> M1
+    T2 --> M2
+    T3 --> M4 --> M3
+    T4 --> M4
+    T5 --> M2
+    T6 --> M7
+    T7 --> M6
+
+    T1 & T2 & T3 & T4 & T5 & T6 & T7 --> L1
+    L1 --> L2 --> L3
+
+    V1 --> T1
+    V2 --> T3
+    V3 --> T2
+    V4 --> T4
+    V5 --> T6
+
+    style DB fill:rgba(34,211,238,0.04),stroke:#22d3ee,stroke-width:1px
+    style CELERY fill:rgba(245,158,11,0.04),stroke:#f59e0b,stroke-width:1px
+    style LLM fill:rgba(167,139,250,0.04),stroke:#a78bfa,stroke-width:1px
+    style VIEWS fill:rgba(52,211,153,0.04),stroke:#34d399,stroke-width:1px
+        </div>
+    </div>
+
+    <!-- SECTION 7: Specialist Lifecycle -->
+    <div class="section">
+        <div class="section-header">
+            <div class="section-number" style="background: linear-gradient(135deg, #a78bfa, #8b5cf6);">7</div>
+            <div>
+                <div class="section-title">Lifecycle Specialista</div>
+                <div class="section-desc">Stati del prodotto dalla creazione alla pubblicazione</div>
+            </div>
+        </div>
+        <div class="mermaid">
+%%{init: {'theme': 'dark', 'themeVariables': {'fontSize': '14px', 'fontFamily': 'Inter', 'primaryColor': '#a78bfa', 'primaryTextColor': '#e2e8f0', 'lineColor': '#475569', 'edgeLabelBackground': '#0f172a'}}%%
+stateDiagram-v2
+    [*] --> bozza: Creazione
+    bozza --> in_costruzione: Generate Pre-DNA
+    in_costruzione --> in_validazione: DNA Completo generato
+    in_costruzione --> in_validazione: Tutte le sezioni approvate
+    in_validazione --> attivo: Promuovi
+    attivo --> updating: Nuovi documenti caricati
+    updating --> in_validazione: Re-generazione DNA
+    attivo --> archiviato: Archivia
+    in_validazione --> archiviato: Archivia
+
+    state " bozza" as bozza
+    state " in_costruzione" as in_costruzione
+    state " in_validazione" as in_validazione
+    state " attivo" as attivo
+    state " updating" as updating
+    state " archiviato" as archiviato
+        </div>
+    </div>
+
+</div>
+
+<div class="footer">
+    <p>ZEUS — Flusso Completo di Lavoro | Generato da Lex il 2026-07-07</p>
+    <p style="margin-top: 8px;">Repo: <a href="https://github.com/gcaponi/Zeus">github.com/gcaponi/Zeus</a> | URL: <a href="https://zeus.cais.uno">zeus.cais.uno</a></p>
+</div>
+
+<script>
+    mermaid.initialize({
+        startOnLoad: true,
+        theme: 'dark',
+        securityLevel: 'loose',
+        flowchart: {
+            useMaxWidth: true,
+            htmlLabels: true,
+            curve: 'basis'
+        },
+        sequence: {
+            useMaxWidth: true
+        },
+        themeVariables: {
+            fontSize: '14px',
+            fontFamily: 'Inter, -apple-system, sans-serif'
+        }
+    });
+</script>
+
+</body>
+</html>

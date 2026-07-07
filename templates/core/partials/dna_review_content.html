@@ -119,6 +119,21 @@
         </div>
     {% endif %}
 
+    {% if is_fully_approved %}
+        <div class="fixed bottom-0 left-0 right-0 z-40 px-4 py-3 sm:px-6" style="background: var(--glass-strong); backdrop-filter: blur(20px); border-top: 1px solid rgba(255,255,255,0.08);">
+            <div class="max-w-3xl mx-auto flex flex-wrap justify-center gap-3">
+                {% if return_product %}
+                    <a href="{% url 'product-review' return_product.pk %}" class="zeus-btn zeus-btn-primary zeus-btn-sm">Torna allo Specialista →</a>
+                {% else %}
+                    <a href="{% url 'product-list-create' %}" class="zeus-btn zeus-btn-primary zeus-btn-sm">Vai agli Specialisti →</a>
+                {% endif %}
+                <a href="{% url 'dna-visualize' %}" class="zeus-btn zeus-btn-secondary zeus-btn-sm">Visualizza DNA</a>
+                <a href="{% url 'dna-download-pdf' %}" class="zeus-btn zeus-btn-secondary zeus-btn-sm">Scarica PDF</a>
+                <a href="{% url 'onboarding-index' %}?revise=1" class="zeus-btn zeus-btn-ghost zeus-btn-sm">Rivedi</a>
+            </div>
+        </div>
+    {% endif %}
+
     <!-- Popup DNA completo -->
     <div id="dna-popup-overlay" class="fixed inset-0 z-50 hidden items-center justify-center" style="background: rgba(2,6,23,0.6); backdrop-filter: blur(8px);">
         <div class="dna-popup-panel relative w-full max-w-2xl max-h-[85vh] overflow-hidden rounded-3xl mx-4"
