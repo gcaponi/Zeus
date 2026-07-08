@@ -31,5 +31,28 @@
 
         <a href="https://zeus.cais.uno" class="text-sm font-bold text-content-muted hover:text-brand-cyan-light">ZEUS</a>
     </div>
+
+    {% if is_public %}
+    <div class="zeus-grid mt-10" style="max-width: 72rem;">
+        <article class="zeus-card p-6">
+            <div class="zeus-step-num">1</div>
+            <div class="zeus-step-icon">📝</div>
+            <h2 class="zeus-step-title">Onboarding guidato</h2>
+            <p class="zeus-step-desc">Raccogli i dati aziendali (documenti, sito, profilo operativo) e genera il DNA dell'azienda in 4 passaggi guidati.</p>
+        </article>
+        <article class="zeus-card p-6">
+            <div class="zeus-step-num">2</div>
+            <div class="zeus-step-icon">🔍</div>
+            <h2 class="zeus-step-title">Motori di analisi</h2>
+            <p class="zeus-step-desc">Motore B per il report di completezza e Motore C per la coerenza del DNA: ogni prodotto viene validato automaticamente.</p>
+        </article>
+        <article class="zeus-card p-6">
+            <div class="zeus-step-num">3</div>
+            <div class="zeus-step-icon">⚙️</div>
+            <h2 class="zeus-step-title">Gestione specialisti</h2>
+            <p class="zeus-step-desc">Crea e governa i DNA dei singoli specialisti di prodotto, mantienili allineati al DNA aziendale e ricevi issue di consistenza.</p>
+        </article>
+    </div>
+    {% endif %}
 </section>
 {% endblock %}

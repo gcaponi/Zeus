@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -72,6 +73,7 @@
             }
         })();
     </script>
+    <link rel="stylesheet" href="{% static 'zeus-design.css' %}">
     <style>
         :root {
             --bg-primary: #f8fafc;
@@ -275,235 +277,21 @@
             color: var(--text-primary);
         }
 
-        .zeus-nav {
-            position: fixed;
-            top: 1rem;
-            left: 50%;
-            z-index: 90;
-            display: grid;
-            grid-template-columns: auto 1fr auto auto;
-            align-items: center;
-            justify-content: space-between;
-            width: min(1180px, calc(100vw - 2rem));
-            min-height: 4.65rem;
-            padding: 0.65rem 0.75rem;
-            border: 1px solid var(--border-color);
-            border-radius: 999px;
-            background: var(--glass);
-            box-shadow: var(--shadow-soft);
-            backdrop-filter: blur(20px);
-            transform: translateX(-50%);
-            transition: border-color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease, backdrop-filter 0.3s ease;
-        }
-
-        .zeus-brand {
-            display: flex;
-            align-items: center;
-            gap: 0.6rem;
-            font-family: 'Space Grotesk', sans-serif;
-            font-weight: 700;
-            font-size: 1.1rem;
-            letter-spacing: 0.12em;
-            color: var(--text-primary);
-            text-decoration: none;
-        }
-
-        .zeus-brand-dot {
-            position: relative;
-            display: grid;
-            width: 2.85rem;
-            height: 2.85rem;
-            place-items: center;
-            overflow: hidden;
-            border-radius: 1rem;
-            background: linear-gradient(135deg, rgba(34, 211, 238, 0.12), rgba(124, 58, 237, 0.12));
-            border: 1px solid var(--border-color);
-            font-size: 0.9rem;
-            color: var(--accent-cyan-light);
-            filter: drop-shadow(0 0 12px var(--glow-cyan));
-            transition: transform 0.6s ease, filter 0.4s ease;
-        }
-
-        .zeus-brand:hover .zeus-brand-dot {
-            transform: rotate(20deg) scale(1.06);
-            filter: drop-shadow(0 0 18px var(--glow-cyan)) drop-shadow(0 0 30px rgba(124, 58, 237, 0.4));
-        }
-
-        .zeus-nav-links {
-            display: flex;
-            justify-content: center;
-            gap: 0.3rem;
-        }
-
-        .zeus-nav-links a {
-            padding: 0.6rem 1rem;
-            border-radius: 999px;
-            font-size: 0.88rem;
-            font-weight: 700;
-            color: var(--text-secondary);
-            text-decoration: none;
-            transition: color 0.2s ease, background 0.2s ease, transform 0.2s ease;
-        }
-
-        .zeus-nav-links a:hover {
-            background: var(--accent-cyan-bg);
-            color: var(--accent-cyan-light);
-            transform: translateY(-1px);
-        }
-
-        .zeus-hamburger {
-            display: none;
-            width: 2.5rem;
-            height: 2.5rem;
-            border-radius: 999px;
-            border: 1px solid var(--border-color);
-            background: var(--glass-strong);
-            cursor: pointer;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-        }
-
-        .zeus-hamburger svg {
-            width: 18px;
-            height: 18px;
-            stroke: var(--text-primary);
-        }
-
-        .zeus-mobile-menu {
-            display: none;
-            position: absolute;
-            top: calc(100% + 0.5rem);
-            left: 0;
-            right: 0;
-            padding: 0.5rem;
-            border: 1px solid var(--border-color);
-            border-radius: 1.4rem;
-            background: var(--glass-strong);
-            backdrop-filter: blur(20px);
-            box-shadow: var(--shadow-soft);
-            z-index: 100;
-        }
-
-        .zeus-mobile-menu.open { display: flex; flex-direction: column; gap: 0.25rem; }
-
-        .zeus-mobile-menu a {
-            display: block;
-            padding: 0.75rem 1rem;
-            border-radius: 0.75rem;
-            font-size: 0.88rem;
-            font-weight: 700;
-            color: var(--text-secondary);
-            text-decoration: none;
-            transition: all 0.2s ease;
-        }
-
-        .zeus-mobile-menu a:hover {
-            background: var(--accent-cyan-bg);
-            color: var(--accent-cyan-light);
-        }
-
-        @media (max-width: 640px) {
-            .zeus-nav { top: 0.65rem; width: calc(100vw - 1rem); min-height: 4rem; border-radius: 1.4rem; grid-template-columns: auto auto; }
-            .zeus-nav-links { display: none; }
-            .zeus-nav .zeus-btn-ghost { display: none; }
-            .zeus-hamburger { display: flex; }
-        }
+        /* NOTE: .zeus-nav / .zeus-brand / .zeus-nav-links / .zeus-hamburger / .zeus-mobile-menu
+           migrati in apps/core/static/zeus-design.css (single source of truth). */
 
         .zeus-card {
-            border: 1px solid var(--border-card);
-            border-radius: 1.6rem;
-            background:
-                radial-gradient(circle at 18% 0%, rgba(34, 211, 238, 0.08), transparent 18rem),
-                linear-gradient(135deg, var(--glass-strong), var(--bg-card));
-            box-shadow: 0 20px 80px rgba(0, 0, 0, 0.32);
-            backdrop-filter: blur(20px);
-            transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+            /* Migrato in apps/core/static/zeus-design.css (single source of truth). */
         }
 
-        .zeus-card:hover {
-            border-color: rgba(148, 163, 184, 0.16);
-            box-shadow: 0 26px 90px rgba(0, 0, 0, 0.36);
-        }
-
-        a.zeus-card:hover {
-            border-color: var(--border-hover);
-            box-shadow: 0 30px 100px rgba(34, 211, 238, 0.14);
-        }
-
-        .zeus-btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.62rem;
-            min-height: 3.2rem;
-            padding: 0.85rem 1.35rem;
-            border-radius: 999px;
-            font-weight: 900;
-            font-size: 0.9rem;
-            letter-spacing: 0.02em;
-            text-decoration: none;
-            transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease, background 0.22s ease, color 0.22s ease;
-            cursor: pointer;
-            border: 1px solid transparent;
-            will-change: transform;
-        }
-
-        .zeus-btn-primary {
-            background: linear-gradient(135deg, var(--accent-cyan-light), var(--accent-violet));
-            color: #020617;
-            border-color: rgba(103, 232, 249, 0.35);
-            box-shadow: 0 20px 70px rgba(34, 211, 238, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.38);
-        }
-
-        .zeus-btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 28px 80px rgba(34, 211, 238, 0.32);
-        }
-
-        .zeus-btn-secondary {
-            border-color: var(--border-color);
-            background: var(--glass);
-            color: var(--text-primary);
-            backdrop-filter: blur(16px);
-        }
-
-        .zeus-btn-secondary:hover {
-            border-color: var(--border-hover);
-            color: var(--accent-cyan-light);
-            transform: translateY(-1px);
-        }
-
-        .zeus-btn-ghost {
-            border-color: transparent;
-            background: transparent;
-            color: var(--text-primary);
-        }
-
-        .zeus-btn-ghost:hover {
-            color: var(--accent-cyan-light);
-            background: rgba(255, 255, 255, 0.04);
-        }
-
-        .zeus-btn-destructive {
-            border-color: rgba(248, 113, 113, 0.4);
-            background: rgba(239, 68, 68, 0.12);
-            color: #f87171;
-            backdrop-filter: blur(16px);
-        }
-
-        .zeus-btn-destructive:hover {
-            background: rgba(239, 68, 68, 0.2);
-            border-color: rgba(248, 113, 113, 0.7);
-            transform: translateY(-2px);
-        }
-
-        /* Compact button size for inline / issue / critique actions */
+        .zeus-btn,
+        .zeus-btn-primary,
+        .zeus-btn-secondary,
+        .zeus-btn-ghost,
+        .zeus-btn-destructive,
         .zeus-btn-sm {
-            min-height: 2.4rem;
-            padding: 0.45rem 1rem;
-            font-size: 0.82rem;
-            border-radius: 999px;
+            /* Migrati in apps/core/static/zeus-design.css (single source of truth).
+               Varianti hyphen (.zeus-btn-primary etc.) allineate al markup live. */
         }
 
         /* Styled file input wrapper — turns native file input into a pill */
@@ -551,32 +339,9 @@
             white-space: nowrap;
         }
 
-        .zeus-input {
-            width: 100%;
-            padding: 0.85rem 1rem;
-            border: 1px solid var(--border-color);
-            border-radius: 1rem;
-            background: var(--bg-input);
-            color: var(--text-primary);
-            font-size: 0.95rem;
-            transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
-        }
-
-        .zeus-input:focus {
-            outline: none;
-            border-color: var(--border-hover);
-            box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.1);
-            transform: translateY(-1px);
-        }
-
+        .zeus-input,
         .zeus-label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-size: 0.78rem;
-            font-weight: 900;
-            letter-spacing: 0.1em;
-            text-transform: uppercase;
-            color: var(--text-secondary);
+            /* Migrati in apps/core/static/zeus-design.css (single source of truth). */
         }
 
         .zeus-badge {
@@ -825,29 +590,7 @@
             background: linear-gradient(90deg, transparent, var(--border-color), transparent);
         }
 
-        /* Unified page layout */
-        .zeus-page-wrap {
-            width: min(100%, 82rem);
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        .zeus-page-grid {
-            display: grid;
-            gap: clamp(1rem, 2vw, 1.5rem);
-        }
-
-        @media (min-width: 1024px) {
-            .zeus-page-grid {
-                grid-template-columns: minmax(0, 1fr) 18rem;
-                align-items: start;
-            }
-
-            .zeus-page-sidebar {
-                position: sticky;
-                top: 7rem;
-            }
-        }
+        /* Unified page layout — migrato in zeus-design.css (.zeus-page-wrap/grid/sidebar) */
 
         /* Long-form prose rendering for review sections */
         .zeus-prose {
@@ -944,10 +687,10 @@
             ZEUS
         </a>
         <div class="zeus-nav-links">
-            <a href="{% url 'onboarding-index' %}">Onboarding</a>
-            <a href="{% url 'product-list-create' %}">Specialisti</a>
-            <a href="{% url 'motore-b-report' %}">Motore B</a>
-            <a href="{% url 'consistency-report' %}">Motore C</a>
+            <a href="{% url 'onboarding-index' %}"{% if '/onboarding' in request.path %} class="is-active" aria-current="page"{% endif %}>Onboarding</a>
+            <a href="{% url 'product-list-create' %}"{% if '/specialisti' in request.path or '/products' in request.path %} class="is-active" aria-current="page"{% endif %}>Specialisti</a>
+            <a href="{% url 'motore-b-report' %}"{% if '/motore-b' in request.path %} class="is-active" aria-current="page"{% endif %}>Motore B</a>
+            <a href="{% url 'consistency-report' %}"{% if '/motore-c' in request.path or '/consistency' in request.path %} class="is-active" aria-current="page"{% endif %}>Motore C</a>
         </div>
         <button type="button" id="theme-toggle" class="zeus-btn zeus-btn-ghost zeus-btn-sm" aria-label="Cambia tema">
             <i data-lucide="sun" class="hidden dark:block" style="width:16px;height:16px;"></i>
@@ -960,10 +703,10 @@
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
         </button>
         <div id="zeus-mobile-menu" class="zeus-mobile-menu">
-            <a href="{% url 'onboarding-index' %}">Onboarding</a>
-            <a href="{% url 'product-list-create' %}">Specialisti</a>
-            <a href="{% url 'motore-b-report' %}">Motore B</a>
-            <a href="{% url 'consistency-report' %}">Motore C</a>
+            <a href="{% url 'onboarding-index' %}"{% if '/onboarding' in request.path %} class="is-active" aria-current="page"{% endif %}>Onboarding</a>
+            <a href="{% url 'product-list-create' %}"{% if '/specialisti' in request.path or '/products' in request.path %} class="is-active" aria-current="page"{% endif %}>Specialisti</a>
+            <a href="{% url 'motore-b-report' %}"{% if '/motore-b' in request.path %} class="is-active" aria-current="page"{% endif %}>Motore B</a>
+            <a href="{% url 'consistency-report' %}"{% if '/motore-c' in request.path or '/consistency' in request.path %} class="is-active" aria-current="page"{% endif %}>Motore C</a>
             <button type="button" onclick="document.getElementById('theme-toggle').click()" class="text-left">Tema chiaro/scuro</button>
             <a href="{% url 'account_logout' %}">Esci</a>
         </div>

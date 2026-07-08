@@ -1,0 +1,669 @@
+/* =========================================================
+   ZEUS — Design System Unificato (SINGLE SOURCE OF TRUTH)
+   ---------------------------------------------------------
+   Sostituisce i duplicati:
+     - :root in templates/core/base.html
+     - --zeus-* in templates/zeus_admin/dashboard.html
+   Include in base.html con:
+     <link rel="stylesheet" href="{% static 'zeus-design.css' %}">
+   ========================================================= */
+
+/* ---------- 1. DESIGN TOKENS (Light default) ---------- */
+:root {
+  /* Surfaces */
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.72);
+  --bg-card-solid: #ffffff;
+  --bg-input: rgba(241, 245, 249, 0.78);
+  --bg-hover: rgba(15, 23, 42, 0.04);
+
+  /* Borders */
+  --border-color: rgba(15, 23, 42, 0.10);
+  --border-card: rgba(15, 23, 42, 0.08);
+  --border-hover: rgba(8, 145, 178, 0.44);
+  --border-strong: rgba(15, 23, 42, 0.16);
+
+  /* Text */
+  --text-primary: #07111f;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --text-inverse: #ffffff;
+
+  /* Brand accents (UNICI — niente --zeus-* separati) */
+  --accent-cyan: #0891b2;
+  --accent-cyan-light: #22d3ee;
+  --accent-violet: #7c3aed;
+  --accent-lime: #a3e635;
+  --accent-amber: #fbbf24;
+  --accent-red: #fb7185;
+
+  --accent-cyan-bg: rgba(8, 145, 178, 0.10);
+  --accent-violet-bg: rgba(124, 58, 237, 0.10);
+  --accent-lime-bg: rgba(163, 230, 53, 0.10);
+  --accent-amber-bg: rgba(251, 191, 36, 0.10);
+  --accent-red-bg: rgba(251, 113, 133, 0.10);
+
+  /* Glow + fx */
+  --glow-cyan: rgba(34, 211, 238, 0.34);
+  --glow-violet: rgba(124, 58, 237, 0.28);
+  --glass: rgba(255, 255, 255, 0.72);
+  --glass-strong: rgba(255, 255, 255, 0.88);
+  --shadow-soft: 0 24px 90px rgba(15, 23, 42, 0.12);
+  --shadow-card: 0 8px 32px rgba(15, 23, 42, 0.08);
+  --noise-opacity: 0.18;
+
+  /* Radii */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.4rem;
+  --radius-full: 999px;
+
+  /* Spacing scale */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-8: 3rem;
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-display: 'Space Grotesk', 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+/* ---------- 2. DARK MODE (UNICO, coerente ovunque) ---------- */
+.dark {
+  --bg-primary: #020617;
+  --bg-secondary: #0b1120;
+  --bg-card: rgba(255, 255, 255, 0.03);
+  --bg-card-solid: #0b1120;
+  --bg-input: rgba(255, 255, 255, 0.05);
+  --bg-hover: rgba(255, 255, 255, 0.06);
+
+  --border-color: rgba(255, 255, 255, 0.10);
+  --border-card: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(34, 211, 238, 0.40);
+  --border-strong: rgba(255, 255, 255, 0.16);
+
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+
+  --glass: rgba(255, 255, 255, 0.03);
+  --glass-strong: rgba(255, 255, 255, 0.05);
+  --shadow-soft: 0 24px 100px rgba(0, 0, 0, 0.45);
+  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.35);
+
+  /* Glow/Fx — in dark sono "luci che brillano" sul nero */
+  --fx-btn-primary: 0 20px 70px rgba(34, 211, 238, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.38);
+  --fx-btn-primary-hover: 0 28px 80px rgba(34, 211, 238, 0.32);
+  --fx-active-ring: 0 0 16px var(--glow-cyan);
+  --fx-border-active: var(--border-hover);
+}
+
+/* ---------- 2b. LIGHT MODE FIX — il glow non esiste su bianco ---------- */
+/* In light, ogni trasparenza bassa = invisibile. Qui i valori sono RADICALMENTE più opachi.
+   Regola: alpha ×2-3 rispetto al dark, ombre nere invece di glow. */
+:root:not(.dark) {
+  /* Surfaces — il glass trasparente su bianco non si vede; lo rendiamo quasi opaco */
+  --glass: rgba(255, 255, 255, 0.92);
+  --glass-strong: rgba(255, 255, 255, 0.96);
+  --bg-card: rgba(255, 255, 255, 0.94);
+
+  /* Bordi visibili */
+  --border-color: rgba(15, 23, 42, 0.18);
+  --border-card: rgba(15, 23, 42, 0.12);
+  --border-strong: rgba(15, 23, 42, 0.22);
+  --border-hover: rgba(8, 145, 178, 0.55);
+
+  /* Ombre solide (non glow trasparente) */
+  --shadow-soft: 0 18px 50px rgba(15, 23, 42, 0.20);
+  --shadow-card: 0 10px 30px rgba(15, 23, 42, 0.12);
+
+  /* Background accent con alpha più alta per visibilità */
+  --accent-cyan-bg: rgba(8, 145, 178, 0.14);
+  --accent-violet-bg: rgba(124, 58, 237, 0.12);
+  --bg-hover: rgba(15, 23, 42, 0.05);
+
+  /* Glow → ombra solida per bottoni e stati attivi */
+  --fx-btn-primary: 0 8px 30px rgba(8, 145, 178, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --fx-btn-primary-hover: 0 14px 36px rgba(8, 145, 178, 0.46);
+  --fx-active-ring: 0 0 0 2px rgba(8, 145, 178, 0.22);
+  --fx-border-active: rgba(8, 145, 178, 0.58);
+}
+/* Componenti specifici — overrride puntuali per light mode */
+:root:not(.dark) .zeus-nav {
+  border-color: rgba(15, 23, 42, 0.14);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 14px 50px rgba(15, 23, 42, 0.18);
+}
+:root:not(.dark) .zeus-brand-dot {
+  filter: drop-shadow(0 3px 8px rgba(8, 145, 178, 0.30));
+}
+:root:not(.dark) .zeus-btn-secondary {
+  border-color: rgba(15, 23, 42, 0.18);
+  background: rgba(255, 255, 255, 0.94);
+  color: #0f172a;
+}
+:root:not(.dark) .zeus-btn-ghost {
+  color: #334155;
+}
+:root:not(.dark) .zeus-btn-ghost:hover {
+  color: #0891b2;
+  background: rgba(8, 145, 178, 0.08);
+}
+:root:not(.dark) .zeus-card {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.12);
+}
+:root:not(.dark) .zeus-input,
+:root:not(.dark) .zeus-select,
+:root:not(.dark) .zeus-textarea {
+  border-color: rgba(15, 23, 42, 0.18);
+  background: rgba(255, 255, 255, 0.96);
+}
+:root:not(.dark) .zeus-input:focus,
+:root:not(.dark) .zeus-select:focus,
+:root:not(.dark) .zeus-textarea:focus {
+  box-shadow: 0 0 0 4px rgba(8, 145, 178, 0.14);
+}
+
+/* ---------- 3. RESET LEGGERO ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+/* Ambient glow di sfondo (dark) */
+.dark body {
+  background:
+    radial-gradient(circle at 18% 8%, rgba(34, 211, 238, 0.10), transparent 28rem),
+    radial-gradient(circle at 78% 10%, rgba(124, 58, 237, 0.12), transparent 30rem),
+    radial-gradient(circle at 52% 92%, rgba(163, 230, 53, 0.06), transparent 24rem),
+    var(--bg-primary);
+  background-attachment: fixed;
+}
+
+/* ---------- 4. LAYOUT PRIMITIVES ---------- */
+.zeus-shell {
+  display: grid;
+  grid-template-columns: 16rem 1fr;
+  min-height: 100vh;
+}
+.zeus-shell__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.zeus-content {
+  flex: 1;
+  padding: var(--space-6);
+  max-width: 1280px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ---------- 5. NAVBAR (floating pill — SINGLE SOURCE OF TRUTH) ---------- */
+/* Migrato da base.html inline. Markup: .zeus-nav > .zeus-brand + .zeus-nav-links + actions + .zeus-hamburger + .zeus-mobile-menu */
+.zeus-nav {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  z-index: 90;
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  justify-content: space-between;
+  width: min(1180px, calc(100vw - 2rem));
+  min-height: 4.65rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--glass);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(20px);
+  transform: translateX(-50%);
+  transition: border-color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease, backdrop-filter 0.3s ease;
+}
+
+.zeus-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.1rem;
+  letter-spacing: 0.12em;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.zeus-brand-dot {
+  position: relative;
+  display: grid;
+  width: 2.85rem;
+  height: 2.85rem;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 1rem;
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.12), rgba(124, 58, 237, 0.12));
+  border: 1px solid var(--border-color);
+  font-size: 0.9rem;
+  color: var(--accent-cyan-light);
+  filter: drop-shadow(0 0 12px var(--glow-cyan));
+  transition: transform 0.6s ease, filter 0.4s ease;
+}
+
+.zeus-brand:hover .zeus-brand-dot {
+  transform: rotate(20deg) scale(1.06);
+  filter: drop-shadow(0 0 18px var(--glow-cyan)) drop-shadow(0 0 30px rgba(124, 58, 237, 0.4));
+}
+
+.zeus-nav-links {
+  display: flex;
+  justify-content: center;
+  gap: 0.3rem;
+}
+
+.zeus-nav-links a {
+  padding: 0.6rem 1rem;
+  border-radius: 999px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.2s ease, background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.zeus-nav-links a:hover {
+  background: var(--accent-cyan-bg);
+  color: var(--accent-cyan-light);
+  transform: translateY(-1px);
+}
+
+/* STATO ATTIVO — indica in quale sezione si è (usa [aria-current="page"] o .is-active) */
+.zeus-nav-links a.is-active,
+.zeus-nav-links a[aria-current="page"] {
+  background: var(--accent-cyan-bg);
+  color: var(--accent-cyan-light);
+  box-shadow: inset 0 0 0 1px var(--fx-border-active), var(--fx-active-ring);
+}
+
+.zeus-hamburger {
+  display: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--glass-strong);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.zeus-hamburger svg {
+  width: 18px;
+  height: 18px;
+  stroke: var(--text-primary);
+}
+
+.zeus-mobile-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  right: 0;
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 1.4rem;
+  background: var(--glass-strong);
+  backdrop-filter: blur(20px);
+  box-shadow: var(--shadow-soft);
+  z-index: 100;
+}
+
+.zeus-mobile-menu.open { display: flex; flex-direction: column; gap: 0.25rem; }
+
+.zeus-mobile-menu a {
+  display: block;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.zeus-mobile-menu a:hover,
+.zeus-mobile-menu a.is-active,
+.zeus-mobile-menu a[aria-current="page"] {
+  background: var(--accent-cyan-bg);
+  color: var(--accent-cyan-light);
+}
+
+@media (max-width: 640px) {
+  .zeus-nav { top: 0.65rem; width: calc(100vw - 1rem); min-height: 4rem; border-radius: 1.4rem; grid-template-columns: auto auto; }
+  .zeus-nav-links { display: none; }
+  .zeus-nav .zeus-btn-ghost { display: none; }
+  .zeus-hamburger { display: flex; }
+}
+
+/* Sidebar (varianti per dashboard tenant/admin) */
+.zeus-sidebar {
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  padding: var(--space-5) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.zeus-sidebar__link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+.zeus-sidebar__link:hover { background: var(--bg-hover); color: var(--text-primary); }
+.zeus-sidebar__link.is-active {
+  background: var(--accent-cyan-bg);
+  color: var(--accent-cyan-light);
+}
+
+/* ---------- 6. BUTTON SYSTEM (single source of truth, nomi hyphen allineati al markup) ---------- */
+/* Markup live: .zeus-btn + .zeus-btn-{primary|secondary|ghost|destructive}{-sm} */
+.zeus-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.62rem;
+  min-height: 3.2rem;
+  padding: 0.85rem 1.35rem;
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-weight: 900;
+  font-size: 0.9rem;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  cursor: pointer;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  will-change: transform;
+  transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease, background 0.22s ease, color 0.22s ease;
+}
+.zeus-btn:focus-visible {
+  outline: 2px solid var(--accent-cyan-light);
+  outline-offset: 3px;
+}
+.zeus-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.zeus-btn-primary {
+  background: linear-gradient(135deg, var(--accent-cyan-light), var(--accent-violet));
+  color: #020617;
+  border-color: rgba(103, 232, 249, 0.35);
+  box-shadow: var(--fx-btn-primary);
+}
+.zeus-btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--fx-btn-primary-hover);
+}
+
+.zeus-btn-secondary {
+  border-color: var(--border-color);
+  background: var(--glass);
+  color: var(--text-primary);
+  backdrop-filter: blur(16px);
+}
+.zeus-btn-secondary:hover {
+  border-color: var(--border-hover);
+  color: var(--accent-cyan-light);
+  transform: translateY(-1px);
+}
+
+.zeus-btn-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-primary);
+}
+.zeus-btn-ghost:hover {
+  color: var(--accent-cyan-light);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.zeus-btn-destructive {
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  backdrop-filter: blur(16px);
+}
+.zeus-btn-destructive:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(248, 113, 113, 0.7);
+  transform: translateY(-2px);
+}
+
+/* Compact button size for inline / issue / critique actions */
+.zeus-btn-sm {
+  min-height: 2.4rem;
+  padding: 0.45rem 1rem;
+  font-size: 0.82rem;
+  border-radius: 999px;
+}
+
+/* Layout helpers */
+.zeus-btn-block { width: 100%; }
+.zeus-btn-group {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.zeus-btn-group--center { justify-content: center; }
+.zeus-btn-group--end { justify-content: flex-end; }
+
+/* ---------- 7. CARD / PANEL ---------- */
+/* Migrato da base.html inline. Markup: .zeus-card (padding via classi Tailwind p-5/p-6). */
+.zeus-card {
+  border: 1px solid var(--border-card);
+  border-radius: 1.6rem;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(34, 211, 238, 0.08), transparent 18rem),
+    linear-gradient(135deg, var(--glass-strong), var(--bg-card));
+  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(20px);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+}
+.zeus-card:hover {
+  border-color: rgba(148, 163, 184, 0.16);
+  box-shadow: 0 26px 90px rgba(0, 0, 0, 0.36);
+}
+a.zeus-card:hover {
+  border-color: var(--border-hover);
+  box-shadow: 0 30px 100px rgba(34, 211, 238, 0.14);
+}
+.zeus-card__title {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
+  color: var(--text-primary);
+}
+.zeus-card__body { color: var(--text-secondary); font-size: 0.9rem; }
+
+/* Grid responsive di card */
+.zeus-grid {
+  display: grid;
+  gap: var(--space-5);
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+/* ---------- 8. PAGE LAYOUT (zeus-page-*) ---------- */
+.zeus-page-wrap {
+  width: min(100%, 82rem);
+  margin-left: auto;
+  margin-right: auto;
+}
+.zeus-page-grid {
+  display: grid;
+  gap: clamp(1rem, 2vw, 1.5rem);
+}
+@media (min-width: 1024px) {
+  .zeus-page-grid {
+    grid-template-columns: minmax(0, 1fr) 18rem;
+    align-items: start;
+  }
+  .zeus-page-sidebar {
+    position: sticky;
+    top: 7rem;
+  }
+}
+/* Mobile: la sidebar resta accessibile subito sotto il form senza sparire in fondo.
+   Sticky top la mantiene sotto il nav fisso mentre si scorre il form. */
+@media (max-width: 1023px) {
+  .zeus-page-sidebar {
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    margin-top: clamp(1rem, 2vw, 1.5rem);
+  }
+  .zeus-page-sidebar > aside,
+  .zeus-page-sidebar aside {
+    display: grid;
+    gap: 0.75rem;
+  }
+  .zeus-page-sidebar .zeus-card:last-child {
+    border-color: var(--border-hover);
+    box-shadow: 0 -10px 50px rgba(0, 0, 0, 0.28), var(--shadow-soft);
+    backdrop-filter: blur(20px);
+  }
+}
+
+/* ---------- 9. FORM ELEMENTS ---------- */
+.zeus-field { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-4); }
+.zeus-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.zeus-input, .zeus-select, .zeus-textarea {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 1rem;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.zeus-input:focus, .zeus-select:focus, .zeus-textarea:focus {
+  outline: none;
+  border-color: var(--border-hover);
+  box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.1);
+  transform: translateY(-1px);
+}
+
+/* ---------- 9. BADGE / STATUS PILL ---------- */
+.zeus-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.zeus-pill--cyan { background: var(--accent-cyan-bg); color: var(--accent-cyan-light); }
+.zeus-pill--violet { background: var(--accent-violet-bg); color: var(--accent-violet); }
+.zeus-pill--lime { background: var(--accent-lime-bg); color: #65a30d; }
+.zeus-pill--amber { background: var(--accent-amber-bg); color: #d97706; }
+.zeus-pill--red { background: var(--accent-red-bg); color: var(--accent-red); }
+
+.zeus-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+/* ---------- 10. UTILITY ---------- */
+.zeus-divider { border: none; border-top: 1px solid var(--border-color); margin: var(--space-5) 0; }
+
+/* Step cards (sezione "Come funziona" della landing pubblica) */
+.zeus-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.95rem;
+  background: linear-gradient(135deg, var(--accent-cyan-bg), var(--accent-violet-bg));
+  border: 1px solid var(--border-hover);
+  color: var(--accent-cyan-light);
+  box-shadow: 0 0 24px var(--glow-cyan);
+}
+.zeus-step-icon {
+  font-size: 1.6rem;
+  margin-top: var(--space-3);
+  line-height: 1;
+}
+.zeus-step-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+  margin: var(--space-2) 0 var(--space-2);
+  color: var(--text-primary);
+}
+.zeus-step-desc {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.55;
+  margin: 0;
+}
+.zeus-text-muted { color: var(--text-muted); }
+.zeus-text-secondary { color: var(--text-secondary); }
+.zeus-mt-4 { margin-top: var(--space-4); }
+.zeus-mt-6 { margin-top: var(--space-6); }
+.zeus-mb-4 { margin-bottom: var(--space-4); }
+.zeus-flex { display: flex; }
+.zeus-flex-center { display: flex; align-items: center; justify-content: center; }
+.zeus-gap-3 { gap: var(--space-3); }
+
+/* ---------- 11. RESPONSIVE ---------- */
+@media (max-width: 900px) {
+  .zeus-shell { grid-template-columns: 1fr; }
+  .zeus-sidebar {
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .zeus-content { padding: var(--space-4); }
+}
+@media (max-width: 640px) {
+  .zeus-nav { flex-wrap: wrap; padding: var(--space-3) var(--space-4); }
+  .zeus-nav__links { margin-left: 0; width: 100%; }
+  .zeus-grid { grid-template-columns: 1fr; }
+}
