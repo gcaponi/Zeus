@@ -88,16 +88,42 @@
             margin-top: 4px;
         }
         
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .hero h1 { font-size: 38px; }
+            .section-title { font-size: 24px; }
+            .dna-grid { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+            .container { padding: 32px 20px; }
+        }
+        
+        @media (max-width: 640px) {
+            .hero { padding: 40px 20px 28px; }
+            .hero h1 { font-size: 30px; letter-spacing: -1px; }
+            .hero .subtitle { font-size: 15px; }
+            .container { padding: 24px 14px; }
+            .section { margin-bottom: 44px; }
+            .section-header { gap: 12px; margin-bottom: 22px; }
+            .section-number { width: 38px; height: 38px; font-size: 16px; }
+            .section-title { font-size: 21px; }
+            .section-desc { font-size: 13px; }
+            .mermaid { padding: 16px; border-radius: 14px; }
+            .dna-grid { grid-template-columns: 1fr; }
+            .stats-bar { gap: 18px; padding: 22px 16px; }
+            .stat-value { font-size: 26px; }
+        }
+        
         .mermaid {
             background: rgba(15,23,42,0.6);
             border: 1px solid rgba(255,255,255,0.08);
             border-radius: 20px;
-            padding: 40px;
+            padding: 24px;
             overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
         }
         
         .mermaid svg {
-            max-width: 100%;
+            max-width: none;
+            height: auto;
         }
         
         /* DNA Layers Table */
@@ -378,7 +404,7 @@
             </div>
         </div>
         <div class="mermaid">
-%%{init: {'theme': 'dark', 'themeVariables': {'fontSize': '14px', 'fontFamily': 'Inter', 'primaryColor': '#22d3ee', 'primaryTextColor': '#e2e8f0', 'primaryBorderColor': '#22d3ee', 'lineColor': '#475569', 'secondaryColor': '#a78bfa', 'tertiaryColor': '#34d399', 'edgeLabelBackground': '#0f172a', 'clusterBkg': 'rgba(15,23,42,0.6)', 'clusterBorder': 'rgba(255,255,255,0.1)'}}}%%
+%%{init: {"theme": "dark", "themeVariables": {"fontSize": "14px", "fontFamily": "Inter", "primaryColor": "#22d3ee", "primaryTextColor": "#e2e8f0", "primaryBorderColor": "#22d3ee", "lineColor": "#475569", "secondaryColor": "#a78bfa", "tertiaryColor": "#34d399", "edgeLabelBackground": "#0f172a", "clusterBkg": "rgba(15,23,42,0.6)", "clusterBorder": "rgba(255,255,255,0.1)"}}}%%
 flowchart TB
     subgraph ONBOARDING["🏢 ONBOARDING AZIENDALE"]
         direction TB
@@ -450,11 +476,11 @@ flowchart TB
     A8 -.->|"Periodico"| MC
     B10 -.->|"Upload su attivo"| MC
 
-    style ONBOARDING fill:rgba(34,211,238,0.06),stroke:#22d3ee,stroke-width:2px
-    style SPECIALIST fill:rgba(167,139,250,0.06),stroke:#a78bfa,stroke-width:2px
-    style MOTORS fill:rgba(245,158,11,0.06),stroke:#f59e0b,stroke-width:2px
-    style FEEDBACK fill:rgba(52,211,153,0.06),stroke:#34d399,stroke-width:2px
-    style OUTPUT fill:rgba(255,255,255,0.04),stroke:rgba(255,255,255,0.15),stroke-width:1px
+    style ONBOARDING fill:#22d3ee0f,stroke:#22d3ee,stroke-width:2px
+    style SPECIALIST fill:#a78bfa0f,stroke:#a78bfa,stroke-width:2px
+    style MOTORS fill:#f59e0b0f,stroke:#f59e0b,stroke-width:2px
+    style FEEDBACK fill:#34d3990f,stroke:#34d399,stroke-width:2px
+    style OUTPUT fill:#ffffff0a,stroke:#ffffff26,stroke-width:1px
         </div>
     </div>
 
@@ -724,7 +750,7 @@ flowchart TB
             </div>
         </div>
         <div class="mermaid">
-%%{init: {'theme': 'dark', 'themeVariables': {'fontSize': '14px', 'fontFamily': 'Inter', 'primaryColor': '#34d399', 'primaryTextColor': '#e2e8f0', 'lineColor': '#475569', 'edgeLabelBackground': '#0f172a'}}%%
+%%{init: {"theme": "dark", "themeVariables": {"fontSize": "14px", "fontFamily": "Inter", "primaryColor": "#34d399", "primaryTextColor": "#e2e8f0", "lineColor": "#475569", "edgeLabelBackground": "#0f172a"}}}%%
 flowchart LR
     subgraph PASS1["Pass 1: Conflict Matrix"]
         direction TB
@@ -751,9 +777,9 @@ flowchart LR
     C1 & C2 & C3 & C4 & C5 --> R1 --> R2
     S1 --> S2 --> S3
 
-    style PASS1 fill:rgba(52,211,153,0.06),stroke:#34d399,stroke-width:2px
-    style PASS2 fill:rgba(52,211,153,0.06),stroke:#34d399,stroke-width:2px
-    style SPECIALIST_CRITIQUE fill:rgba(167,139,250,0.06),stroke:#a78bfa,stroke-width:2px
+    style PASS1 fill:#34d3990f,stroke:#34d399,stroke-width:2px
+    style PASS2 fill:#34d3990f,stroke:#34d399,stroke-width:2px
+    style SPECIALIST_CRITIQUE fill:#a78bfa0f,stroke:#a78bfa,stroke-width:2px
         </div>
     </div>
 
@@ -767,44 +793,29 @@ flowchart LR
             </div>
         </div>
         <div class="mermaid">
-%%{init: {'theme': 'dark', 'themeVariables': {'fontSize': '13px', 'fontFamily': 'Inter', 'primaryColor': '#fb923c', 'primaryTextColor': '#e2e8f0', 'lineColor': '#475569', 'edgeLabelBackground': '#0f172a'}}%%
+%%{init: {"theme": "dark", "themeVariables": {"fontSize": "15px", "fontFamily": "Inter", "primaryColor": "#fb923c", "primaryTextColor": "#e2e8f0", "lineColor": "#475569", "edgeLabelBackground": "#0f172a"}}}%%
 flowchart TB
-    subgraph LOOP1["Loop 1: Feedback Specialista → DNA Generale"]
-        direction LR
-        L1A["DNA Specialista<br/>approvato"] --> L1B["Genera proposte<br/>feedback"]
-        L1B --> L1C["Utente seleziona<br/>proposte"]
-        L1C --> L1D["Rigenera DNA Generale<br/>v+1"]
-    end
+    %% --- Riga 1: Loop 1 (vertice) ---
+    L1["<b>Loop 1</b><br/>Feedback Specialista → DNA Generale<br/>DNA approvato → proposte → utente seleziona → rigenera v+1"]
 
-    subgraph LOOP2["Loop 2: Confidence Score"]
-        direction LR
-        L2A["Utente valuta<br/>DNA (1-5)"] --> L2B["Recency-weighted<br/>average"]
-        L2B --> L2C["confidence_score<br/>aggiornato"]
-    end
+    %% --- Riga 2: Loop 2 e Loop 3 ---
+    L2["<b>Loop 2</b><br/>Confidence Score<br/>valutazione 1-5 → recency avg → score"]
+    L3["<b>Loop 3</b><br/>Edit → Nuova Versione<br/>modifica sezione → v+1 → approvazioni"]
 
-    subgraph LOOP3["Loop 3: Edit → Nuova Versione"]
-        direction LR
-        L3A["Utente modifica<br/>sezione"] --> L3B["Nuova versione<br/>v+1"]
-        L3B --> L3C["Approvazioni<br/>trasferite"]
-    end
+    %% --- Riga 3: Loop 4 e Loop 5 ---
+    L4["<b>Loop 4</b><br/>Audit Chain<br/>modifica → HMAC-SHA256 → chain"]
+    L5["<b>Loop 5</b><br/>Consistency → Issue<br/>audit C → ConsistencyIssue → ignora/risolvi"]
 
-    subgraph LOOP4["Loop 4: Audit Chain"]
-        direction LR
-        L4A["Ogni modifica"] --> L4B["HMAC-SHA256<br/>content + prev_hash"]
-        L4B --> L4C["Chain di<br/>integrità"]
-    end
+    L1 --> L2
+    L1 --> L3
+    L2 --> L4
+    L3 --> L5
 
-    subgraph LOOP5["Loop 5: Consistency → Issue"]
-        direction LR
-        L5A["Audit Motore C"] --> L5B["ConsistencyIssue<br/>records"]
-        L5B --> L5C["Utente ignora/<br/>risolve/archivia"]
-    end
-
-    style LOOP1 fill:rgba(251,146,60,0.06),stroke:#fb923c,stroke-width:2px
-    style LOOP2 fill:rgba(34,211,238,0.06),stroke:#22d3ee,stroke-width:2px
-    style LOOP3 fill:rgba(167,139,250,0.06),stroke:#a78bfa,stroke-width:2px
-    style LOOP4 fill:rgba(52,211,153,0.06),stroke:#34d399,stroke-width:2px
-    style LOOP5 fill:rgba(245,158,11,0.06),stroke:#f59e0b,stroke-width:2px
+    style L1 fill:#fb923c1f,stroke:#fb923c,stroke-width:2px
+    style L2 fill:#22d3ee1f,stroke:#22d3ee,stroke-width:2px
+    style L3 fill:#a78bfa1f,stroke:#a78bfa,stroke-width:2px
+    style L4 fill:#34d3991f,stroke:#34d399,stroke-width:2px
+    style L5 fill:#f59e0b1f,stroke:#f59e0b,stroke-width:2px
         </div>
     </div>
 
@@ -818,7 +829,7 @@ flowchart TB
             </div>
         </div>
         <div class="mermaid">
-%%{init: {'theme': 'dark', 'themeVariables': {'fontSize': '12px', 'fontFamily': 'Inter', 'primaryColor': '#22d3ee', 'primaryTextColor': '#e2e8f0', 'lineColor': '#475569', 'edgeLabelBackground': '#0f172a', 'clusterBkg': 'rgba(15,23,42,0.4)', 'clusterBorder': 'rgba(255,255,255,0.08)'}}}%%
+%%{init: {"theme": "dark", "themeVariables": {"fontSize": "12px", "fontFamily": "Inter", "primaryColor": "#22d3ee", "primaryTextColor": "#e2e8f0", "lineColor": "#475569", "edgeLabelBackground": "#0f172a", "clusterBkg": "rgba(15,23,42,0.4)", "clusterBorder": "rgba(255,255,255,0.08)"}}}%%
 flowchart TB
     subgraph DB["🗄️ Database"]
         direction LR
@@ -875,10 +886,10 @@ flowchart TB
     V4 --> T4
     V5 --> T6
 
-    style DB fill:rgba(34,211,238,0.04),stroke:#22d3ee,stroke-width:1px
-    style CELERY fill:rgba(245,158,11,0.04),stroke:#f59e0b,stroke-width:1px
-    style LLM fill:rgba(167,139,250,0.04),stroke:#a78bfa,stroke-width:1px
-    style VIEWS fill:rgba(52,211,153,0.04),stroke:#34d399,stroke-width:1px
+    style DB fill:#22d3ee0a,stroke:#22d3ee,stroke-width:1px
+    style CELERY fill:#f59e0b0a,stroke:#f59e0b,stroke-width:1px
+    style LLM fill:#a78bfa0a,stroke:#a78bfa,stroke-width:1px
+    style VIEWS fill:#34d3990a,stroke:#34d399,stroke-width:1px
         </div>
     </div>
 
@@ -892,7 +903,7 @@ flowchart TB
             </div>
         </div>
         <div class="mermaid">
-%%{init: {'theme': 'dark', 'themeVariables': {'fontSize': '14px', 'fontFamily': 'Inter', 'primaryColor': '#a78bfa', 'primaryTextColor': '#e2e8f0', 'lineColor': '#475569', 'edgeLabelBackground': '#0f172a'}}%%
+%%{init: {"theme": "dark", "themeVariables": {"fontSize": "14px", "fontFamily": "Inter", "primaryColor": "#a78bfa", "primaryTextColor": "#e2e8f0", "lineColor": "#475569", "edgeLabelBackground": "#0f172a"}}}%%
 stateDiagram-v2
     [*] --> bozza: Creazione
     bozza --> in_costruzione: Generate Pre-DNA
@@ -926,12 +937,12 @@ stateDiagram-v2
         theme: 'dark',
         securityLevel: 'loose',
         flowchart: {
-            useMaxWidth: true,
+            useMaxWidth: false,
             htmlLabels: true,
             curve: 'basis'
         },
         sequence: {
-            useMaxWidth: true
+            useMaxWidth: false
         },
         themeVariables: {
             fontSize: '14px',
