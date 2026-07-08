@@ -110,12 +110,16 @@ def public_login(request):
         with schema_context(tenant_schema):
             user = authenticate(request, username=email, password=password)
 
-        if user is None:
+            if user is None:
+                error = True  # usciamo per renderizzare fuori
+            else:
+                auth_login(request, user)
+                error = False
+
+        if error or user is None:
             return render(request, "account/login.html", {
                 "error": "Email o password non validi.",
             })
-
-        auth_login(request, user)
 
         response = redirect(f"https://{access.tenant_domain}/onboarding/")
         return _set_workspace_cookie(response, access.tenant_domain)

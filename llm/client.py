@@ -9,7 +9,7 @@ Gestisce retry, timeout, e streaming (future).
 """
 
 import json
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Optional
 
 import httpx
 
