@@ -173,6 +173,32 @@
   box-shadow: 0 0 0 4px rgba(8, 145, 178, 0.14);
 }
 
+/* Light override — badge, hero-kicker, pulse-dot, auth-card */
+:root:not(.dark) .zeus-badge-cyan { background: rgba(8, 145, 178, 0.16); }
+:root:not(.dark) .zeus-badge-lime { background: rgba(163, 230, 53, 0.18); }
+:root:not(.dark) .zeus-badge-violet { background: rgba(124, 58, 237, 0.14); }
+:root:not(.dark) .zeus-badge-amber { background: rgba(251, 191, 36, 0.18); color: #b45309; }
+:root:not(.dark) .zeus-badge-orange { background: rgba(251, 146, 60, 0.18); color: #c2410c; }
+:root:not(.dark) .zeus-badge-red { background: rgba(239, 68, 68, 0.16); color: #dc2626; }
+:root:not(.dark) .zeus-badge-muted {
+  background: rgba(15, 23, 42, 0.08);
+  color: #475569;
+}
+:root:not(.dark) .hero-kicker {
+  border-color: rgba(15, 23, 42, 0.16);
+  background: rgba(255, 255, 255, 0.92);
+  color: #0891b2;
+}
+:root:not(.dark) .pulse-dot {
+  box-shadow: 0 2px 8px rgba(132, 204, 22, 0.40);
+  background: #65a30d;
+}
+:root:not(.dark) .zeus-auth-card::before {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(8, 145, 178, 0.12), transparent 18rem),
+    radial-gradient(circle at 100% 80%, rgba(124, 58, 237, 0.10), transparent 20rem);
+}
+
 /* ---------- 3. RESET LEGGERO ---------- */
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
