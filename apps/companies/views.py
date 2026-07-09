@@ -122,6 +122,47 @@ QUESTION_GENERATION_PROFILES = {
     },
 }
 
+# Motore C (Consistency Audit) tier profiles. Foundation wants a quick, focused
+# check on real contradictions; Professional adds governance gaps and
+# absolutizations; Legacy runs the full deep analysis including boundary cases.
+CONSISTENCY_AUDIT_TIER_PROFILES = {
+    Plan.SLUG_STARTER: {
+        "max_issues": 5,
+        "depth_instruction": (
+            "Solo contraddizioni operative evidenti tra Specialisti e DNA Generale. "
+            "Ignora boundary case e dettagli minori."
+        ),
+    },
+    Plan.SLUG_PROFESSIONAL: {
+        "max_issues": 8,
+        "depth_instruction": (
+            "Contraddizioni, assolutizzazioni (vincoli di uno specialista che "
+            "rischiano di diventare legge aziendale) e buchi di governo."
+        ),
+    },
+    Plan.SLUG_ENTERPRISE: {
+        "max_issues": 15,
+        "depth_instruction": (
+            "Analisi completa: includi boundary case, principi stale e dettagli "
+            "minori. Massima copertura."
+        ),
+    },
+}
+# Fallback when the company plan is unknown: keeps the previous behaviour
+# (12 issues, no depth modifier) so the audit is backwards compatible.
+CONSISTENCY_AUDIT_DEFAULT_PROFILE = {
+    "max_issues": 12,
+    "depth_instruction": "",
+}
+
+
+def _consistency_audit_profile(company):
+    """Resolve the Motore C profile (max_issues + depth) for the company plan."""
+    plan_slug = _plan_slug_for_company(company)
+    return CONSISTENCY_AUDIT_TIER_PROFILES.get(
+        plan_slug, CONSISTENCY_AUDIT_DEFAULT_PROFILE
+    )
+
 
 def _tenant_company(request):
     tenant = getattr(request, "tenant", None)
@@ -2925,11 +2966,14 @@ def _dispatch_specialist_consistency_audit(request, company, product):
 
     _mark_consistency_audit_pending(company_dna, ConsistencyIssue.SCOPE_SPECIALIST, product)
     tenant = getattr(request, "tenant", None)
+    profile = _consistency_audit_profile(company)
     run_consistency_audit.delay(
         company.pk,
         scope=ConsistencyIssue.SCOPE_SPECIALIST,
         product_id=product.pk,
         tenant_schema=tenant.schema_name if tenant else None,
+        max_issues=profile["max_issues"],
+        depth_instruction=profile["depth_instruction"],
     )
     return True
 
@@ -3406,10 +3450,13 @@ def consistency_audit_run(request):
 
     _mark_consistency_audit_pending(company_dna, ConsistencyIssue.SCOPE_PERIODIC)
     tenant = getattr(request, "tenant", None)
+    profile = _consistency_audit_profile(company)
     run_consistency_audit.delay(
         company.pk,
         scope=ConsistencyIssue.SCOPE_PERIODIC,
         tenant_schema=tenant.schema_name if tenant else None,
+        max_issues=profile["max_issues"],
+        depth_instruction=profile["depth_instruction"],
     )
     return redirect("consistency-report")
 
@@ -4840,10 +4887,13 @@ def product_promote(request, pk):
         if company_dna:
             _mark_consistency_audit_pending(company_dna, ConsistencyIssue.SCOPE_PERIODIC)
         tenant = getattr(request, "tenant", None)
+        profile = _consistency_audit_profile(company)
         run_consistency_audit.delay(
             company.pk,
             scope=ConsistencyIssue.SCOPE_PERIODIC,
             tenant_schema=tenant.schema_name if tenant else None,
+            max_issues=profile["max_issues"],
+            depth_instruction=profile["depth_instruction"],
         )
     return redirect("product-detail", pk=product.pk)
 

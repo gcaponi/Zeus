@@ -133,7 +133,7 @@ def _consistency_specialist_records(company, product=None):
     return records
 
 
-def _normalize_consistency_issues(raw, scope, company_dna, records):
+def _normalize_consistency_issues(raw, scope, company_dna, records, max_issues=12):
     raw = raw if isinstance(raw, dict) else {}
     raw_issues = raw.get("issues") or []
     if not isinstance(raw_issues, list):
@@ -150,7 +150,7 @@ def _normalize_consistency_issues(raw, scope, company_dna, records):
     source_dna_ids = {record["dna_id"] for record in records}
 
     issues = []
-    for item in raw_issues[:12]:
+    for item in raw_issues[:max_issues]:
         if not isinstance(item, dict):
             continue
         title = _text(item.get("title"), limit=160).strip()
@@ -202,7 +202,13 @@ def _update_accumulated_structure(company_dna, records, audit_summary):
     company_dna.save(update_fields=["content", "audit_hash"])
 
 
-def _run_consistency_audit(company_id, scope=ConsistencyIssue.SCOPE_PERIODIC, product_id=None):
+def _run_consistency_audit(
+    company_id,
+    scope=ConsistencyIssue.SCOPE_PERIODIC,
+    product_id=None,
+    max_issues=12,
+    depth_instruction="",
+):
     from apps.companies.models import Company
 
     try:
@@ -260,6 +266,12 @@ def _run_consistency_audit(company_id, scope=ConsistencyIssue.SCOPE_PERIODIC, pr
     ).replace(
         "{{product_layers}}",
         ", ".join(PRODUCT_LAYER_KEYS),
+    ).replace(
+        "{{max_issues}}",
+        str(max_issues),
+    ).replace(
+        "{{depth_instruction}}",
+        depth_instruction,
     )
 
     raw = {"summary": "Audit non eseguito.", "issues": []}
@@ -286,7 +298,7 @@ def _run_consistency_audit(company_id, scope=ConsistencyIssue.SCOPE_PERIODIC, pr
     except Exception:
         logger.exception("Consistency audit failed for company %s", company.schema_name)
 
-    issues = _normalize_consistency_issues(raw, scope, company_dna, records)
+    issues = _normalize_consistency_issues(raw, scope, company_dna, records, max_issues=max_issues)
     now = timezone.now()
     with transaction.atomic():
         previous = ConsistencyIssue.objects.filter(
@@ -938,7 +950,7 @@ REGOLE:
 - Non assolutizzare MAI ("garantisce", "certezza assoluta").
 - Se un dato non e coperto dalle fonti, scrivi "Da chiarire in intervista: ...".
 - Usa i PARAMETRI della concept map per dati numerici precisi.
-- Usa i GAPS per identificare "Da chiarare in intervista".
+- Usa i GAPS per identificare "Da chiarire in intervista".
 
 LE 6 SEZIONI TECNICHE:
 1. identita_tecnica — categoria tecnica, problema risolto, posizionamento
@@ -1542,10 +1554,24 @@ def run_consistency_audit(
     scope=ConsistencyIssue.SCOPE_PERIODIC,
     product_id=None,
     tenant_schema=None,
+    max_issues=12,
+    depth_instruction="",
 ):
-    """Run Motore C coherence audit for Company DNA and active specialists."""
+    """Run Motore C coherence audit for Company DNA and active specialists.
+
+    ``max_issues`` and ``depth_instruction`` are resolved per-tier by the caller
+    (see CONSISTENCY_AUDIT_TIER_PROFILES in views.py) so the same task stays
+    plan-agnostic and backwards compatible.
+    """
+
     def _run():
-        return _run_consistency_audit(company_id, scope=scope, product_id=product_id)
+        return _run_consistency_audit(
+            company_id,
+            scope=scope,
+            product_id=product_id,
+            max_issues=max_issues,
+            depth_instruction=depth_instruction,
+        )
 
     if tenant_schema and hasattr(connection, "tenant"):
         with schema_context(tenant_schema):

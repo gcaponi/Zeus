@@ -14,7 +14,8 @@ Regole:
 - I dettagli tecnici validi per un solo specialista sono normali: segnala solo se contraddicono il DNA Generale o creano ambiguita operativa.
 - I conflitti sono warning gestibili, non blocchi automatici.
 - Se non trovi problemi concreti, ritorna `issues: []`.
-- Massimo 12 issue.
+- Massimo {{max_issues}} issue.
+- Profondita richiesta: {{depth_instruction}}
 - Usa solo questi layer DNA Generale: {{company_layers}}.
 - Usa solo questi layer DNA Specialista: {{product_layers}}.
 

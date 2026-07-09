@@ -2210,6 +2210,7 @@ class TestConsistencyMotor:
             "company_id": company.pk,
             "scope": ConsistencyIssue.SCOPE_PERIODIC,
             "tenant_schema": "test-tenant",
+            **views.CONSISTENCY_AUDIT_TIER_PROFILES[Plan.SLUG_STARTER],
         }
 
     def test_consistency_audit_run_marks_pending_and_dispatches(self, rf_with_tenant, monkeypatch):
@@ -2237,6 +2238,7 @@ class TestConsistencyMotor:
             "company_id": company.pk,
             "scope": ConsistencyIssue.SCOPE_PERIODIC,
             "tenant_schema": "test-tenant",
+            **views.CONSISTENCY_AUDIT_TIER_PROFILES[Plan.SLUG_STARTER],
         }
 
     def test_product_consistency_check_marks_specialist_pending(self, rf_with_tenant, monkeypatch):
@@ -2268,6 +2270,7 @@ class TestConsistencyMotor:
             "scope": ConsistencyIssue.SCOPE_SPECIALIST,
             "product_id": product.pk,
             "tenant_schema": "test-tenant",
+            **views.CONSISTENCY_AUDIT_TIER_PROFILES[Plan.SLUG_STARTER],
         }
 
     def test_product_consistency_check_allows_complete_draft_specialist(
@@ -2329,6 +2332,7 @@ class TestConsistencyMotor:
             "scope": ConsistencyIssue.SCOPE_SPECIALIST,
             "product_id": product.pk,
             "tenant_schema": "test-tenant",
+            **views.CONSISTENCY_AUDIT_TIER_PROFILES[Plan.SLUG_STARTER],
         }
 
     def test_product_promote_uses_professional_consistency_threshold(
@@ -2362,6 +2366,70 @@ class TestConsistencyMotor:
         assert resp.status_code == 302
         assert called["scope"] == ConsistencyIssue.SCOPE_PERIODIC
         assert called["tenant_schema"] == "test-tenant"
+
+    def test_product_promote_passes_enterprise_audit_profile(
+        self, rf_with_tenant, monkeypatch,
+    ):
+        """Legacy (Enterprise) plan resolves to max_issues=15 + deep instruction."""
+        monkeypatch.setattr(Client, "auto_create_schema", False)
+        tenant = Client.objects.create(schema_name="test-tenant", name="Test Tenant")
+        plan, _ = Plan.objects.update_or_create(
+            slug=Plan.SLUG_ENTERPRISE,
+            defaults=Plan.default_values(Plan.SLUG_ENTERPRISE),
+        )
+        WorkspaceSubscription.objects.create(client=tenant, plan=plan)
+        company = self._make_company_with_dna()
+        self._make_product(company, "A", "a", "A", Product.STATUS_ATTIVO)
+        product = self._make_product(company, "B", "b", "B", Product.STATUS_IN_VALIDAZIONE)
+        called = {}
+
+        def fake_delay(company_id, **kwargs):
+            called["company_id"] = company_id
+            called.update(kwargs)
+
+        monkeypatch.setattr(tasks.run_consistency_audit, "delay", fake_delay)
+        req = rf_with_tenant(
+            "post",
+            reverse("product-promote", args=[product.pk]),
+            form=True,
+        )
+
+        resp = views.product_promote(req, product.pk)
+
+        assert resp.status_code == 302
+        # Enterprise threshold is 1 specialist, so a single active product triggers T3.
+        assert called.get("max_issues") == 15
+        assert "Analisi completa" in called.get("depth_instruction", "")
+
+    def test_consistency_audit_run_passes_starter_audit_profile(
+        self, rf_with_tenant, monkeypatch,
+    ):
+        """Foundation (Starter) plan resolves to max_issues=5."""
+        monkeypatch.setattr(Client, "auto_create_schema", False)
+        tenant = Client.objects.create(schema_name="test-tenant", name="Test Tenant")
+        plan, _ = Plan.objects.update_or_create(
+            slug=Plan.SLUG_STARTER,
+            defaults=Plan.default_values(Plan.SLUG_STARTER),
+        )
+        WorkspaceSubscription.objects.create(client=tenant, plan=plan)
+        company = self._make_company_with_dna()
+        called = {}
+
+        def fake_delay(company_id, **kwargs):
+            called["company_id"] = company_id
+            called.update(kwargs)
+
+        monkeypatch.setattr(tasks.run_consistency_audit, "delay", fake_delay)
+        req = rf_with_tenant(
+            "post",
+            reverse("consistency-audit-run"),
+            form=True,
+        )
+
+        views.consistency_audit_run(req)
+
+        assert called.get("max_issues") == 5
+        assert "contraddizioni operative" in called.get("depth_instruction", "")
 
     def test_updating_specialist_returns_to_validation_after_reapproval(self, rf_with_tenant):
         company = self._make_company_with_dna()

@@ -490,3 +490,88 @@ class TestAsyncCompanyTasks:
         assert "_consistency_audit_pending" not in company_dna.content
         assert company_dna.content["_accumulated"]["active_specialist_count"] == 3
         assert company_dna.content["_accumulated"]["last_consistency_audit"]["issue_count"] == 1
+
+    def test_run_consistency_audit_caps_issues_at_max_issues(self, monkeypatch):
+        """Foundation profile (max_issues=5) truncates the LLM output to 5."""
+        company = _make_company(schema="capco")
+        company_dna = company.dna_versions.get(dna_type=CompanyDNA.TYPE_COMPLETE)
+        company_dna.content["_consistency_audit_pending"] = {"scope": "periodic"}
+        company_dna.save(update_fields=["content"])
+        product = _make_product(company, slug="canale", codice="CI-000")
+        product.status = Product.STATUS_ATTIVO
+        product.save(update_fields=["status"])
+        ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            content=_specialist_content("active"),
+        )
+
+        # LLM returns 9 issues; with max_issues=5 only 5 must survive.
+        issues = [
+            {
+                "severity": "medium",
+                "issue_type": "boundary",
+                "title": f"Issue {i}",
+                "description": f"Descrizione {i}",
+                "recommendation": "ok",
+                "company_layer": "confini",
+                "product_layer": "vincoli",
+                "evidence": {"products": ["Canale"]},
+            }
+            for i in range(9)
+        ]
+        fake_text = json.dumps({"summary": "molte issue", "issues": issues})
+        fake_result = SimpleNamespace(
+            text=fake_text, tokens_in=1, tokens_out=1, cost=0, latency_ms=1,
+        )
+
+        def fake_generate(*args, **kwargs):
+            return fake_result, json.loads(fake_text)
+
+        monkeypatch.setattr("apps.companies.tasks._generate_with_retry", fake_generate)
+        monkeypatch.setattr("apps.companies.tasks.get_llm_client", lambda: None)
+
+        count = tasks._run_consistency_audit(company.id, max_issues=5)
+
+        assert count == 5
+        assert ConsistencyIssue.objects.filter(company=company).count() == 5
+
+    def test_run_consistency_audit_injects_depth_and_max_into_prompt(self, monkeypatch):
+        """max_issues and depth_instruction reach the LLM prompt."""
+        company = _make_company(schema="depthco")
+        company_dna = company.dna_versions.get(dna_type=CompanyDNA.TYPE_COMPLETE)
+        company_dna.content["_consistency_audit_pending"] = {"scope": "periodic"}
+        company_dna.save(update_fields=["content"])
+        product = _make_product(company, slug="canale", codice="CI-001")
+        product.status = Product.STATUS_ATTIVO
+        product.save(update_fields=["status"])
+        ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            content=_specialist_content("active"),
+        )
+
+        captured = {}
+
+        fake_result = SimpleNamespace(
+            text='{"summary":"ok","issues":[]}',
+            tokens_in=1, tokens_out=1, cost=0, latency_ms=1,
+        )
+
+        def fake_generate(client, prompt, **kwargs):
+            captured["prompt"] = prompt
+            return fake_result, json.loads(fake_result.text)
+
+        monkeypatch.setattr("apps.companies.tasks._generate_with_retry", fake_generate)
+        monkeypatch.setattr("apps.companies.tasks.get_llm_client", lambda: None)
+
+        tasks._run_consistency_audit(
+            company.id,
+            max_issues=15,
+            depth_instruction="Analisi completa: includi boundary case.",
+        )
+
+        assert "Massimo 15 issue." in captured["prompt"]
+        assert "Analisi completa: includi boundary case." in captured["prompt"]
