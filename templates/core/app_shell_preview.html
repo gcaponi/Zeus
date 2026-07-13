@@ -1,0 +1,194 @@
+{% extends "core/app_shell.html" %}
+
+{% block title %}Preview App Shell · ZEUS{% endblock %}
+
+{% block shell_head %}
+<style>
+    .shell-preview-brand {
+        display: flex;
+        align-items: center;
+        height: 52px;
+        padding: 0 16px;
+        border-bottom: 1px solid var(--shell-border);
+        color: var(--shell-text);
+        font-size: 15px;
+        font-weight: 800;
+        text-decoration: none;
+    }
+
+    .shell-preview-brand-mark {
+        display: grid;
+        width: 26px;
+        height: 26px;
+        margin-right: 9px;
+        place-items: center;
+        border-radius: 7px;
+        background: var(--shell-accent);
+        color: #ffffff;
+        font-size: 12px;
+    }
+
+    .shell-preview-nav {
+        display: grid;
+        gap: 2px;
+        padding: 12px 10px;
+    }
+
+    .shell-preview-nav-label {
+        padding: 12px 10px 5px;
+        color: var(--shell-muted);
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+
+    .shell-preview-nav a {
+        padding: 8px 10px;
+        border-radius: 7px;
+        color: #475569;
+        font-size: 14px;
+        font-weight: 600;
+        text-decoration: none;
+    }
+
+    .shell-preview-nav a:hover,
+    .shell-preview-nav a:focus-visible {
+        background: #ecfeff;
+        color: var(--shell-accent);
+    }
+
+    .shell-preview-header-content {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        min-width: 0;
+        padding: 0 20px;
+    }
+
+    .shell-preview-breadcrumb {
+        overflow: hidden;
+        color: var(--shell-muted);
+        font-size: 13px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .shell-preview-status {
+        flex-shrink: 0;
+        color: #047857;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .shell-preview-content {
+        max-width: 960px;
+    }
+
+    .shell-preview-content h1 {
+        margin: 0;
+        font-size: 30px;
+        line-height: 1.2;
+    }
+
+    .shell-preview-content > p {
+        max-width: 720px;
+        margin: 10px 0 24px;
+        color: var(--shell-muted);
+        line-height: 1.6;
+    }
+
+    .shell-preview-contracts {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+    }
+
+    .shell-preview-contract {
+        min-width: 0;
+        padding: 16px;
+        border: 1px solid var(--shell-border);
+        border-radius: 8px;
+        background: var(--shell-panel);
+    }
+
+    .shell-preview-contract h2 {
+        margin: 0 0 6px;
+        font-size: 15px;
+    }
+
+    .shell-preview-contract p {
+        margin: 0;
+        color: var(--shell-muted);
+        font-size: 13px;
+        line-height: 1.5;
+    }
+
+    @media (max-width: 767px) {
+        .shell-preview-brand {
+            display: none;
+        }
+
+        .shell-preview-nav {
+            grid-auto-columns: max-content;
+            grid-auto-flow: column;
+            overflow-x: auto;
+        }
+
+        .shell-preview-nav-label {
+            display: none;
+        }
+
+        .shell-preview-contracts {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block shell_sidebar %}
+<a class="shell-preview-brand" href="{% url 'tenant-dashboard' %}">
+    <span class="shell-preview-brand-mark" aria-hidden="true">Z</span>
+    ZEUS
+</a>
+<nav class="shell-preview-nav" aria-label="Workspace">
+    <span class="shell-preview-nav-label">Workspace</span>
+    <a href="{% url 'tenant-dashboard' %}">Dashboard</a>
+    <a href="{% url 'onboarding-index' %}">Onboarding</a>
+    <a href="{% url 'product-list-create' %}">Specialisti</a>
+    <span class="shell-preview-nav-label">Motori</span>
+    <a href="{% url 'motore-b-report' %}">Motore B</a>
+    <a href="{% url 'consistency-report' %}">Motore C</a>
+</nav>
+{% endblock %}
+
+{% block shell_header %}
+<div class="shell-preview-header-content">
+    <span class="shell-preview-breadcrumb">Preview / App Shell</span>
+    <span class="shell-preview-status">Feature flag attivo</span>
+</div>
+{% endblock %}
+
+{% block shell_main %}
+<section class="shell-preview-content" aria-labelledby="shell-preview-title">
+    <h1 id="shell-preview-title">Contratto App Shell</h1>
+    <p>
+        Questa route isola la nuova struttura applicativa. Nessuna pagina tenant usa ancora
+        la shell e nessun comportamento di ZEUS viene sostituito in questa fase.
+    </p>
+    <div class="shell-preview-contracts">
+        <article class="shell-preview-contract">
+            <h2>Sidebar globale</h2>
+            <p>Espone soltanto destinazioni gia' collegate a route reali.</p>
+        </article>
+        <article class="shell-preview-contract">
+            <h2>Header contestuale</h2>
+            <p>Riserva lo spazio per breadcrumb e controlli realmente disponibili.</p>
+        </article>
+        <article class="shell-preview-contract">
+            <h2>Main stabile</h2>
+            <p>Mantiene un contenitore identificabile senza cambiare i flussi correnti.</p>
+        </article>
+    </div>
+</section>
+{% endblock %}

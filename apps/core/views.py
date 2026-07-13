@@ -1,10 +1,11 @@
 from allauth.account.utils import perform_login
 from allauth.account.views import SignupView
+from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth import login as auth_login
 from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import redirect, render
 from django_tenants.utils import schema_context
 
@@ -17,6 +18,12 @@ WORKSPACE_COOKIE_MAX_AGE = 60 * 60 * 24 * 30
 
 def health_check(request):
     return JsonResponse({"status": "ok"})
+
+
+def app_shell_preview(request):
+    if not settings.ZEUS_APP_SHELL_ENABLED:
+        raise Http404
+    return render(request, "core/app_shell_preview.html")
 
 
 def _set_workspace_cookie(response, workspace):

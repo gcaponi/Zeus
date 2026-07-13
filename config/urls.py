@@ -6,6 +6,7 @@ from apps.companies import urls as companies_urls
 from apps.core.metrics import metrics_view
 from apps.core.views import (
     ZEUSSignupView,
+    app_shell_preview,
     health_check,
     public_login,
     public_logout,
@@ -15,6 +16,7 @@ from apps.core.views import (
 )
 
 urlpatterns = [
+    path("__shell_preview/", app_shell_preview, name="app-shell-preview"),
     path("health/", health_check, name="health-check"),
     path("metrics/", metrics_view, name="metrics"),
     path("zeus-admin/", include("apps.zeus_admin.urls")),

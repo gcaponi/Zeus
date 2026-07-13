@@ -1,13 +1,16 @@
 from types import SimpleNamespace
 
 import pytest
+from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
+from django.http import Http404
 from django.middleware.csrf import CsrfViewMiddleware
 from django.test import RequestFactory, override_settings
 from django.urls import resolve, reverse
 
 from apps.core.views import (
     WORKSPACE_COOKIE,
+    app_shell_preview,
     public_login,
     tenant_dashboard,
     tenant_landing,
@@ -22,6 +25,7 @@ from apps.core.views import (
         ("account_login", "/accounts/login/"),
         ("account_logout", "/accounts/logout/"),
         ("tenant-dashboard", "/dashboard/"),
+        ("app-shell-preview", "/__shell_preview/"),
         ("onboarding-index", "/onboarding/"),
         ("product-list-create", "/products/"),
         ("motore-b-report", "/company/dna/motore-b/"),
@@ -37,6 +41,57 @@ def test_onboarding_path_keeps_current_resolver_precedence():
     match = resolve("/onboarding/")
 
     assert match.url_name == "onboarding-index"
+
+
+@override_settings(ROOT_URLCONF="config.urls")
+def test_app_shell_preview_is_disabled_by_default():
+    assert settings.ZEUS_APP_SHELL_ENABLED is False
+    request = RequestFactory().get(reverse("app-shell-preview"))
+
+    with pytest.raises(Http404):
+        app_shell_preview(request)
+
+
+@override_settings(ROOT_URLCONF="config.urls", ZEUS_APP_SHELL_ENABLED=True)
+def test_app_shell_preview_renders_declared_slots():
+    request = RequestFactory().get(reverse("app-shell-preview"))
+    request.user = AnonymousUser()
+
+    response = app_shell_preview(request)
+
+    assert response.status_code == 200
+    assert b'data-app-shell="v1"' in response.content
+    assert b'id="app-sidebar"' in response.content
+    assert b'id="app-header"' in response.content
+    assert b'id="app-main"' in response.content
+    assert b"Feature flag attivo" in response.content
+
+
+@override_settings(ROOT_URLCONF="config.urls", ZEUS_APP_SHELL_ENABLED=True)
+def test_app_shell_flag_does_not_change_existing_pages():
+    request_factory = RequestFactory()
+    login_request = request_factory.get(reverse("account_login"))
+    login_request.user = AnonymousUser()
+    landing_request = request_factory.get(reverse("tenant-landing"))
+    landing_request.user = AnonymousUser()
+    dashboard_request = request_factory.get(reverse("tenant-dashboard"))
+    dashboard_request.user = SimpleNamespace(
+        is_authenticated=True,
+        email="ui-baseline@example.com",
+    )
+    dashboard_request.tenant = SimpleNamespace(
+        name="UI Baseline",
+        schema_name="ui-baseline",
+    )
+
+    responses = [
+        public_login(login_request),
+        tenant_landing(landing_request),
+        tenant_dashboard(dashboard_request),
+    ]
+
+    assert all(response.status_code == 200 for response in responses)
+    assert all(b'id="app-shell"' not in response.content for response in responses)
 
 
 @override_settings(ROOT_URLCONF="config.urls")

@@ -27,6 +27,7 @@ VIEWPORTS = {
     MIDDLEWARE=BROWSER_MIDDLEWARE,
     ALLOWED_HOSTS=["*"],
     DEBUG=True,
+    ZEUS_APP_SHELL_ENABLED=True,
 )
 class TestUIBrowserBaseline(StaticLiveServerTestCase):
     def _assert_no_horizontal_overflow(self, page):
@@ -150,4 +151,29 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                 self._assert_no_horizontal_overflow(products_page)
                 self._assert_visual_baseline(products_page, f"products-{viewport_name}")
                 tenant_context.close()
+            browser.close()
+
+    def test_app_shell_preview_visual_baselines(self):
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            for viewport_name, viewport in VIEWPORTS.items():
+                context = browser.new_context(
+                    viewport=viewport,
+                    color_scheme="light",
+                    reduced_motion="reduce",
+                )
+                page = context.new_page()
+                response = page.goto(
+                    f"{self.live_server_url}{reverse('app-shell-preview')}",
+                    wait_until="networkidle",
+                )
+
+                self.assertTrue(response.ok)
+                self.assertEqual(page.locator("h1").inner_text(), "Contratto App Shell")
+                self.assertTrue(page.locator("#app-sidebar").count())
+                self.assertTrue(page.locator("#app-header").count())
+                self.assertTrue(page.locator("#app-main").count())
+                self._assert_no_horizontal_overflow(page)
+                self._assert_visual_baseline(page, f"app-shell-preview-{viewport_name}")
+                context.close()
             browser.close()

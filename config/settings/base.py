@@ -7,6 +7,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "change-me-in-production")
 DEBUG = False
 ALLOWED_HOSTS = []
+ZEUS_APP_SHELL_ENABLED = os.environ.get("ZEUS_APP_SHELL_ENABLED", "").lower() in {
+    "1",
+    "true",
+    "yes",
+}
 
 SHARED_APPS = [
     "django_tenants",

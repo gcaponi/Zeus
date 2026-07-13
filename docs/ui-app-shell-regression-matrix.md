@@ -1,6 +1,6 @@
 # ZEUS App Shell - Matrice di regressione
 
-Stato: Fase 0, baseline locale del 2026-07-13.
+Stato: Fasi 0-1, baseline locale del 2026-07-13.
 
 ## Invarianti
 
@@ -12,12 +12,13 @@ Stato: Fase 0, baseline locale del 2026-07-13.
 
 ## Route principali
 
-| Superficie | URL name | Path | Contratto Fase 0 |
+| Superficie | URL name | Path | Contratto corrente |
 | --- | --- | --- | --- |
 | Landing | `tenant-landing` | `/` | Route bloccata; pagina pubblica senza `#app-main`. |
 | Login | `account_login` | `/accounts/login/` | Route, form CSRF e assenza shell tenant bloccati. |
 | Logout | `account_logout` | `/accounts/logout/` | Redirect pubblico assoluto e rimozione cookie workspace bloccati. |
 | Dashboard | `tenant-dashboard` | `/dashboard/` | Login obbligatorio; link onboarding/logout e bootstrap CSRF bloccati. |
+| Preview App Shell | `app-shell-preview` | `/__shell_preview/` | `404` con flag off; shell renderizzata soltanto con `ZEUS_APP_SHELL_ENABLED=True`. |
 | Onboarding | `onboarding-index` | `/onboarding/` | Precedenza resolver, rendering autenticato e `#onboarding-step` bloccati. |
 | Specialisti | `product-list-create` | `/products/` | Rendering autenticato e form creazione bloccati. |
 | Motore B | `motore-b-report` | `/company/dna/motore-b/` | Route bloccata; comportamento dati coperto dalla suite Companies. |
@@ -49,6 +50,7 @@ Il test `tests/test_ui_browser_baseline.py` usa `StaticLiveServerTestCase`, Chro
 | Dashboard | `dashboard-desktop.png` | `dashboard-tablet.png` | `dashboard-mobile.png` | Sessione, tenant, onboarding, no overflow. |
 | Onboarding | `onboarding-desktop.png` | `onboarding-tablet.png` | `onboarding-mobile.png` | Sessione, tenant, `#onboarding-step`, no overflow. |
 | Specialisti | `products-desktop.png` | `products-tablet.png` | `products-mobile.png` | Sessione, tenant, form creazione, no overflow. |
+| Preview App Shell | `app-shell-preview-desktop.png` | `app-shell-preview-tablet.png` | `app-shell-preview-mobile.png` | Flag, sidebar, header, `#app-main`, no overflow. |
 
 Le immagini sono in `docs/ui-baseline/`. Il confronto e' bloccante e non aggiorna file. Per approvare intenzionalmente una nuova baseline:
 
@@ -87,5 +89,15 @@ uv run playwright install chromium
 - [x] Test di caratterizzazione Django.
 - [x] Screenshot desktop, tablet e mobile riproducibili.
 - [x] Suite completa e check statici verdi: `259 passed`, coverage `71.72%`, Ruff e Django check puliti.
-- [ ] Approvazione visuale di Guglielmo.
-- [ ] Commit locale isolato della Fase 0.
+- [x] Approvazione visuale di Guglielmo.
+- [x] Commit locale isolato della Fase 0: `9befad4`.
+
+## Gate Fase 1
+
+- [x] Feature flag `ZEUS_APP_SHELL_ENABLED` disattivo per default.
+- [x] Route dedicata `/__shell_preview/`, non sovrapposta alle route esistenti.
+- [x] Foundation standalone con slot `shell_sidebar`, `shell_header`, `shell_main` e `shell_scripts`.
+- [x] Preview collegata soltanto a destinazioni ZEUS reali.
+- [x] Login, landing, dashboard e le 12 baseline Fase 0 restano invariati con flag attivo.
+- [x] Preview verificata a 1440, 1024 e 390 px senza overflow orizzontale.
+- [x] Suite completa e check statici verdi: `264 passed`, coverage `71.72%`, Ruff e Django check puliti.
