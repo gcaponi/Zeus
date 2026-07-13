@@ -9,6 +9,9 @@ from django.test import override_settings
 from django.urls import reverse
 from playwright.sync_api import sync_playwright
 
+from apps.companies.dna_schemas import LAYER_KEYS
+from apps.companies.models import Company, CompanyDNA, CompanyQuestion
+
 
 BROWSER_MIDDLEWARE = [
     "tests.browser_support.BrowserTenantMiddleware",
@@ -274,5 +277,152 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                     products_page,
                     f"app-shell-products-{viewport_name}",
                 )
+                context.close()
+            browser.close()
+
+    @override_settings(ZEUS_APP_SHELL_ENABLED=True)
+    def test_onboarding_app_shell_visual_baselines(self):
+        user = get_user_model().objects.create_user(
+            username="browser-onboarding-shell",
+            email="browser-onboarding-shell@example.com",
+            password="test-password",
+        )
+        company = Company.objects.create(
+            schema_name="ui-baseline",
+            name="UI Baseline",
+        )
+        pre_dna = CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_PRE,
+            is_current=False,
+            content={key: f"Contesto preliminare {key}." for key in LAYER_KEYS},
+        )
+        CompanyQuestion.objects.create(
+            company=company,
+            dna=pre_dna,
+            code="A1",
+            section_key="identita",
+            principle="Principio non negoziabile",
+            question="Quale principio guida le decisioni tecniche del workspace?",
+            answer_depth="mirata",
+            answer_guidance="Descrivi una scelta concreta e il criterio usato.",
+        )
+        complete_content = {
+            key: f"Contenuto verificato per {key}." for key in LAYER_KEYS
+        }
+        complete_content["sintesi_cognitiva"] = (
+            "UI Baseline traduce il contesto tecnico in decisioni verificabili."
+        )
+        CompanyDNA.objects.create(
+            company=company,
+            version=2,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            content=complete_content,
+        )
+
+        self.client.force_login(user)
+        session = self.client.session
+        session["pending_complete_min_version"] = 3
+        session.save()
+        session_cookie = self.client.cookies[settings.SESSION_COOKIE_NAME].value
+        surfaces = [
+            (
+                "onboarding",
+                f"{reverse('onboarding-index')}?revise=1",
+                "Onboarding",
+                "#onboarding-step",
+                True,
+            ),
+            (
+                "dna-questions",
+                reverse("dna-questions"),
+                "10 domande per completare il DNA",
+                'textarea[name^="answer_"]',
+                True,
+            ),
+            (
+                "dna-generating",
+                reverse("dna-generating"),
+                "Generazione DNA in corso",
+                '[hx-target="body"]',
+                True,
+            ),
+            (
+                "dna-review",
+                reverse("dna-review"),
+                "Revisione DNA",
+                "#dna-review-root",
+                True,
+            ),
+            (
+                "dna-visualize",
+                reverse("dna-visualize"),
+                "Visualizzazione finale",
+                "text=DNA Generale",
+                False,
+            ),
+        ]
+
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            for viewport_name, viewport in VIEWPORTS.items():
+                context = browser.new_context(
+                    viewport=viewport,
+                    color_scheme="light",
+                    reduced_motion="reduce",
+                    extra_http_headers={"X-Zeus-Test-Tenant": "ui-baseline"},
+                )
+                context.add_init_script(
+                    "localStorage.setItem('zeus-theme', 'light')"
+                )
+                context.add_cookies(
+                    [
+                        {
+                            "name": settings.SESSION_COOKIE_NAME,
+                            "value": session_cookie,
+                            "url": self.live_server_url,
+                        }
+                    ]
+                )
+
+                for surface_name, path, heading, contract, requires_htmx in surfaces:
+                    page_errors = []
+                    page = context.new_page()
+                    page.on(
+                        "pageerror",
+                        lambda error, errors=page_errors: errors.append(str(error)),
+                    )
+                    response = page.goto(
+                        f"{self.live_server_url}{path}",
+                        wait_until="networkidle",
+                    )
+
+                    self.assertTrue(response.ok)
+                    self.assertTrue(page.locator(".zeus-app-shell--tenant").count())
+                    self.assertEqual(page.locator("h1").first.inner_text(), heading)
+                    self.assertEqual(
+                        page.locator(".zeus-app-nav a.is-active").inner_text(),
+                        "Onboarding",
+                    )
+                    self.assertTrue(page.locator(contract).count())
+                    if requires_htmx:
+                        self.assertTrue(
+                            page.evaluate("typeof window.htmx !== 'undefined'")
+                        )
+                    for overlay_selector in (
+                        "#generating-popup",
+                        "#dna-popup-overlay",
+                    ):
+                        overlay = page.locator(overlay_selector)
+                        if overlay.count():
+                            self.assertFalse(overlay.is_visible())
+                    self.assertFalse(page_errors)
+                    self._assert_no_horizontal_overflow(page)
+                    self._assert_visual_baseline(
+                        page,
+                        f"app-shell-{surface_name}-{viewport_name}",
+                    )
+                    page.close()
                 context.close()
             browser.close()

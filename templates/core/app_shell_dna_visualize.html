@@ -1,0 +1,42 @@
+{% extends "core/app_shell_tenant.html" %}
+{% load zeus_filters %}
+
+{% block title %}Visualizzazione finale · ZEUS{% endblock %}
+{% block shell_page_title %}DNA Generale{% endblock %}
+
+{% block tenant_main %}
+<section class="zeus-app-page zeus-app-page--with-context zeus-app-page--core-flow">
+    <header class="zeus-app-page-header">
+        <div>
+            <p class="zeus-app-eyebrow">Onboarding · Step 4</p>
+            <h1>Visualizzazione finale</h1>
+            <p>Il DNA Generale approvato del workspace.</p>
+        </div>
+    </header>
+
+    {% include "core/onboarding/_step_indicator.html" with current_step=4 %}
+
+    <div class="zeus-app-page-body">
+        <div class="zeus-app-page-main">
+            {% include "core/partials/dna_visualize_content.html" %}
+        </div>
+        <aside class="zeus-app-page-context" aria-label="Azioni e contesto">
+            <div class="zeus-app-context-card">
+                {% if company %}
+                <p class="zeus-app-context-label">Workspace</p>
+                <p class="zeus-app-context-title">{{ company.name }}</p>
+                <p class="zeus-app-context-meta">{{ company.schema_name }}.zeus.cais.uno</p>
+                {% endif %}
+            </div>
+            <div class="zeus-app-context-card zeus-app-context-actions">
+                <a href="{% url 'dna-download-pdf' %}" class="zeus-btn zeus-btn-secondary w-full">Scarica PDF completo</a>
+                <a href="{% url 'dna-review' %}" class="zeus-btn zeus-btn-ghost w-full">&larr; Torna alla revisione</a>
+                <form method="post" action="{% url 'onboarding-dna-reset' %}" onsubmit="return confirm('Sei sicuro? Questo cancellerà DNA, domande, file e source. Dovrai ricominciare da capo.');">
+                    {% csrf_token %}
+                    <button type="submit" class="zeus-btn zeus-btn-destructive w-full">Riparti da capo</button>
+                </form>
+            </div>
+        </aside>
+    </div>
+</section>
+{% endblock %}

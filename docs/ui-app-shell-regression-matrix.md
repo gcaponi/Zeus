@@ -1,6 +1,6 @@
 # ZEUS App Shell - Matrice di regressione
 
-Stato: Fasi 0-2, baseline locale del 2026-07-13.
+Stato: Fasi 0-3a, baseline locale del 2026-07-13.
 
 ## Invarianti
 
@@ -19,7 +19,12 @@ Stato: Fasi 0-2, baseline locale del 2026-07-13.
 | Logout | `account_logout` | `/accounts/logout/` | Redirect pubblico assoluto e rimozione cookie workspace bloccati. |
 | Dashboard | `tenant-dashboard` | `/dashboard/` | Login obbligatorio; legacy con flag off, App Shell tenant con flag on. |
 | Preview App Shell | `app-shell-preview` | `/__shell_preview/` | `404` con flag off; shell renderizzata soltanto con `ZEUS_APP_SHELL_ENABLED=True`. |
-| Onboarding | `onboarding-index` | `/onboarding/` | Precedenza resolver, rendering autenticato e `#onboarding-step` bloccati. |
+| Onboarding | `onboarding-index` | `/onboarding/` | Legacy con flag off; App Shell con flag on; rendering autenticato e `#onboarding-step` bloccati. |
+| Domande DNA | `dna-questions` | `/company/dna/questions/` | Full page flag-aware; POST, CSRF e avanzamento restano sulla view esistente. |
+| Gap Engine DNA | `dna-gap-questions` | `/company/dna/gap-questions/<round>/` | Full page flag-aware; round e contratti delle domande restano invariati. |
+| Generazione DNA | `dna-generating` | `/company/dna/generating/` | Full page flag-aware; polling HTMX conserva `hx-target="body"` e `HX-Redirect`. |
+| Revisione DNA | `dna-review` | `/company/dna/review/` | Full page flag-aware; `#dna-review-root`, approvazione e modifica sezioni invariati. |
+| Visualizzazione DNA | `dna-visualize` | `/company/dna/visualize/` | Full page flag-aware; sidebar contestuale, feedback e PDF restano raggiungibili. |
 | Specialisti | `product-list-create` | `/products/` | Legacy con flag off; App Shell con flag on su GET, create POST e rami di errore. |
 | Motore B | `motore-b-report` | `/company/dna/motore-b/` | Route bloccata; comportamento dati coperto dalla suite Companies. |
 | Motore C | `consistency-report` | `/company/dna/consistency/` | Route e partial `#consistency-report-root` coperti. |
@@ -30,7 +35,7 @@ I contratti route e pubblici sono in `tests/test_ui_app_shell_baseline.py`. La l
 
 | Contratto | Superfici | Protezione corrente |
 | --- | --- | --- |
-| `#onboarding-step` | Fonte e avanzamento onboarding | Test HTML e redirect non-HTMX esistenti. |
+| `#onboarding-step` | Fonte e avanzamento onboarding | Flag on restituisce App Shell nelle risposte full page e lo stesso frammento puro nelle richieste HTMX. |
 | `#company-files-list` | Upload e cancellazione file aziendali | ID e azioni conservati nella matrice. |
 | `#dna-review-root` | Approva/modifica sezioni DNA | Test partial e assenza redirect prematuro esistenti. |
 | `#consistency-report-root` | Polling Motore C | Test partial, pending e assenza `DOCTYPE` esistenti. |
@@ -53,6 +58,11 @@ Il test `tests/test_ui_browser_baseline.py` usa `StaticLiveServerTestCase`, Chro
 | Preview App Shell | `app-shell-preview-desktop.png` | `app-shell-preview-tablet.png` | `app-shell-preview-mobile.png` | Flag, sidebar, header, `#app-main`, no overflow. |
 | Dashboard App Shell | `app-shell-dashboard-desktop.png` | `app-shell-dashboard-tablet.png` | `app-shell-dashboard-mobile.png` | Flag on, tema, drawer mobile, navigazione e no overflow. |
 | Specialisti App Shell | `app-shell-products-desktop.png` | `app-shell-products-tablet.png` | `app-shell-products-mobile.png` | Flag on, form reale, empty state e no overflow. |
+| Onboarding App Shell | `app-shell-onboarding-desktop.png` | `app-shell-onboarding-tablet.png` | `app-shell-onboarding-mobile.png` | Flag on, stepper, fonte, sidebar contestuale e no overflow. |
+| Domande DNA App Shell | `app-shell-dna-questions-desktop.png` | `app-shell-dna-questions-tablet.png` | `app-shell-dna-questions-mobile.png` | Flag on, textarea reale, stepper, HTMX disponibile e no overflow. |
+| Generazione DNA App Shell | `app-shell-dna-generating-desktop.png` | `app-shell-dna-generating-tablet.png` | `app-shell-dna-generating-mobile.png` | Flag on, polling `body`, popup chiuso al load e no overflow. |
+| Revisione DNA App Shell | `app-shell-dna-review-desktop.png` | `app-shell-dna-review-tablet.png` | `app-shell-dna-review-mobile.png` | Flag on, `#dna-review-root`, popup chiuso al load e no overflow. |
+| Visualizzazione DNA App Shell | `app-shell-dna-visualize-desktop.png` | `app-shell-dna-visualize-tablet.png` | `app-shell-dna-visualize-mobile.png` | Flag on, DNA reale, sidebar contestuale e no overflow. |
 
 Le immagini sono in `docs/ui-baseline/`. Il confronto e' bloccante e non aggiorna file. Per approvare intenzionalmente una nuova baseline:
 
@@ -114,3 +124,13 @@ uv run playwright install chromium
 - [x] Sei nuove baseline Dashboard/Specialisti verificate a 1440, 1024 e 390 px senza overflow.
 - [x] Gate mirato: `43 passed`; suite completa: `269 passed`, coverage `71.75%`.
 - [x] Ruff, Django system check e migration check SQLite puliti; nessun modello o migration modificato.
+
+## Gate Fase 3a
+
+- [x] Sei view onboarding/DNA selezionano legacy o App Shell esclusivamente tramite `ZEUS_APP_SHELL_ENABLED`.
+- [x] I template legacy e i wrapper App Shell includono gli stessi partial di contenuto; nessuna logica di dominio e' stata duplicata.
+- [x] Le richieste HTMX alla fonte onboarding restano frammenti puri; polling DNA, `HX-Redirect`, CSRF, `#onboarding-step`, `#company-files-list` e `#dna-review-root` restano invariati.
+- [x] Sidebar contestuale destra, stepper, sticky action bar e popup vivono nel contenuto del flusso; il chrome tenant resta comune.
+- [x] Le 21 baseline storiche restano byte-identiche; 15 nuove baseline onboarding/DNA sono verificate a 1440, 1024 e 390 px.
+- [x] Gate mirato: `146 passed`; suite completa: `273 passed`, coverage `72.27%`.
+- [x] Ruff, Django system check e migration check SQLite puliti; nessun modello, migration, task Celery o deploy modificato.

@@ -1,0 +1,34 @@
+{% extends "core/app_shell_tenant.html" %}
+
+{% block title %}Approfondimenti DNA · ZEUS{% endblock %}
+{% block shell_page_title %}Approfondimenti DNA{% endblock %}
+
+{% block tenant_main %}
+<section class="zeus-app-page zeus-app-page--with-context zeus-app-page--core-flow">
+    <header class="zeus-app-page-header">
+        <div>
+            <p class="zeus-app-eyebrow">Onboarding · Gap Engine</p>
+            <h1>Round {{ round_number }} — Approfondimenti</h1>
+            <p>Domande mirate generate dal Gap Engine per colmare le lacune emerse dalle risposte precedenti.</p>
+            {% if plan_label %}<span class="zeus-app-chip">{{ plan_label }}</span>{% endif %}
+        </div>
+    </header>
+
+    {% include "core/onboarding/_step_indicator.html" with current_step=2 %}
+
+    <div class="zeus-app-page-body">
+        <div class="zeus-app-page-main">
+            {% include "core/partials/dna_gap_questions_content.html" %}
+        </div>
+        <aside class="zeus-app-page-context" aria-label="Azioni e contesto">
+            {% include "core/onboarding/_step_sidebar.html" %}
+        </aside>
+    </div>
+</section>
+{% endblock %}
+
+{% block shell_scripts %}
+{{ block.super }}
+{% include "core/partials/_app_shell_htmx.html" %}
+{% include "core/partials/_generating_popup.html" with popup_text="ZEUS sta valutando le risposte e preparando il DNA completo" %}
+{% endblock %}

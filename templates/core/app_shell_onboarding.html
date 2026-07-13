@@ -1,0 +1,35 @@
+{% extends "core/app_shell_tenant.html" %}
+
+{% block title %}Onboarding · ZEUS{% endblock %}
+{% block shell_page_title %}Onboarding{% endblock %}
+
+{% block tenant_main %}
+<section class="zeus-app-page zeus-app-page--with-context zeus-app-page--core-flow">
+    <header class="zeus-app-page-header">
+        <div>
+            <p class="zeus-app-eyebrow">Onboarding</p>
+            <h1>Onboarding</h1>
+            <p>Costruisci il DNA della tua azienda in 4 passaggi.</p>
+        </div>
+    </header>
+
+    {% include "core/onboarding/_step_indicator.html" with current_step=step|default:1 %}
+
+    <div class="zeus-app-page-body">
+        <div class="zeus-app-page-main">
+            <div class="zeus-app-panel zeus-app-panel--padded">
+                {% include "core/partials/onboarding_content.html" %}
+            </div>
+        </div>
+        <aside class="zeus-app-page-context" aria-label="Azioni e contesto">
+            {% include "core/onboarding/_step_sidebar.html" %}
+        </aside>
+    </div>
+</section>
+{% endblock %}
+
+{% block shell_scripts %}
+{{ block.super }}
+{% include "core/partials/_app_shell_htmx.html" %}
+{% include "core/partials/_generating_popup.html" with popup_title="Stiamo generando le domande" popup_text="ZEUS sta analizzando il pre-DNA per creare domande pertinenti" %}
+{% endblock %}

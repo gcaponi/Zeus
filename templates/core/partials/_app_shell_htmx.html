@@ -1,0 +1,19 @@
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+<script>
+(function () {
+    function getCsrfToken() {
+        var cookies = document.cookie.split(';');
+        for (var index = 0; index < cookies.length; index += 1) {
+            var cookie = cookies[index].trim();
+            if (cookie.indexOf('csrftoken=') === 0) {
+                return decodeURIComponent(cookie.substring(10));
+            }
+        }
+        return '{{ csrf_token }}';
+    }
+
+    document.body.addEventListener('htmx:configRequest', function (event) {
+        event.detail.headers['X-CSRFToken'] = getCsrfToken();
+    });
+})();
+</script>

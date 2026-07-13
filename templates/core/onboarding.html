@@ -20,17 +20,7 @@
 
 {% block main_content %}
 <section class="zeus-card p-6 sm:p-8">
-    <div id="onboarding-step">
-        {% if show_source_form %}
-            {% include "core/onboarding/_source_form.html" %}
-        {% elif dna %}
-            {% include "core/onboarding/_dna.html" %}
-        {% elif run and run.status in "running pending" %}
-            {% include "core/onboarding/_progress.html" %}
-        {% else %}
-            {% include "core/onboarding/_source_form.html" %}
-        {% endif %}
-    </div>
+    {% include "core/partials/onboarding_content.html" %}
 </section>
 {% endblock %}
 

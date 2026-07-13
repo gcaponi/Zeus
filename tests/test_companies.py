@@ -634,6 +634,39 @@ class TestOnboardingViews:
         assert b"hx-post" in resp.content
         assert b"hx-target=\"#onboarding-step\"" in resp.content
 
+    @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
+    def test_onboarding_app_shell_preserves_full_page_and_htmx_fragment(self, rf_with_tenant):
+        Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+
+        page_response = views.onboarding_index(
+            rf_with_tenant("get", reverse("onboarding-index"))
+        )
+        htmx_request = rf_with_tenant(
+            "post",
+            reverse("onboarding-source-create"),
+            {},
+            form=True,
+        )
+        htmx_request.META["HTTP_HX_REQUEST"] = "true"
+        fragment_response = views.onboarding_source_create(htmx_request)
+        full_page_error = views.onboarding_source_create(
+            rf_with_tenant(
+                "post",
+                reverse("onboarding-source-create"),
+                {},
+                form=True,
+            )
+        )
+
+        assert page_response.status_code == 200
+        assert b'id="app-shell"' in page_response.content
+        assert b'id="onboarding-step"' in page_response.content
+        assert fragment_response.status_code == 400
+        assert b'id="app-shell"' not in fragment_response.content
+        assert b"Inserisci un URL valido" in fragment_response.content
+        assert full_page_error.status_code == 400
+        assert b'id="app-shell"' in full_page_error.content
+
     def test_onboarding_revise_shows_prefilled_source_form(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
         Source.objects.create(company=company, url="https://cais.uno", status=Source.STATUS_SCRAPED)
@@ -932,6 +965,46 @@ class TestDNAQuestions:
         assert first_question.answer_depth == "generica"
         assert "almeno 2 pagine" in first_question.answer_guidance
         assert LLMCall.objects.filter(company=company).count() == 1
+
+    @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
+    def test_question_gap_and_generating_pages_use_app_shell(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        pre_dna = self._make_pre_dna(company)
+
+        questions_response = views.dna_questions(
+            rf_with_tenant("get", reverse("dna-questions"))
+        )
+        CompanyQuestion.objects.create(
+            company=company,
+            dna=pre_dna,
+            code="F1",
+            section_key="identita",
+            principle="Approfondimento",
+            question="Quale principio guida questa scelta?",
+            question_round=2,
+        )
+        gap_response = views.dna_gap_questions(
+            rf_with_tenant("get", reverse("dna-gap-questions", args=[2])),
+            round_number=2,
+        )
+        generating_response = views.dna_generating(
+            rf_with_tenant("get", reverse("dna-generating"))
+        )
+        htmx_request = rf_with_tenant("get", reverse("dna-generating"))
+        htmx_request.META["HTTP_HX_REQUEST"] = "true"
+        htmx_response = views.dna_generating(htmx_request)
+
+        assert questions_response.status_code == 200
+        assert b'id="app-shell"' in questions_response.content
+        assert b'name="answer_' in questions_response.content
+        assert gap_response.status_code == 200
+        assert b'id="app-shell"' in gap_response.content
+        assert b"Round 2" in gap_response.content
+        assert generating_response.status_code == 200
+        assert b'id="app-shell"' in generating_response.content
+        assert b'hx-target="body"' in generating_response.content
+        assert htmx_response.status_code == 204
+        assert not htmx_response.content
 
     def test_professional_questions_use_context_and_documents(
         self,
@@ -1422,6 +1495,30 @@ class TestDNAQuestions:
 
 @pytest.mark.django_db
 class TestDNAReviewViews:
+    @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
+    def test_review_and_visualize_pages_use_app_shell(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            content={"identita": "DNA aziendale verificato."},
+        )
+
+        review_response = views.dna_review(
+            rf_with_tenant("get", reverse("dna-review"))
+        )
+        visualize_response = views.dna_visualize(
+            rf_with_tenant("get", reverse("dna-visualize"))
+        )
+
+        assert review_response.status_code == 200
+        assert b'id="app-shell"' in review_response.content
+        assert b'id="dna-review-root"' in review_response.content
+        assert visualize_response.status_code == 200
+        assert b'id="app-shell"' in visualize_response.content
+        assert b"DNA aziendale verificato" in visualize_response.content
+
     def test_section_approve_htmx_updates_review_fragment(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
         dna = CompanyDNA.objects.create(

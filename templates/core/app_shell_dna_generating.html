@@ -1,0 +1,25 @@
+{% extends "core/app_shell_tenant.html" %}
+
+{% block title %}Generazione DNA · ZEUS{% endblock %}
+{% block shell_page_title %}Generazione DNA{% endblock %}
+
+{% block tenant_main %}
+<section class="zeus-app-page zeus-app-page--core-flow">
+    <header class="zeus-app-page-header">
+        <div>
+            <p class="zeus-app-eyebrow">Onboarding · Attendi</p>
+            <h1>Generazione DNA in corso</h1>
+            <p>ZEUS sta riformulando le sezioni con le tue risposte.</p>
+        </div>
+    </header>
+
+    <div class="zeus-app-page-main zeus-app-page-main--centered">
+        {% include "core/partials/dna_generating_content.html" %}
+    </div>
+</section>
+{% endblock %}
+
+{% block shell_scripts %}
+{{ block.super }}
+{% include "core/partials/_app_shell_htmx.html" %}
+{% endblock %}

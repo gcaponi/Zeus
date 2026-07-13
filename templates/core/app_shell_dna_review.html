@@ -1,0 +1,71 @@
+{% extends "core/app_shell_tenant.html" %}
+
+{% block title %}Revisione DNA · ZEUS{% endblock %}
+{% block shell_page_title %}Revisione DNA{% endblock %}
+
+{% block tenant_main %}
+<section class="zeus-app-page zeus-app-page--with-context zeus-app-page--core-flow">
+    <header class="zeus-app-page-header">
+        <div>
+            <p class="zeus-app-eyebrow">Onboarding · Step 3</p>
+            <h1>Revisione DNA</h1>
+            <p>Rivedi e approva le sezioni del DNA prima della pubblicazione.</p>
+        </div>
+    </header>
+
+    <div class="zeus-app-page-body">
+        <div class="zeus-app-page-main">
+            <div class="zeus-app-panel zeus-app-panel--padded">
+                {% include "core/partials/dna_review_content.html" %}
+            </div>
+        </div>
+        <aside class="zeus-app-page-context" aria-label="Azioni e contesto">
+            {% include "core/onboarding/_step_sidebar.html" %}
+        </aside>
+    </div>
+</section>
+{% endblock %}
+
+{% block shell_scripts %}
+{{ block.super }}
+{% include "core/partials/_app_shell_htmx.html" %}
+<script>
+function openDnaPopup() {
+    var overlay = document.getElementById('dna-popup-overlay');
+    if (!overlay) return;
+    overlay.classList.remove('hidden');
+    overlay.classList.add('flex');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeDnaPopup() {
+    var overlay = document.getElementById('dna-popup-overlay');
+    if (!overlay) return;
+    overlay.classList.add('hidden');
+    overlay.classList.remove('flex');
+    document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeDnaPopup();
+});
+
+document.body.addEventListener('htmx:beforeRequest', function(event) {
+    var button = event.detail.elt;
+    if (!button || !button.matches('[data-approve-button]')) return;
+    button.disabled = true;
+    button.classList.add('opacity-70', 'cursor-wait');
+    var label = button.querySelector('[data-approve-label]');
+    if (label) label.textContent = 'Approvo...';
+});
+
+document.body.addEventListener('htmx:responseError', function(event) {
+    var button = event.detail.elt;
+    if (!button || !button.matches('[data-approve-button]')) return;
+    button.disabled = false;
+    button.classList.remove('opacity-70', 'cursor-wait');
+    var label = button.querySelector('[data-approve-label]');
+    if (label) label.textContent = 'Approva';
+});
+</script>
+{% endblock %}

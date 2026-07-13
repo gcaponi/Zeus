@@ -1338,6 +1338,362 @@ html,
   text-align: center;
 }
 
+/* ==========================================================================
+   Fase 3a — Onboarding flussi core (layout with-context, context card, chip,
+   popup overlay glass, sticky action bar)
+   ========================================================================== */
+
+.zeus-app-page--with-context .zeus-app-page-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.zeus-app-page--core-flow .hidden {
+  display: none !important;
+}
+
+.zeus-app-page--core-flow .flex { display: flex; }
+.zeus-app-page--core-flow .inline-flex { display: inline-flex; }
+.zeus-app-page--core-flow .flex-col { flex-direction: column; }
+.zeus-app-page--core-flow .flex-wrap { flex-wrap: wrap; }
+.zeus-app-page--core-flow .flex-1 { flex: 1; }
+.zeus-app-page--core-flow .items-center { align-items: center; }
+.zeus-app-page--core-flow .justify-center { justify-content: center; }
+.zeus-app-page--core-flow .justify-between { justify-content: space-between; }
+.zeus-app-page--core-flow .gap-1 { gap: 4px; }
+.zeus-app-page--core-flow .gap-2 { gap: 8px; }
+.zeus-app-page--core-flow .gap-3 { gap: 12px; }
+.zeus-app-page--core-flow .gap-4 { gap: 16px; }
+.zeus-app-page--core-flow .w-full { width: 100%; }
+.zeus-app-page--core-flow .min-w-0 { min-width: 0; }
+.zeus-app-page--core-flow .text-center { text-align: center; }
+.zeus-app-page--core-flow .text-xs { font-size: 0.75rem; }
+.zeus-app-page--core-flow .text-sm { font-size: 0.875rem; }
+.zeus-app-page--core-flow .text-lg { font-size: 1.125rem; }
+.zeus-app-page--core-flow .text-xl { font-size: 1.25rem; }
+.zeus-app-page--core-flow .font-bold { font-weight: 700; }
+.zeus-app-page--core-flow .uppercase { text-transform: uppercase; }
+.zeus-app-page--core-flow .italic { font-style: italic; }
+.zeus-app-page--core-flow .truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zeus-app-page--core-flow .break-words { overflow-wrap: anywhere; }
+.zeus-app-page--core-flow .whitespace-pre-line { white-space: pre-line; }
+.zeus-app-page--core-flow .text-content-primary { color: var(--shell-text); }
+.zeus-app-page--core-flow .text-content-secondary,
+.zeus-app-page--core-flow .text-content-muted { color: var(--shell-muted); }
+.zeus-app-page--core-flow .text-brand-cyan,
+.zeus-app-page--core-flow .text-brand-cyan-light { color: var(--shell-accent-strong); }
+.zeus-app-page--core-flow .text-brand-lime,
+.zeus-app-page--core-flow .text-green-400 { color: #15803d; }
+.zeus-app-page--core-flow .text-red-300 { color: #b91c1c; }
+.zeus-app-page--core-flow .text-yellow-300 { color: #a16207; }
+.zeus-app-page--core-flow .mt-1 { margin-top: 4px; }
+.zeus-app-page--core-flow .mt-2 { margin-top: 8px; }
+.zeus-app-page--core-flow .mt-3 { margin-top: 12px; }
+.zeus-app-page--core-flow .mt-4 { margin-top: 16px; }
+.zeus-app-page--core-flow .mt-5 { margin-top: 20px; }
+.zeus-app-page--core-flow .mt-6 { margin-top: 24px; }
+.zeus-app-page--core-flow .mt-8 { margin-top: 32px; }
+.zeus-app-page--core-flow .mb-3 { margin-bottom: 12px; }
+.zeus-app-page--core-flow .mb-4 { margin-bottom: 16px; }
+.zeus-app-page--core-flow .mb-6 { margin-bottom: 24px; }
+.zeus-app-page--core-flow .mb-8 { margin-bottom: 32px; }
+.zeus-app-page--core-flow .p-3 { padding: 12px; }
+.zeus-app-page--core-flow .p-4 { padding: 16px; }
+.zeus-app-page--core-flow .p-5 { padding: 20px; }
+.zeus-app-page--core-flow .p-6 { padding: 24px; }
+.zeus-app-page--core-flow .p-8 { padding: 32px; }
+.zeus-app-page--core-flow .space-y-2 > * + * { margin-top: 8px; }
+.zeus-app-page--core-flow .space-y-4 > * + * { margin-top: 16px; }
+.zeus-app-page--core-flow .space-y-6 > * + * { margin-top: 24px; }
+.zeus-app-page--core-flow .rounded-xl { border-radius: 8px; }
+.zeus-app-page--core-flow .border { border: 1px solid var(--shell-border); }
+.zeus-app-page--core-flow .leading-5 { line-height: 1.25rem; }
+.zeus-app-page--core-flow .leading-6 { line-height: 1.5rem; }
+.zeus-app-page--core-flow .leading-7 { line-height: 1.75rem; }
+
+:where(.zeus-app-page--core-flow) .zeus-app-steps {
+  margin-bottom: 24px;
+}
+
+:where(.zeus-app-page--core-flow) .zeus-app-steps ol {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  color: var(--shell-muted);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  list-style: none;
+}
+
+:where(.zeus-app-page--core-flow) .zeus-app-steps li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+:where(.zeus-app-page--core-flow) .zeus-app-steps li > a,
+:where(.zeus-app-page--core-flow) .zeus-app-steps li > span.inline-flex {
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--shell-border);
+  border-radius: 7px;
+  background: var(--shell-panel-muted);
+  color: var(--shell-muted);
+  font-size: 0.75rem;
+  text-decoration: none;
+}
+
+:where(.zeus-app-page--core-flow) .zeus-app-steps li > [class*="bg-brand-cyan"] {
+  border-color: #0e7490;
+  background: #0e7490;
+  color: #ffffff;
+}
+
+:where(.zeus-app-page--core-flow) .zeus-app-steps li > [class*="bg-green-500"] {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+:where(.zeus-app-page--core-flow) .zeus-app-steps li > svg {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  color: var(--shell-muted);
+}
+
+:where(.zeus-app-page--core-flow) .zeus-app-steps li > a svg {
+  width: 16px;
+  height: 16px;
+}
+
+#dna-popup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+#dna-popup-overlay.flex {
+  display: flex;
+}
+
+#dna-popup-overlay .dna-popup-panel {
+  width: min(100%, 672px);
+  max-height: 85vh;
+  overflow: hidden;
+  border-radius: 8px !important;
+}
+
+@media (min-width: 960px) {
+  .zeus-app-page--with-context .zeus-app-page-body {
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+}
+
+@media (min-width: 640px) {
+  :where(.zeus-app-page--core-flow) .zeus-app-steps li > span.hidden {
+    display: inline !important;
+  }
+
+  .zeus-app-page--core-flow .sm\:flex-row { flex-direction: row; }
+}
+
+.zeus-app-page-main {
+  min-width: 0;
+}
+
+.zeus-app-page-main--centered {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.zeus-app-panel--padded {
+  padding: 28px;
+}
+
+.zeus-app-page-context {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: sticky;
+  top: 76px;
+}
+
+.zeus-app-context-card {
+  border: 1px solid var(--shell-border);
+  border-radius: 8px;
+  background: var(--shell-panel);
+  padding: 18px;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+}
+
+.dark .zeus-app-context-card {
+  box-shadow: none;
+}
+
+.zeus-app-context-label {
+  margin: 0 0 6px;
+  color: var(--shell-muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.zeus-app-context-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zeus-app-context-meta {
+  margin: 6px 0 0;
+  color: var(--shell-muted);
+  font-size: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zeus-app-context-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.zeus-app-context-actions .zeus-btn {
+  width: 100%;
+}
+
+.zeus-app-chip {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 4px 10px;
+  border: 1px solid var(--shell-border);
+  border-radius: 999px;
+  background: var(--shell-panel);
+  color: var(--shell-accent-strong);
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+/* Popup glass "generazione in corso" — overlay accessibile */
+.zeus-app-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(2, 6, 23, 0.5);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+.zeus-app-overlay.flex {
+  display: flex;
+}
+
+.zeus-app-overlay.hidden {
+  display: none !important;
+}
+
+.zeus-app-overlay__card {
+  width: 100%;
+  max-width: 360px;
+  padding: 32px;
+  border-radius: 16px;
+  text-align: center;
+  background: var(--shell-panel);
+  border: 1px solid var(--shell-border);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.22);
+}
+
+.zeus-app-overlay__card--glass {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.dark .zeus-app-overlay__card--glass {
+  background: rgba(15, 23, 42, 0.72);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  backdrop-filter: blur(40px) saturate(180%);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.zeus-app-overlay__spinner {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 20px;
+  border: 3px solid var(--shell-accent);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: zeus-app-spin 0.8s linear infinite;
+}
+
+.zeus-app-overlay__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.zeus-app-overlay__text {
+  margin: 8px 0 0;
+  color: var(--shell-muted);
+  font-size: 0.875rem;
+}
+
+@keyframes zeus-app-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zeus-app-overlay__spinner { animation: none; }
+}
+
+/* Sticky action bar per i form domande (sostituisce utility Tailwind legacy) */
+.sticky-bottom-bar {
+  position: sticky;
+  bottom: 16px;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--shell-border);
+  border-radius: 8px;
+  background: var(--shell-panel);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.10);
+}
+
+.dark .sticky-bottom-bar {
+  background: rgba(15, 23, 42, 0.86);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+
 .zeus-product-empty p {
   margin: 0;
   color: var(--shell-muted);

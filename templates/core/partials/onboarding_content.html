@@ -1,0 +1,14 @@
+{% comment %}Cuore funzionale onboarding (Fase 3a). Estratto da onboarding.html.
+   Contiene solo il contenitore #onboarding-step con gli swap HTMX.
+   L'involucro (zeus-card legacy / zeus-app-panel shell) e' del wrapper.{% endcomment %}
+<div id="onboarding-step">
+    {% if show_source_form %}
+        {% include "core/onboarding/_source_form.html" %}
+    {% elif dna %}
+        {% include "core/onboarding/_dna.html" %}
+    {% elif run and run.status in "running pending" %}
+        {% include "core/onboarding/_progress.html" %}
+    {% else %}
+        {% include "core/onboarding/_source_form.html" %}
+    {% endif %}
+</div>

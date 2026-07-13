@@ -2021,7 +2021,12 @@ def onboarding_index(request):
     context = _onboarding_context(request)
     if not context:
         return HttpResponse("No tenant", status=400)
-    return render(request, "core/onboarding.html", context)
+    template_name = (
+        "core/app_shell_onboarding.html"
+        if settings.ZEUS_APP_SHELL_ENABLED
+        else "core/onboarding.html"
+    )
+    return render(request, template_name, context)
 
 
 @login_required
@@ -2037,7 +2042,12 @@ def onboarding_source_create(request):
             return render(request, "core/onboarding/_source_form.html", context, status=status)
         page_context = _onboarding_context(request) or {"company": company, "step": 1}
         page_context.update(context)
-        return render(request, "core/onboarding.html", page_context, status=status)
+        template_name = (
+            "core/app_shell_onboarding.html"
+            if settings.ZEUS_APP_SHELL_ENABLED
+            else "core/onboarding.html"
+        )
+        return render(request, template_name, page_context, status=status)
 
     url = _normalize_source_url(request.POST.get("url", ""))
     if not url:
@@ -2640,7 +2650,12 @@ def dna_questions(request):
 
     status_code = 400 if error else 200
     latest_run = company.pipeline_runs.order_by("-created_at").first()
-    return render(request, "core/dna_questions.html", {
+    template_name = (
+        "core/app_shell_dna_questions.html"
+        if settings.ZEUS_APP_SHELL_ENABLED
+        else "core/dna_questions.html"
+    )
+    return render(request, template_name, {
         "company": company,
         "pre_dna": pre_dna,
         "complete_dna": complete_dna,
@@ -2703,7 +2718,12 @@ def dna_gap_questions(request, round_number):
 
     status_code = 400 if error else 200
     latest_run = company.pipeline_runs.order_by("-created_at").first()
-    return render(request, "core/dna_gap_questions.html", {
+    template_name = (
+        "core/app_shell_dna_gap_questions.html"
+        if settings.ZEUS_APP_SHELL_ENABLED
+        else "core/dna_gap_questions.html"
+    )
+    return render(request, template_name, {
         "company": company,
         "pre_dna": pre_dna,
         "complete_dna": complete_dna,
@@ -2749,7 +2769,12 @@ def dna_generating(request):
     if complete_dna:
         _clear_pending_complete_generation(request)
         return redirect("dna-review")
-    return render(request, "core/dna_generating.html", {
+    template_name = (
+        "core/app_shell_dna_generating.html"
+        if settings.ZEUS_APP_SHELL_ENABLED
+        else "core/dna_generating.html"
+    )
+    return render(request, template_name, {
         **_complete_generation_progress_context(source_dna),
         "review_url": reverse("dna-review"),
         "back_url": reverse("onboarding-index"),
@@ -2768,7 +2793,12 @@ def dna_review(request):
 
     context = _dna_review_context(company, dna)
     context["return_product"] = _specialist_feedback_return_product(request, company)
-    return render(request, "core/dna_review.html", context)
+    template_name = (
+        "core/app_shell_dna_review.html"
+        if settings.ZEUS_APP_SHELL_ENABLED
+        else "core/dna_review.html"
+    )
+    return render(request, template_name, context)
 
 
 @login_required
@@ -2800,7 +2830,12 @@ def dna_visualize(request):
         return HttpResponse("DNA not found", status=404)
     latest_run = company.pipeline_runs.order_by("-created_at").first()
     final_document = _dna_final_document(dna.content)
-    return render(request, "core/dna_visualize.html", {
+    template_name = (
+        "core/app_shell_dna_visualize.html"
+        if settings.ZEUS_APP_SHELL_ENABLED
+        else "core/dna_visualize.html"
+    )
+    return render(request, template_name, {
         "company": company,
         "dna": dna,
         "sections": _dna_sections(dna.content),

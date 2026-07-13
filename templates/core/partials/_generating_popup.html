@@ -1,0 +1,27 @@
+{% comment %}Popup glass "generazione in corso" riusabile (Fase 3a).
+   Variabili: popup_title (default), popup_text (default).
+   Definisce showGeneratingPopup() richiamata dagli onsubmit dei form domande.{% endcomment %}
+<div id="generating-popup" class="zeus-app-overlay hidden" role="dialog" aria-modal="true" aria-live="polite">
+    <div class="zeus-app-overlay__card zeus-app-overlay__card--glass">
+        <div class="zeus-app-overlay__spinner" aria-hidden="true"></div>
+        <h3 class="zeus-app-overlay__title">{{ popup_title|default:"Stiamo generando il DNA" }}</h3>
+        <p class="zeus-app-overlay__text">
+            {{ popup_text|default:"ZEUS sta riformulando le sezioni con le tue risposte" }}<span id="generating-dots"></span>
+        </p>
+    </div>
+</div>
+
+<script>
+function showGeneratingPopup() {
+    var popup = document.getElementById('generating-popup');
+    if (!popup) return;
+    popup.classList.remove('hidden');
+    popup.classList.add('flex');
+    var dotsEl = document.getElementById('generating-dots');
+    var n = 0;
+    window._generatingInterval = setInterval(function() {
+        n = (n + 1) % 4;
+        dotsEl.textContent = '.'.repeat(n);
+    }, 400);
+}
+</script>
