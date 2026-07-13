@@ -1,0 +1,9 @@
+{% include "core/partials/_generation_progress.html" with title="Analisi Neurale in corso" description="ZEUS sta elaborando i documenti dello specialista." phases=product_phases status=task_status error_msg=task_error steps_total=steps_total current_step_num=current_step_num step_label=step_label progress_pct=progress_pct %}
+
+<div
+    class="mt-8"
+    hx-get="{% url 'product-detail' product.pk %}?generating=1"
+    hx-trigger="every 4s"
+    hx-target="body"
+    hx-swap="outerHTML"
+></div>

@@ -1,0 +1,22 @@
+{% extends "core/app_shell_tenant.html" %}
+
+{% block title %}Analisi Neurale · {{ product.name }} · ZEUS{% endblock %}
+{% block shell_page_title %}Analisi Neurale{% endblock %}
+
+{% block tenant_main %}
+<section class="zeus-app-page zeus-app-page--core-flow zeus-app-page--specialist-flow">
+    <header class="zeus-app-page-header">
+        <div>
+            <p class="zeus-app-eyebrow">Specialista · Preparazione</p>
+            <h1>Analisi Neurale in corso</h1>
+            <p>{{ product.name }} · Elaborazione dei documenti tecnici.</p>
+        </div>
+    </header>
+    {% include "core/partials/product_dna_loading_content.html" %}
+</section>
+{% endblock %}
+
+{% block shell_scripts %}
+{{ block.super }}
+{% include "core/partials/_app_shell_htmx.html" %}
+{% endblock %}

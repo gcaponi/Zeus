@@ -1,0 +1,23 @@
+{% extends "core/app_shell_tenant.html" %}
+
+{% block title %}Feedback DNA Generale · {{ product.name }} · ZEUS{% endblock %}
+{% block shell_page_title %}Feedback DNA Generale{% endblock %}
+
+{% block tenant_main %}
+<section class="zeus-app-page zeus-app-page--core-flow zeus-app-page--specialist-flow">
+    <header class="zeus-app-page-header">
+        <div>
+            <p class="zeus-app-eyebrow">Specialista · Step 5</p>
+            <h1>Feedback: Specialista → DNA Generale</h1>
+            <p>{{ product.name }} · Seleziona gli aggiornamenti da integrare.</p>
+        </div>
+    </header>
+    {% include "core/onboarding/_product_step_indicator.html" with product_step=5 %}
+    {% include "core/partials/product_dna_feedback_content.html" %}
+</section>
+{% endblock %}
+
+{% block shell_scripts %}
+{{ block.super }}
+{% include "core/partials/product_dna_feedback_runtime.html" %}
+{% endblock %}

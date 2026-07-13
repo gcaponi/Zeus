@@ -4484,6 +4484,14 @@ def _product_generation_progress_context(product, pre_dna=None):
     }
 
 
+def _product_detail_template_name():
+    return (
+        "core/app_shell_product_detail.html"
+        if settings.ZEUS_APP_SHELL_ENABLED
+        else "core/product_detail.html"
+    )
+
+
 @login_required
 def product_detail(request, pk):
     company = _tenant_company(request)
@@ -4502,13 +4510,18 @@ def product_detail(request, pk):
                 response["HX-Redirect"] = reverse("product-questions", args=[product.pk])
                 return response
             return redirect("product-questions", pk=product.pk)
+        template_name = (
+            "core/app_shell_product_dna_loading.html"
+            if settings.ZEUS_APP_SHELL_ENABLED
+            else "core/product_dna_loading.html"
+        )
         return render(
             request,
-            "core/product_dna_loading.html",
+            template_name,
             _product_generation_progress_context(product, pre_dna),
         )
 
-    return render(request, "core/product_detail.html", _product_detail_context(product))
+    return render(request, _product_detail_template_name(), _product_detail_context(product))
 
 
 @login_required
@@ -4526,7 +4539,7 @@ def product_file_upload(request, pk):
         if not _wants_json(request):
             return render(
                 request,
-                "core/product_detail.html",
+                _product_detail_template_name(),
                 _product_detail_context(product, block_reason),
                 status=403,
             )
@@ -4539,7 +4552,7 @@ def product_file_upload(request, pk):
         if not _wants_json(request):
             return render(
                 request,
-                "core/product_detail.html",
+                _product_detail_template_name(),
                 _product_detail_context(product, "File o note obbligatori."),
                 status=400,
             )
@@ -4560,7 +4573,7 @@ def product_file_upload(request, pk):
         if not _wants_json(request):
             return render(
                 request,
-                "core/product_detail.html",
+                _product_detail_template_name(),
                 _product_detail_context(product, error),
                 status=400,
             )
@@ -4570,7 +4583,7 @@ def product_file_upload(request, pk):
         if not _wants_json(request):
             return render(
                 request,
-                "core/product_detail.html",
+                _product_detail_template_name(),
                 _product_detail_context(product, "Contenuto vuoto."),
                 status=400,
             )
@@ -4632,7 +4645,7 @@ def product_dna_generate(request, pk):
         if not _wants_json(request):
             return render(
                 request,
-                "core/product_detail.html",
+                _product_detail_template_name(),
                 _product_detail_context(product, block_reason),
                 status=403,
             )
@@ -4643,7 +4656,7 @@ def product_dna_generate(request, pk):
         if not _wants_json(request):
             return render(
                 request,
-                "core/product_detail.html",
+                _product_detail_template_name(),
                 _product_detail_context(product, error),
                 status=400,
             )
@@ -4700,7 +4713,12 @@ def product_questions(request, pk):
     questions = list(pre_dna.questions.filter(question_round=1).order_by("id"))
 
     if not questions:
-        return render(request, "core/product_questions_loading.html", {
+        template_name = (
+            "core/app_shell_product_questions_loading.html"
+            if settings.ZEUS_APP_SHELL_ENABLED
+            else "core/product_questions_loading.html"
+        )
+        return render(request, template_name, {
             "product": product,
             "pre_dna": pre_dna,
             "product_step": 2,
@@ -4735,7 +4753,12 @@ def product_questions(request, pk):
             )
 
     status_code = 400 if error else 200
-    return render(request, "core/product_questions.html", {
+    template_name = (
+        "core/app_shell_product_questions.html"
+        if settings.ZEUS_APP_SHELL_ENABLED
+        else "core/product_questions.html"
+    )
+    return render(request, template_name, {
         "product": product,
         "pre_dna": pre_dna,
         "complete_dna": complete_dna,
@@ -4799,7 +4822,12 @@ def product_gap_questions(request, pk, round_number):
             )
 
     status_code = 400 if error else 200
-    return render(request, "core/product_gap_questions.html", {
+    template_name = (
+        "core/app_shell_product_gap_questions.html"
+        if settings.ZEUS_APP_SHELL_ENABLED
+        else "core/product_gap_questions.html"
+    )
+    return render(request, template_name, {
         "product": product,
         "pre_dna": pre_dna,
         "complete_dna": complete_dna,
@@ -4855,7 +4883,12 @@ def product_gap_processing(request, pk, round_number):
         return redirect(target)
 
     progress_context = _product_gap_progress_context(round_number, state)
-    return render(request, "core/product_gap_processing.html", {
+    template_name = (
+        "core/app_shell_product_gap_processing.html"
+        if settings.ZEUS_APP_SHELL_ENABLED
+        else "core/product_gap_processing.html"
+    )
+    return render(request, template_name, {
         "product": product,
         "pre_dna": pre_dna,
         "round_number": round_number,
@@ -4888,7 +4921,12 @@ def product_review(request, pk):
         status=ConsistencyIssue.STATUS_OPEN,
     ).count()
     publications = product.publications.filter(status=ProductPublication.STATUS_PUBLISHED)
-    return render(request, "core/product_review.html", {
+    template_name = (
+        "core/app_shell_product_review.html"
+        if settings.ZEUS_APP_SHELL_ENABLED
+        else "core/product_review.html"
+    )
+    return render(request, template_name, {
         "product": product,
         "dna": dna,
         "sections": _product_dna_sections(dna.content),
@@ -5216,7 +5254,12 @@ def product_dna_visualize(request, pk):
     if not dna:
         return HttpResponse("DNA non trovato", status=404)
     sections = _product_dna_sections(dna.content)
-    return render(request, "core/product_dna_visualize.html", {
+    template_name = (
+        "core/app_shell_product_dna_visualize.html"
+        if settings.ZEUS_APP_SHELL_ENABLED
+        else "core/product_dna_visualize.html"
+    )
+    return render(request, template_name, {
         "product": product,
         "dna": dna,
         "sections": sections,
@@ -5570,7 +5613,12 @@ def product_dna_feedback(request, pk):
             request.session[_feedback_session_key(product, specialist_dna, company_dna)] = proposals
             if hasattr(request.session, "modified"):
                 request.session.modified = True
-        return render(request, "core/product_dna_feedback.html", {
+        template_name = (
+            "core/app_shell_product_dna_feedback.html"
+            if settings.ZEUS_APP_SHELL_ENABLED
+            else "core/product_dna_feedback.html"
+        )
+        return render(request, template_name, {
             "product": product,
             "specialist_dna": specialist_dna,
             "company_dna": company_dna,
@@ -5582,7 +5630,12 @@ def product_dna_feedback(request, pk):
         # Task in flight (proposals is None): render loading page with HTMX
         # polling. The browser polls this same URL; once the Celery task
         # completes and replaces None with a list, the branch above fires.
-        return render(request, "core/product_dna_feedback_loading.html", {
+        template_name = (
+            "core/app_shell_product_dna_feedback_loading.html"
+            if settings.ZEUS_APP_SHELL_ENABLED
+            else "core/product_dna_feedback_loading.html"
+        )
+        return render(request, template_name, {
             "product": product,
             "product_step": 5,
             **_specialist_feedback_progress_context(specialist_dna),

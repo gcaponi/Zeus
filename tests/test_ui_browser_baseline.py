@@ -1,5 +1,6 @@
 import hashlib
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 
 from django.conf import settings
@@ -9,8 +10,14 @@ from django.test import override_settings
 from django.urls import reverse
 from playwright.sync_api import sync_playwright
 
-from apps.companies.dna_schemas import LAYER_KEYS
-from apps.companies.models import Company, CompanyDNA, CompanyQuestion
+from apps.companies.dna_schemas import LAYER_KEYS, PRODUCT_LAYER_KEYS
+from apps.companies.models import (
+    Company,
+    CompanyDNA,
+    CompanyQuestion,
+    Product,
+    ProductDNA,
+)
 
 
 BROWSER_MIDDLEWARE = [
@@ -404,6 +411,150 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                     self.assertEqual(
                         page.locator(".zeus-app-nav a.is-active").inner_text(),
                         "Onboarding",
+                    )
+                    self.assertTrue(page.locator(contract).count())
+                    if requires_htmx:
+                        self.assertTrue(
+                            page.evaluate("typeof window.htmx !== 'undefined'")
+                        )
+                    for overlay_selector in (
+                        "#generating-popup",
+                        "#dna-popup-overlay",
+                    ):
+                        overlay = page.locator(overlay_selector)
+                        if overlay.count():
+                            self.assertFalse(overlay.is_visible())
+                    self.assertFalse(page_errors)
+                    self._assert_no_horizontal_overflow(page)
+                    self._assert_visual_baseline(
+                        page,
+                        f"app-shell-{surface_name}-{viewport_name}",
+                    )
+                    page.close()
+                context.close()
+            browser.close()
+
+    @override_settings(ZEUS_APP_SHELL_ENABLED=True)
+    def test_specialist_app_shell_visual_baselines(self):
+        user = get_user_model().objects.create_user(
+            username="browser-specialist-shell",
+            email="browser-specialist-shell@example.com",
+            password="test-password",
+        )
+        company = Company.objects.create(
+            schema_name="ui-baseline",
+            name="UI Baseline",
+        )
+        product = Product.objects.create(
+            company=company,
+            name="Vasca Premium",
+            slug="vasca-premium",
+            tipologia="Componente",
+            status=Product.STATUS_BOZZA,
+        )
+        ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_PRE,
+            is_current=False,
+            content={key: f"Contesto pre-DNA {key}." for key in PRODUCT_LAYER_KEYS},
+        )
+        complete_content = {
+            key: f"Contenuto verificato per {key}." for key in PRODUCT_LAYER_KEYS
+        }
+        complete_dna = ProductDNA.objects.create(
+            product=product,
+            version=2,
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            content=complete_content,
+        )
+        ProductDNA.objects.filter(pk=complete_dna.pk).update(
+            created_at=datetime(2026, 7, 13, 18, 56, tzinfo=UTC)
+        )
+
+        self.client.force_login(user)
+        session_cookie = self.client.cookies[settings.SESSION_COOKIE_NAME].value
+        surfaces = [
+            (
+                "specialist-list",
+                reverse("product-list-create"),
+                "Specialisti",
+                'input[name="name"]',
+                False,
+            ),
+            (
+                "specialist-detail",
+                reverse("product-detail", args=[product.pk]),
+                "Dettaglio Specialista",
+                "text=Vasca Premium",
+                False,
+            ),
+            (
+                "specialist-questions",
+                reverse("product-questions", args=[product.pk]),
+                "Preparazione Domande",
+                "text=Preparazione domande",
+                True,
+            ),
+            (
+                "specialist-review",
+                reverse("product-review", args=[product.pk]),
+                "Revisione Specialista",
+                "text=Identità del prodotto",
+                False,
+            ),
+            (
+                "specialist-visualize",
+                reverse("product-dna-visualize", args=[product.pk]),
+                "DNA Specialista",
+                "text=Identità del prodotto",
+                False,
+            ),
+        ]
+
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            for viewport_name, viewport in VIEWPORTS.items():
+                context = browser.new_context(
+                    viewport=viewport,
+                    color_scheme="light",
+                    reduced_motion="reduce",
+                    extra_http_headers={"X-Zeus-Test-Tenant": "ui-baseline"},
+                )
+                context.add_init_script(
+                    "localStorage.setItem('zeus-theme', 'light')"
+                )
+                context.add_cookies(
+                    [
+                        {
+                            "name": settings.SESSION_COOKIE_NAME,
+                            "value": session_cookie,
+                            "url": self.live_server_url,
+                        }
+                    ]
+                )
+
+                for surface_name, path, title, contract, requires_htmx in surfaces:
+                    page_errors = []
+                    page = context.new_page()
+                    page.on(
+                        "pageerror",
+                        lambda error, errors=page_errors: errors.append(str(error)),
+                    )
+                    response = page.goto(
+                        f"{self.live_server_url}{path}",
+                        wait_until="networkidle",
+                    )
+
+                    self.assertTrue(response.ok)
+                    self.assertTrue(page.locator(".zeus-app-shell--tenant").count())
+                    self.assertEqual(
+                        page.locator(".zeus-app-breadcrumb strong").inner_text(),
+                        title,
+                    )
+                    self.assertEqual(
+                        page.locator(".zeus-app-nav a.is-active").inner_text(),
+                        "Specialisti",
                     )
                     self.assertTrue(page.locator(contract).count())
                     if requires_htmx:

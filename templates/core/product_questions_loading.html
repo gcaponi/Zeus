@@ -14,42 +14,6 @@
     </header>
 
     {% include "core/onboarding/_product_step_indicator.html" with product_step=product_step %}
-
-    <div
-        class="zeus-card p-8 mt-6 text-center"
-        hx-get="{% url 'product-questions' product.pk %}"
-        hx-trigger="every 3s"
-        hx-target="body"
-        hx-swap="outerHTML"
-    >
-        <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-brand-cyan/10">
-            <div class="w-8 h-8 rounded-full border-[3px] border-brand-cyan-light border-t-transparent animate-spin"></div>
-        </div>
-        <h3 class="text-lg font-bold font-display text-content-primary">ZEUS sta generando le domande</h3>
-        <p class="mt-2 text-sm text-content-secondary">Analisi del pre-DNA specialista in corso...</p>
-        <div id="zeus-phases" class="mt-6 space-y-3 text-sm">
-            <div class="zeus-phase"><span class="zeus-phase-dot"></span>1. Lettura del pre-DNA specialista</div>
-            <div class="zeus-phase"><span class="zeus-phase-dot"></span>2. Collegamento con il DNA Generale</div>
-            <div class="zeus-phase"><span class="zeus-phase-dot"></span>3. Generazione 10 domande combinazionali</div>
-        </div>
-    </div>
+    {% include "core/partials/product_questions_loading_content.html" %}
 </div>
-
-<script>
-(function() {
-    var phases = document.querySelectorAll('#zeus-phases .zeus-phase');
-    var current = 0;
-    function tick() {
-        phases.forEach(function(p, i) {
-            p.classList.remove('zeus-phase-active', 'zeus-phase-done');
-            if (i < current) p.classList.add('zeus-phase-done');
-            if (i === current) p.classList.add('zeus-phase-active');
-        });
-        current++;
-        if (current > phases.length) current = 0;
-    }
-    tick();
-    setInterval(tick, 1800);
-})();
-</script>
 {% endblock %}

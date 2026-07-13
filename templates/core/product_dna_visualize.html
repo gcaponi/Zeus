@@ -10,43 +10,7 @@
 {% endblock %}
 
 {% block main_content %}
-<section class="dna-visualize-main">
-    {% if not dna.is_approved %}
-    <div class="zeus-card p-5 mb-8" style="border-color: rgba(234, 179, 8, 0.35); background: rgba(234, 179, 8, 0.06);">
-        <p class="text-sm text-yellow-300">
-            Questo DNA non è ancora stato approvato in tutte le sue parti.
-            <a href="{% url 'product-review' product.pk %}" class="underline hover:text-yellow-200">Torna alla revisione</a> per completare le approvazioni.
-        </p>
-    </div>
-    {% endif %}
-
-    <div class="zeus-card p-6 md:p-8">
-        <header class="mb-8 text-center">
-            <h1 class="text-2xl sm:text-3xl font-bold font-display text-content-primary">DNA Specialista</h1>
-            <p class="mt-2 text-content-secondary text-sm tracking-wide uppercase">
-                {{ product.name }} · Versione {{ dna.version }}
-            </p>
-            {% if dna.created_at %}
-            <p class="text-content-muted text-xs mt-1">
-                Redatto il {{ dna.created_at|date:"d F Y" }}
-            </p>
-            {% endif %}
-        </header>
-
-        <div class="space-y-8">
-            {% for section in sections %}
-                <section>
-                    <h2 class="text-lg font-bold font-display text-brand-cyan pb-2 mb-3" style="border-bottom: 1px solid rgba(255,255,255,0.06);">{{ section.label }}</h2>
-                    <div class="text-sm leading-7 text-content-primary break-words">{{ section.value|markdownify|default:"<p>Non disponibile</p>" }}</div>
-                    {% include "core/partials/_technical_specs.html" with specs=section.specs %}
-                </section>
-            {% empty %}
-                <p class="text-content-muted italic text-center">Documento non disponibile.</p>
-            {% endfor %}
-        </div>
-    </div>
-
-</section>
+{% include "core/partials/product_dna_visualize_content.html" %}
 {% endblock %}
 
 {% block sidebar_content %}

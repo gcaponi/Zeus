@@ -1,0 +1,17 @@
+{% with phases_list=gap_phases|default:None %}
+{% include "core/partials/_generation_progress.html" with title="ZEUS sta valutando le risposte" description="Il Gap Engine sta decidendo se servono altri approfondimenti o se può generare il DNA Specialista completo." status=task_status error_msg=task_error phases=phases_list steps_total=steps_total current_step_num=current_step_num step_label=step_label progress_pct=progress_pct %}
+{% endwith %}
+
+{% if state.status == "failed" %}
+    <div class="mt-5 rounded-xl border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-300">
+        Valutazione non completata. Riprova o torna allo specialista.
+    </div>
+{% endif %}
+
+<div
+    class="mt-8"
+    hx-get="{% url 'product-gap-processing' product.pk round_number %}"
+    hx-trigger="every 4s"
+    hx-target="body"
+    hx-swap="outerHTML"
+></div>

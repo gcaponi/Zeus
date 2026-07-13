@@ -1,0 +1,72 @@
+{% comment %}Cuore funzionale review DNA Specialista (Fase 3b).{% endcomment %}
+{% load zeus_filters %}
+{% if is_fully_approved %}
+    <div class="mb-6 zeus-card p-5" style="border-color: rgba(34, 197, 94, 0.3); background: rgba(34, 197, 94, 0.05);">
+        <p class="zeus-label text-brand-lime">DNA specialista approvato</p>
+        <p class="mt-2 text-lg font-bold font-display">Tutte le sezioni sono state approvate.</p>
+    </div>
+{% endif %}
+
+<div class="space-y-4">
+    {% for section in sections %}
+        <section class="zeus-card p-5">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <h3 class="text-lg font-bold font-display text-brand-cyan">{{ section.label }}</h3>
+                {% if section.key in approved_keys %}
+                    <span class="zeus-badge zeus-badge-lime">Approvato</span>
+                {% elif section.key in missing_keys %}
+                    <span class="zeus-badge zeus-badge-amber">Da approvare</span>
+                {% endif %}
+            </div>
+            <div class="mt-4 text-sm leading-6 text-content-primary break-words" style="text-wrap: pretty;">{{ section.value|markdownify|default:"<p>Non disponibile</p>" }}</div>
+            {% include "core/partials/_technical_specs.html" with specs=section.specs %}
+
+            {% if section.key not in approved_keys and not is_fully_approved %}
+                <div class="mt-4 flex gap-3">
+                    <button hx-post="{% url 'product-section-approve' product.pk section.key %}" hx-swap="outerHTML" class="zeus-btn zeus-btn-secondary zeus-btn-sm">Approva</button>
+                    <button onclick="document.getElementById('edit-{{ section.key }}').classList.toggle('hidden')" class="zeus-btn zeus-btn-ghost zeus-btn-sm">Modifica</button>
+                </div>
+                <form id="edit-{{ section.key }}" class="hidden mt-4" hx-post="{% url 'product-section-edit' product.pk section.key %}" hx-swap="outerHTML" hx-target="closest section">
+                    {% csrf_token %}
+                    <textarea name="text" rows="4" class="zeus-input font-mono text-xs">{{ section.value }}</textarea>
+                    <button type="submit" class="zeus-btn zeus-btn-primary mt-3">Salva e crea nuova versione</button>
+                </form>
+            {% endif %}
+        </section>
+    {% endfor %}
+</div>
+
+{% if critique_proposals %}
+    <div class="mt-8">
+        <h2 class="text-xl font-bold font-display text-brand-violet mb-4">Analisi critica ZEUS</h2>
+        <p class="text-sm text-content-secondary mb-4">ZEUS ha revisionato il DNA e propone miglioramenti per queste sezioni. Accetta o rifiuta.</p>
+        <div class="space-y-4">
+            {% for index, proposal in critique_proposals %}
+                <div class="zeus-card p-5" style="border-color: rgba(167, 139, 250, 0.25);">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="zeus-badge zeus-badge-violet">{{ proposal.section_key }}</span>
+                        {% if proposal.anti_memorization %}
+                            <span class="zeus-badge zeus-badge-amber">Sintesi migliorabile</span>
+                        {% endif %}
+                        <span class="text-xs text-content-muted">Auto-critica ZEUS</span>
+                    </div>
+                    <p class="text-sm text-content-secondary mb-3">{{ proposal.issue }}</p>
+                    <div class="rounded-lg border border-white/10 bg-white/5 p-3">
+                        <p class="text-xs text-content-muted mb-1">Testo proposto:</p>
+                        <div class="text-sm leading-6 text-content-primary break-words">{{ proposal.proposed_text|markdownify }}</div>
+                    </div>
+                    <div class="mt-3 flex gap-3">
+                        <form method="post" action="{% url 'product-critique-accept' product.pk index %}">
+                            {% csrf_token %}
+                            <button type="submit" class="zeus-btn zeus-btn-secondary zeus-btn-sm">Accetta</button>
+                        </form>
+                        <form method="post" action="{% url 'product-critique-reject' product.pk index %}">
+                            {% csrf_token %}
+                            <button type="submit" class="zeus-btn zeus-btn-ghost zeus-btn-sm">Rifiuta</button>
+                        </form>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+{% endif %}

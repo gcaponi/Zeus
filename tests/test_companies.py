@@ -1006,6 +1006,36 @@ class TestDNAQuestions:
         assert htmx_response.status_code == 204
         assert not htmx_response.content
 
+    @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
+    def test_dna_generating_hx_redirect_preserved_with_app_shell(self, rf_with_tenant):
+        """Con App Shell attivo il polling HTMX deve comunque emettere
+        HX-Redirect verso la review non appena il DNA completo e pronto."""
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+
+        # DNA completo ancora assente: il polling resta in attesa (204 vuoto,
+        # nessun HX-Redirect) anche se la pagina di attesa usa la shell.
+        hx_req = rf_with_tenant("get", reverse("dna-generating"))
+        hx_req.META["HTTP_HX_REQUEST"] = "true"
+        resp = views.dna_generating(hx_req)
+        assert resp.status_code == 204
+        assert not resp.content
+        assert "HX-Redirect" not in resp
+
+        # DNA completo disponibile: il polling rilascia il redirect verso la
+        # review. Questo e il contratto che la migrazione shell non deve rompere.
+        CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            content={"chi_siamo": "Completo"},
+        )
+
+        hx_req = rf_with_tenant("get", reverse("dna-generating"))
+        hx_req.META["HTTP_HX_REQUEST"] = "true"
+        resp = views.dna_generating(hx_req)
+        assert resp.status_code == 204
+        assert resp["HX-Redirect"] == reverse("dna-review")
+
     def test_professional_questions_use_context_and_documents(
         self,
         rf_with_tenant,
@@ -1773,6 +1803,63 @@ class TestProductViews:
         response = views.product_detail(request, product.pk)
         assert response.status_code == 200
 
+    @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
+    def test_product_detail_and_feedback_use_app_shell(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+
+        detail_response = views.product_detail(
+            rf_with_tenant("get", reverse("product-detail", args=[product.pk])),
+            product.pk,
+        )
+        error_response = views.product_file_upload(
+            rf_with_tenant(
+                "post",
+                reverse("product-file-upload", args=[product.pk]),
+                form=True,
+            ),
+            product.pk,
+        )
+
+        for response in (detail_response, error_response):
+            assert b'zeus-app-shell--tenant' in response.content
+            assert b'id="product-file-upload-form"' in response.content
+        assert error_response.status_code == 400
+
+        ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            is_approved=timezone.now(),
+            content={
+                "identita_tecnica": "DNA Specialista",
+                "_feedback_proposals": [
+                    {
+                        "target_layer": "nucleo_tecnico",
+                        "current_value": "Attuale",
+                        "proposed_value": "Proposto",
+                        "rationale": "Motivo",
+                    }
+                ],
+            },
+        )
+        CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            is_current=True,
+            content={"nucleo_tecnico": "DNA Generale"},
+        )
+        feedback_response = views.product_dna_feedback(
+            rf_with_tenant("get", reverse("product-dna-feedback", args=[product.pk])),
+            product.pk,
+        )
+
+        assert feedback_response.status_code == 200
+        assert b'zeus-app-shell--tenant' in feedback_response.content
+        assert b'name="selected_proposals"' in feedback_response.content
+        assert b'id="feedback-regeneration-popup"' in feedback_response.content
+
     def test_product_detail_shows_uploaded_files(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
         product = Product.objects.create(company=company, name="Vasca", slug="vasca")
@@ -1909,6 +1996,129 @@ class TestProductViews:
         assert b"ZEUS sta generando le domande" in response.content
         delay.assert_not_called()
 
+    @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
+    def test_product_loading_pages_use_app_shell_and_keep_body_polling(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        ProductFile.objects.create(
+            product=product,
+            original_name="scheda.txt",
+            content_text="Scheda tecnica",
+        )
+        pre_dna = ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_PRE,
+            content={"identita_tecnica": "Pre DNA"},
+        )
+
+        loading_responses = [
+            views.product_detail(
+                rf_with_tenant(
+                    "get",
+                    f"{reverse('product-detail', args=[product.pk])}?generating=1",
+                ),
+                product.pk,
+            ),
+            views.product_questions(
+                rf_with_tenant("get", reverse("product-questions", args=[product.pk])),
+                product.pk,
+            ),
+            views.product_gap_processing(
+                rf_with_tenant(
+                    "get",
+                    reverse("product-gap-processing", args=[product.pk, 1]),
+                ),
+                product.pk,
+                1,
+            ),
+        ]
+
+        complete_product = Product.objects.create(
+            company=company,
+            name="Pompa",
+            slug="pompa",
+            codice="POMPA-01",
+        )
+        ProductDNA.objects.create(
+            product=complete_product,
+            version=1,
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            is_approved=timezone.now(),
+            content={
+                "identita_tecnica": "DNA Specialista",
+                "_feedback_proposals": None,
+            },
+        )
+        CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            is_current=True,
+            content={"nucleo_tecnico": "DNA Generale"},
+        )
+        loading_responses.append(
+            views.product_dna_feedback(
+                rf_with_tenant(
+                    "get",
+                    reverse("product-dna-feedback", args=[complete_product.pk]),
+                ),
+                complete_product.pk,
+            )
+        )
+
+        for response in loading_responses:
+            assert response.status_code == 200
+            assert b'zeus-app-shell--tenant' in response.content
+            assert b'hx-target="body"' in response.content
+
+    @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
+    def test_product_question_forms_use_app_shell(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        pre_dna = ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_PRE,
+            content={"identita_tecnica": "Pre DNA"},
+        )
+        first_question = ProductQuestion.objects.create(
+            product=product,
+            dna=pre_dna,
+            code="D1",
+            principle="Identita prodotto",
+            question="Cosa distingue il prodotto?",
+            question_round=1,
+        )
+
+        questions_response = views.product_questions(
+            rf_with_tenant("get", reverse("product-questions", args=[product.pk])),
+            product.pk,
+        )
+
+        assert questions_response.status_code == 200
+        assert b'zeus-app-shell--tenant' in questions_response.content
+        assert f'name="answer_{first_question.pk}"'.encode() in questions_response.content
+
+        gap_question = ProductQuestion.objects.create(
+            product=product,
+            dna=pre_dna,
+            code="G1",
+            principle="Lacuna tecnica",
+            question="Quale limite operativo manca?",
+            question_round=2,
+        )
+        gap_response = views.product_gap_questions(
+            rf_with_tenant("get", reverse("product-gap-questions", args=[product.pk, 2])),
+            product.pk,
+            2,
+        )
+
+        assert gap_response.status_code == 200
+        assert b'zeus-app-shell--tenant' in gap_response.content
+        assert f'name="answer_{gap_question.pk}"'.encode() in gap_response.content
+        assert b'id="generating-popup"' in gap_response.content
+
     def test_product_gap_processing_shows_persisted_progress(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
         product = Product.objects.create(company=company, name="Vasca", slug="vasca")
@@ -2022,6 +2232,45 @@ class TestProductViews:
         response = views.product_dna_visualize(request, product.pk)
 
         assert response.status_code == 200
+        assert b"Aggiorna DNA Generale" in response.content
+
+    @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
+    def test_product_review_uses_app_shell_with_htmx_actions(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            content={"identita_tecnica": "DNA completo"},
+        )
+        request = rf_with_tenant("get", reverse("product-review", args=[product.pk]))
+
+        response = views.product_review(request, product.pk)
+
+        assert response.status_code == 200
+        assert b'zeus-app-shell--tenant' in response.content
+        assert reverse("product-section-approve", args=[product.pk, "identita_tecnica"]).encode() in response.content
+        assert reverse("product-section-edit", args=[product.pk, "identita_tecnica"]).encode() in response.content
+
+    @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
+    def test_product_dna_visualize_uses_app_shell_when_flag_enabled(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            is_approved=timezone.now(),
+            content={"identita_tecnica": "DNA completo"},
+        )
+        request = rf_with_tenant("get", reverse("product-dna-visualize", args=[product.pk]))
+
+        response = views.product_dna_visualize(request, product.pk)
+
+        assert response.status_code == 200
+        assert b'zeus-app-shell--tenant' in response.content
+        assert b"DNA completo" in response.content
         assert b"Aggiorna DNA Generale" in response.content
 
     def test_complete_product_dna_rewrites_sections_instead_of_appending_answers(self):

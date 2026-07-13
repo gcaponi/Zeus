@@ -1,0 +1,27 @@
+{% extends "core/app_shell_tenant.html" %}
+
+{% block title %}Visualizzazione DNA {{ product.name }} · ZEUS{% endblock %}
+{% block shell_page_title %}DNA Specialista{% endblock %}
+
+{% block tenant_main %}
+<section class="zeus-app-page zeus-app-page--with-context zeus-app-page--core-flow zeus-app-page--specialist-flow">
+    <header class="zeus-app-page-header">
+        <div>
+            <p class="zeus-app-eyebrow">Specialista · Step 4</p>
+            <h1>Visualizzazione DNA</h1>
+            <p>{{ product.name }} · Versione {{ dna.version }}</p>
+        </div>
+    </header>
+
+    {% include "core/onboarding/_product_step_indicator.html" with product_step=4 %}
+
+    <div class="zeus-app-page-body">
+        <div class="zeus-app-page-main">
+            {% include "core/partials/product_dna_visualize_content.html" %}
+        </div>
+        <aside class="zeus-app-page-context" aria-label="Azioni e contesto">
+            {% include "core/onboarding/_product_step_sidebar.html" %}
+        </aside>
+    </div>
+</section>
+{% endblock %}

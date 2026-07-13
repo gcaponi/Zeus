@@ -1,0 +1,65 @@
+<script>
+(function() {
+    var form = document.getElementById('product-file-upload-form');
+    if (!form) return;
+    var unlimited = {{ unlimited_product_files|yesno:"true,false" }};
+    var maxBytes = {{ max_product_files_mb|default:"5" }} * 1024 * 1024;
+    var usedBytes = {{ product_files_bytes_used|default:"0" }};
+    var remaining = maxBytes - usedBytes;
+    var fileInput = document.getElementById('product-file-input');
+    var fileText = form.querySelector('.zeus-file-text');
+    if (fileInput && fileText) {
+        fileInput.addEventListener('change', function() {
+            var hasFile = fileInput.files && fileInput.files.length > 0;
+            form.querySelector('.zeus-file-input').classList.toggle('has-file', hasFile);
+            fileText.textContent = hasFile ? fileInput.files[0].name : 'Scegli file';
+        });
+    }
+    form.addEventListener('submit', function(evt) {
+        var input = document.getElementById('product-file-input');
+        if (!input || !input.files.length) return;
+        var totalSize = 0;
+        for (var i = 0; i < input.files.length; i++) totalSize += input.files[i].size;
+        if (!unlimited && totalSize > remaining) {
+            evt.preventDefault();
+            var remainingMB = (remaining / (1024 * 1024)).toFixed(1);
+            var fileMB = (totalSize / (1024 * 1024)).toFixed(1);
+            alert('File troppo grande (' + fileMB + ' MB).\n' + 'Spazio rimanente: ' + remainingMB + ' MB.\n' + 'Seleziona file più piccoli o elimina documenti esistenti.');
+        }
+    });
+})();
+
+function showNeuralPopup() {
+    var popup = document.getElementById('neural-popup');
+    if (!popup) return;
+    popup.classList.remove('hidden');
+    popup.classList.add('flex');
+    var steps = document.querySelectorAll('.neural-step');
+    var current = 0;
+    function activateStep() {
+        if (current > 0) {
+            steps[current - 1].classList.remove('active');
+            steps[current - 1].classList.add('done');
+        }
+        if (current < steps.length) {
+            steps[current].classList.add('active');
+            current++;
+            setTimeout(activateStep, 1200);
+        }
+    }
+    activateStep();
+}
+</script>
+
+<div id="neural-popup" class="fixed inset-0 z-50 hidden items-center justify-center" style="background: rgba(2,6,23,0.6); backdrop-filter: blur(8px);">
+    <div class="zeus-card p-8 text-center mx-4" style="max-width: min(420px, calc(100vw - 2rem));">
+        <h3 class="text-lg font-bold font-display text-content-primary mb-2">Analisi Neurale</h3>
+        <p class="text-sm text-content-secondary mb-6">ZEUS sta elaborando i documenti</p>
+        <div class="space-y-3 text-left">
+            <div class="neural-step flex items-center gap-3 opacity-30 transition-all duration-500"><div class="w-6 h-6 rounded-full border-2 border-brand-cyan flex items-center justify-center text-xs"></div><span class="text-sm text-content-primary">Layer 1: Lettura documenti</span></div>
+            <div class="neural-step flex items-center gap-3 opacity-30 transition-all duration-500"><div class="w-6 h-6 rounded-full border-2 border-brand-cyan flex items-center justify-center text-xs"></div><span class="text-sm text-content-primary">Layer 2: Estrazione fatti tecnici</span></div>
+            <div class="neural-step flex items-center gap-3 opacity-30 transition-all duration-500"><div class="w-6 h-6 rounded-full border-2 border-brand-cyan flex items-center justify-center text-xs"></div><span class="text-sm text-content-primary">Layer 3: Analisi pattern e principi</span></div>
+            <div class="neural-step flex items-center gap-3 opacity-30 transition-all duration-500"><div class="w-6 h-6 rounded-full border-2 border-brand-cyan flex items-center justify-center text-xs"></div><span class="text-sm text-content-primary">Layer 4: Sintesi DNA Specialista</span></div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,24 @@
+{% extends "core/app_shell_tenant.html" %}
+
+{% block title %}Domande Specialista · {{ product.name }} · ZEUS{% endblock %}
+{% block shell_page_title %}Domande Specialista{% endblock %}
+
+{% block tenant_main %}
+<section class="zeus-app-page zeus-app-page--core-flow zeus-app-page--specialist-flow">
+    <header class="zeus-app-page-header">
+        <div>
+            <p class="zeus-app-eyebrow">Specialista · Step 2</p>
+            <h1>10 domande per il DNA specialista</h1>
+            <p>{{ product.name }} · Pre-DNA v{{ pre_dna.version }} · {{ plan_label }}</p>
+        </div>
+    </header>
+
+    {% include "core/onboarding/_product_step_indicator.html" with product_step=2 %}
+    {% include "core/partials/product_questions_content.html" %}
+</section>
+{% endblock %}
+
+{% block shell_scripts %}
+{{ block.super }}
+{% include "core/partials/_app_shell_htmx.html" %}
+{% endblock %}
