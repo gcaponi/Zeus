@@ -5,113 +5,22 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}ZEUS App Shell{% endblock %}</title>
+    <script>
+        try {
+            document.documentElement.classList.toggle(
+                "dark",
+                localStorage.getItem("zeus-theme") === "dark"
+            );
+        } catch (error) {
+            document.documentElement.classList.remove("dark");
+        }
+    </script>
     <link rel="stylesheet" href="{% static 'zeus-design.css' %}">
-    <style>
-        :root {
-            --shell-canvas: #f6f7f9;
-            --shell-panel: #ffffff;
-            --shell-border: #e2e8f0;
-            --shell-text: #0f172a;
-            --shell-muted: #64748b;
-            --shell-accent: #0891b2;
-            --shell-sidebar-width: 248px;
-            --shell-header-height: 52px;
-        }
-
-        * {
-            box-sizing: border-box;
-        }
-
-        html,
-        body {
-            height: 100%;
-            margin: 0;
-        }
-
-        body {
-            background: var(--shell-canvas);
-            color: var(--shell-text);
-            font-family: Inter, system-ui, sans-serif;
-        }
-
-        .zeus-app-shell {
-            display: grid;
-            grid-template-areas:
-                "sidebar header"
-                "sidebar main";
-            grid-template-columns: var(--shell-sidebar-width) minmax(0, 1fr);
-            grid-template-rows: var(--shell-header-height) minmax(0, 1fr);
-            min-height: 100vh;
-        }
-
-        .zeus-app-shell__sidebar {
-            grid-area: sidebar;
-            overflow-y: auto;
-            background: var(--shell-panel);
-            border-right: 1px solid var(--shell-border);
-        }
-
-        .zeus-app-shell__header {
-            grid-area: header;
-            display: flex;
-            align-items: center;
-            min-width: 0;
-            background: var(--shell-panel);
-            border-bottom: 1px solid var(--shell-border);
-        }
-
-        .zeus-app-shell__main {
-            grid-area: main;
-            min-width: 0;
-            overflow: auto;
-            padding: 24px;
-        }
-
-        .zeus-app-shell a {
-            color: inherit;
-        }
-
-        .zeus-app-shell :focus-visible {
-            outline: 3px solid color-mix(in srgb, var(--shell-accent) 35%, transparent);
-            outline-offset: 2px;
-        }
-
-        @media (max-width: 767px) {
-            .zeus-app-shell {
-                grid-template-areas:
-                    "header"
-                    "sidebar"
-                    "main";
-                grid-template-columns: minmax(0, 1fr);
-                grid-template-rows: var(--shell-header-height) auto minmax(0, 1fr);
-            }
-
-            .zeus-app-shell__sidebar {
-                border-right: 0;
-                border-bottom: 1px solid var(--shell-border);
-            }
-
-            .zeus-app-shell__main {
-                padding: 16px;
-            }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-            *,
-            *::before,
-            *::after {
-                scroll-behavior: auto !important;
-                transition-duration: 0.01ms !important;
-                animation-duration: 0.01ms !important;
-                animation-iteration-count: 1 !important;
-            }
-        }
-    </style>
     {% block shell_head %}{% endblock %}
 </head>
-<body>
+<body class="zeus-app-shell-body">
     <!-- app-shell:v1 -->
-    <div id="app-shell" class="zeus-app-shell" data-app-shell="v1">
+    <div id="app-shell" class="zeus-app-shell {% block shell_class %}{% endblock %}" data-app-shell="v1">
         <aside id="app-sidebar" class="zeus-app-shell__sidebar" aria-label="Navigazione principale">
             {% block shell_sidebar %}{% endblock %}
         </aside>

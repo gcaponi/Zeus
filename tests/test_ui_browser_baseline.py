@@ -27,7 +27,6 @@ VIEWPORTS = {
     MIDDLEWARE=BROWSER_MIDDLEWARE,
     ALLOWED_HOSTS=["*"],
     DEBUG=True,
-    ZEUS_APP_SHELL_ENABLED=True,
 )
 class TestUIBrowserBaseline(StaticLiveServerTestCase):
     def _assert_no_horizontal_overflow(self, page):
@@ -153,6 +152,7 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                 tenant_context.close()
             browser.close()
 
+    @override_settings(ZEUS_APP_SHELL_ENABLED=True)
     def test_app_shell_preview_visual_baselines(self):
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)
@@ -175,5 +175,104 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                 self.assertTrue(page.locator("#app-main").count())
                 self._assert_no_horizontal_overflow(page)
                 self._assert_visual_baseline(page, f"app-shell-preview-{viewport_name}")
+                context.close()
+            browser.close()
+
+    @override_settings(ZEUS_APP_SHELL_ENABLED=True)
+    def test_tenant_app_shell_visual_baselines(self):
+        user = get_user_model().objects.create_user(
+            username="browser-app-shell",
+            email="browser-app-shell@example.com",
+            password="test-password",
+        )
+        self.client.force_login(user)
+        session_cookie = self.client.cookies[settings.SESSION_COOKIE_NAME].value
+
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            for viewport_name, viewport in VIEWPORTS.items():
+                context = browser.new_context(
+                    viewport=viewport,
+                    color_scheme="light",
+                    reduced_motion="reduce",
+                    extra_http_headers={"X-Zeus-Test-Tenant": "ui-baseline"},
+                )
+                context.add_init_script(
+                    "localStorage.setItem('zeus-theme', 'light')"
+                )
+                context.add_cookies(
+                    [
+                        {
+                            "name": settings.SESSION_COOKIE_NAME,
+                            "value": session_cookie,
+                            "url": self.live_server_url,
+                        }
+                    ]
+                )
+
+                dashboard_page = context.new_page()
+                dashboard_response = dashboard_page.goto(
+                    f"{self.live_server_url}{reverse('tenant-dashboard')}",
+                    wait_until="networkidle",
+                )
+
+                self.assertTrue(dashboard_response.ok)
+                self.assertTrue(dashboard_page.locator(".zeus-app-shell--tenant").count())
+                self.assertEqual(dashboard_page.locator("h1").inner_text(), "UI Baseline")
+                self.assertEqual(
+                    dashboard_page.locator(".zeus-app-nav a.is-active").inner_text(),
+                    "Dashboard",
+                )
+                self.assertTrue(dashboard_page.get_by_text("Inizia onboarding").count())
+                self._assert_no_horizontal_overflow(dashboard_page)
+                self._assert_visual_baseline(
+                    dashboard_page,
+                    f"app-shell-dashboard-{viewport_name}",
+                )
+
+                theme_toggle = dashboard_page.locator("[data-app-theme-toggle]")
+                theme_toggle.click()
+                self.assertTrue(
+                    dashboard_page.locator("html").evaluate(
+                        "element => element.classList.contains('dark')"
+                    )
+                )
+                theme_toggle.click()
+                self.assertFalse(
+                    dashboard_page.locator("html").evaluate(
+                        "element => element.classList.contains('dark')"
+                    )
+                )
+
+                if viewport_name == "mobile":
+                    menu_toggle = dashboard_page.locator("[data-app-menu-toggle]")
+                    self.assertTrue(menu_toggle.is_visible())
+                    menu_toggle.click()
+                    self.assertEqual(menu_toggle.get_attribute("aria-expanded"), "true")
+                    dashboard_page.keyboard.press("Escape")
+                    self.assertEqual(menu_toggle.get_attribute("aria-expanded"), "false")
+
+                products_page = context.new_page()
+                products_response = products_page.goto(
+                    f"{self.live_server_url}{reverse('product-list-create')}",
+                    wait_until="networkidle",
+                )
+
+                self.assertTrue(products_response.ok)
+                self.assertTrue(products_page.locator(".zeus-app-shell--tenant").count())
+                self.assertEqual(products_page.locator("h1").inner_text(), "Specialisti")
+                self.assertEqual(
+                    products_page.locator(".zeus-app-nav a.is-active").inner_text(),
+                    "Specialisti",
+                )
+                self.assertTrue(products_page.locator('form input[name="name"]').count())
+                self.assertTrue(
+                    products_page.locator('input[name="csrfmiddlewaretoken"]').count()
+                )
+                self._assert_no_horizontal_overflow(products_page)
+                self._assert_visual_baseline(
+                    products_page,
+                    f"app-shell-products-{viewport_name}",
+                )
                 context.close()
             browser.close()

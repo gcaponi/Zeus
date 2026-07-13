@@ -1,0 +1,58 @@
+{% extends "core/app_shell_tenant.html" %}
+
+{% block title %}{{ tenant.name|default:"Dashboard" }} · ZEUS{% endblock %}
+{% block shell_page_title %}Dashboard{% endblock %}
+
+{% block tenant_main %}
+<section class="zeus-app-page">
+    <header class="zeus-app-page-header">
+        <div>
+            <p class="zeus-app-eyebrow">Dashboard</p>
+            <h1>{{ tenant.name|default:"Workspace ZEUS" }}</h1>
+            <p>Configura il DNA aziendale e gestisci gli specialisti dal tuo workspace.</p>
+        </div>
+        <span class="zeus-app-status"><span aria-hidden="true"></span> Workspace attivo</span>
+    </header>
+
+    <div class="zeus-app-dashboard-grid">
+        <article class="zeus-app-panel zeus-app-dashboard-overview">
+            <p class="zeus-app-section-label">Prossimo passo</p>
+            <h2>Costruisci il DNA aziendale</h2>
+            <p>Completa l’onboarding per fornire a ZEUS il contesto necessario ai motori di analisi.</p>
+            <dl class="zeus-app-workspace-details">
+                <div>
+                    <dt>Dominio</dt>
+                    <dd>{{ tenant.schema_name|default:"workspace" }}.zeus.cais.uno</dd>
+                </div>
+                <div>
+                    <dt>Account</dt>
+                    <dd>{{ user.email }}</dd>
+                </div>
+            </dl>
+            <div class="zeus-app-actions">
+                <a href="{% url 'onboarding-index' %}" class="zeus-btn zeus-btn-primary">Inizia onboarding</a>
+                <a href="{% url 'product-list-create' %}" class="zeus-btn zeus-btn-secondary">Gestisci specialisti</a>
+            </div>
+        </article>
+
+        <aside class="zeus-app-panel zeus-app-quick-links" aria-labelledby="quick-links-title">
+            <div class="zeus-app-quick-links-head">
+                <p class="zeus-app-section-label">Accesso rapido</p>
+                <h2 id="quick-links-title">Strumenti</h2>
+            </div>
+            <a href="{% url 'onboarding-index' %}">
+                <span>Onboarding aziendale</span>
+                <span aria-hidden="true">→</span>
+            </a>
+            <a href="{% url 'product-list-create' %}">
+                <span>Specialisti</span>
+                <span aria-hidden="true">→</span>
+            </a>
+            <a href="{% url 'tenant-landing' %}">
+                <span>Workspace pubblico</span>
+                <span aria-hidden="true">→</span>
+            </a>
+        </aside>
+    </div>
+</section>
+{% endblock %}

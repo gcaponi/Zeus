@@ -1,6 +1,6 @@
 # ZEUS App Shell - Matrice di regressione
 
-Stato: Fasi 0-1, baseline locale del 2026-07-13.
+Stato: Fasi 0-2, baseline locale del 2026-07-13.
 
 ## Invarianti
 
@@ -17,10 +17,10 @@ Stato: Fasi 0-1, baseline locale del 2026-07-13.
 | Landing | `tenant-landing` | `/` | Route bloccata; pagina pubblica senza `#app-main`. |
 | Login | `account_login` | `/accounts/login/` | Route, form CSRF e assenza shell tenant bloccati. |
 | Logout | `account_logout` | `/accounts/logout/` | Redirect pubblico assoluto e rimozione cookie workspace bloccati. |
-| Dashboard | `tenant-dashboard` | `/dashboard/` | Login obbligatorio; link onboarding/logout e bootstrap CSRF bloccati. |
+| Dashboard | `tenant-dashboard` | `/dashboard/` | Login obbligatorio; legacy con flag off, App Shell tenant con flag on. |
 | Preview App Shell | `app-shell-preview` | `/__shell_preview/` | `404` con flag off; shell renderizzata soltanto con `ZEUS_APP_SHELL_ENABLED=True`. |
 | Onboarding | `onboarding-index` | `/onboarding/` | Precedenza resolver, rendering autenticato e `#onboarding-step` bloccati. |
-| Specialisti | `product-list-create` | `/products/` | Rendering autenticato e form creazione bloccati. |
+| Specialisti | `product-list-create` | `/products/` | Legacy con flag off; App Shell con flag on su GET, create POST e rami di errore. |
 | Motore B | `motore-b-report` | `/company/dna/motore-b/` | Route bloccata; comportamento dati coperto dalla suite Companies. |
 | Motore C | `consistency-report` | `/company/dna/consistency/` | Route e partial `#consistency-report-root` coperti. |
 
@@ -47,10 +47,12 @@ Il test `tests/test_ui_browser_baseline.py` usa `StaticLiveServerTestCase`, Chro
 | Superficie | Desktop 1440x900 | Tablet 1024x768 | Mobile 390x844 | Assert funzionali |
 | --- | --- | --- | --- | --- |
 | Login | `login-desktop.png` | `login-tablet.png` | `login-mobile.png` | `200`, heading, CSRF, no overflow. |
-| Dashboard | `dashboard-desktop.png` | `dashboard-tablet.png` | `dashboard-mobile.png` | Sessione, tenant, onboarding, no overflow. |
+| Dashboard legacy | `dashboard-desktop.png` | `dashboard-tablet.png` | `dashboard-mobile.png` | Flag off, sessione, tenant, onboarding, no overflow. |
 | Onboarding | `onboarding-desktop.png` | `onboarding-tablet.png` | `onboarding-mobile.png` | Sessione, tenant, `#onboarding-step`, no overflow. |
-| Specialisti | `products-desktop.png` | `products-tablet.png` | `products-mobile.png` | Sessione, tenant, form creazione, no overflow. |
+| Specialisti legacy | `products-desktop.png` | `products-tablet.png` | `products-mobile.png` | Flag off, sessione, tenant, form creazione, no overflow. |
 | Preview App Shell | `app-shell-preview-desktop.png` | `app-shell-preview-tablet.png` | `app-shell-preview-mobile.png` | Flag, sidebar, header, `#app-main`, no overflow. |
+| Dashboard App Shell | `app-shell-dashboard-desktop.png` | `app-shell-dashboard-tablet.png` | `app-shell-dashboard-mobile.png` | Flag on, tema, drawer mobile, navigazione e no overflow. |
+| Specialisti App Shell | `app-shell-products-desktop.png` | `app-shell-products-tablet.png` | `app-shell-products-mobile.png` | Flag on, form reale, empty state e no overflow. |
 
 Le immagini sono in `docs/ui-baseline/`. Il confronto e' bloccante e non aggiorna file. Per approvare intenzionalmente una nuova baseline:
 
@@ -101,3 +103,14 @@ uv run playwright install chromium
 - [x] Login, landing, dashboard e le 12 baseline Fase 0 restano invariati con flag attivo.
 - [x] Preview verificata a 1440, 1024 e 390 px senza overflow orizzontale.
 - [x] Suite completa e check statici verdi: `264 passed`, coverage `71.72%`, Ruff e Django check puliti.
+
+## Gate Fase 2
+
+- [x] Shell tenant comune con navigazione reale, breadcrumb, stato attivo, logout, light default e tema persistito.
+- [x] Drawer mobile accessibile: stato `aria-expanded`, overlay e chiusura con `Escape` verificati in Chromium.
+- [x] Dashboard seleziona legacy/App Shell esclusivamente tramite `ZEUS_APP_SHELL_ENABLED`.
+- [x] Lista Specialisti condivide un solo partial tra legacy e App Shell; create, errori, CSRF, detail e delete restano sulle view e route esistenti.
+- [x] Login, landing, onboarding e le 15 baseline precedenti restano invariati.
+- [x] Sei nuove baseline Dashboard/Specialisti verificate a 1440, 1024 e 390 px senza overflow.
+- [x] Gate mirato: `43 passed`; suite completa: `269 passed`, coverage `71.75%`.
+- [x] Ruff, Django system check e migration check SQLite puliti; nessun modello o migration modificato.

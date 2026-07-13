@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client as TestClient
-from django.test import RequestFactory
+from django.test import RequestFactory, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -1611,6 +1611,44 @@ class TestProductViews:
         request = rf_with_tenant("get", "/products/")
         response = views.product_list_create(request)
         assert response.status_code == 200
+
+    @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
+    def test_product_list_uses_app_shell_when_flag_enabled(self, rf_with_tenant):
+        request = rf_with_tenant("get", "/products/")
+
+        response = views.product_list_create(request)
+
+        assert response.status_code == 200
+        assert b'id="app-shell"' in response.content
+        assert b"zeus-app-shell--tenant" in response.content
+        assert b'name="name"' in response.content
+
+    @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
+    def test_product_validation_error_keeps_app_shell(self, rf_with_tenant):
+        request = rf_with_tenant("post", "/products/", data={"name": ""}, form=True)
+
+        response = views.product_list_create(request)
+
+        assert response.status_code == 400
+        assert b'id="app-shell"' in response.content
+        assert b"Nome prodotto obbligatorio." in response.content
+
+    @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
+    def test_product_create_keeps_actions_in_app_shell(self, rf_with_tenant):
+        request = rf_with_tenant(
+            "post",
+            "/products/",
+            data={"name": "Vasca BVCI", "codice": "VB-001"},
+            form=True,
+        )
+
+        response = views.product_list_create(request)
+
+        product = Product.objects.get(name="Vasca BVCI")
+        assert response.status_code == 200
+        assert b'id="app-shell"' in response.content
+        assert reverse("product-detail", args=[product.pk]).encode() in response.content
+        assert reverse("product-delete", args=[product.pk]).encode() in response.content
 
     def test_product_create(self, rf_with_tenant):
         request = rf_with_tenant("post", "/products/", data={"name": "Vasca BVCI"}, form=True)

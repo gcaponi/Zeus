@@ -1,0 +1,63 @@
+{% if error %}
+    <div class="mb-6 rounded-xl border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-300 zeus-product-error" role="alert">
+        {{ error }}
+    </div>
+{% endif %}
+
+<form method="post" class="mb-8 zeus-card p-6 zeus-product-create-form">
+    {% csrf_token %}
+    <label class="zeus-label" for="name">Nuovo specialista</label>
+    <div class="mt-2 flex flex-col gap-3 zeus-product-form-fields">
+        <input type="text" name="name" id="name" placeholder="Nome specialista (es. Canale Ispezionabile)" class="zeus-input" required>
+        <div class="flex flex-col sm:flex-row gap-3 zeus-product-form-row">
+            <input type="text" name="tipologia" id="tipologia" placeholder="Tipologia (es. canale, vasca)" class="zeus-input flex-1">
+            <input type="text" name="codice" id="codice" placeholder="Codice (es. CI-001)" class="zeus-input flex-1">
+            <button type="submit" class="zeus-btn zeus-btn-primary">Crea</button>
+        </div>
+    </div>
+</form>
+
+{% if products %}
+    <div class="space-y-4 zeus-product-list">
+        {% for product in products %}
+            <div class="zeus-card p-5 hover:translate-y-[-2px] transition-transform zeus-product-item">
+                <div class="flex items-center justify-between gap-4 zeus-product-item-layout">
+                    <a href="{% url 'product-detail' product.pk %}" class="flex-1 min-w-0 zeus-product-main-link">
+                        <div class="flex items-center gap-3 flex-wrap zeus-product-title-row">
+                            <h3 class="text-lg font-bold font-display text-content-primary">{{ product.name }}</h3>
+                            <span class="zeus-badge {{ product.status_badge_class }}">
+                                {{ product.get_status_display }}
+                            </span>
+                        </div>
+                        <p class="mt-1 text-sm text-content-muted zeus-product-meta">
+                            {% if product.codice %}{{ product.codice }} · {% endif %}
+                            {% if product.tipologia %}{{ product.tipologia }} · {% endif %}
+                            {% with dna=product.dna_versions.first %}
+                                {% if dna %}
+                                    DNA v{{ dna.version }} · {{ dna.dna_type }}
+                                    {% if dna.is_approved %}
+                                        <span class="ml-2 zeus-badge zeus-badge-lime">Approvato</span>
+                                    {% endif %}
+                                {% else %}
+                                    Nessun DNA
+                                {% endif %}
+                            {% endwith %}
+                        </p>
+                        <p class="mt-2 text-xs text-content-muted italic zeus-product-next-action">{{ product.next_action }}</p>
+                    </a>
+                    <div class="flex items-center gap-3 zeus-product-actions">
+                        <form method="post" action="{% url 'product-delete' product.pk %}" onsubmit="return confirm('Eliminare lo specialista &quot;{{ product.name }}&quot; e tutti i suoi file e DNA? Questa azione e irreversibile.');">
+                            {% csrf_token %}
+                            <button type="submit" class="zeus-btn zeus-btn-destructive zeus-btn-sm">Elimina</button>
+                        </form>
+                        <a href="{% url 'product-detail' product.pk %}" class="text-content-muted text-xl zeus-product-open" aria-label="Apri {{ product.name }}">→</a>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="zeus-card p-8 text-center zeus-product-empty">
+        <p class="text-content-muted">Nessuno specialista ancora. Creane uno per iniziare.</p>
+    </div>
+{% endif %}

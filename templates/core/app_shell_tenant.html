@@ -1,0 +1,62 @@
+{% extends "core/app_shell.html" %}
+{% load static %}
+
+{% block shell_class %}zeus-app-shell--tenant{% endblock %}
+
+{% block shell_sidebar %}
+<div class="zeus-app-sidebar-inner">
+    <div class="zeus-app-sidebar-head">
+        <a class="zeus-app-brand" href="{% url 'tenant-dashboard' %}">
+            <span class="zeus-app-brand-mark" aria-hidden="true">Z</span>
+            <span>ZEUS</span>
+        </a>
+        <button type="button" class="zeus-app-icon-button zeus-app-menu-close" data-app-menu-close aria-label="Chiudi navigazione">
+            <span aria-hidden="true">×</span>
+        </button>
+    </div>
+
+    <nav class="zeus-app-nav" aria-label="Navigazione workspace">
+        <p class="zeus-app-nav-label">Workspace</p>
+        <a href="{% url 'tenant-dashboard' %}"{% if request.path == '/dashboard/' %} class="is-active" aria-current="page"{% endif %}>Dashboard</a>
+        <a href="{% url 'onboarding-index' %}"{% if '/onboarding/' in request.path %} class="is-active" aria-current="page"{% endif %}>Onboarding</a>
+        <a href="{% url 'product-list-create' %}"{% if '/products/' in request.path %} class="is-active" aria-current="page"{% endif %}>Specialisti</a>
+
+        <p class="zeus-app-nav-label">Motori</p>
+        <a href="{% url 'motore-b-report' %}"{% if '/motore-b/' in request.path %} class="is-active" aria-current="page"{% endif %}>Motore B</a>
+        <a href="{% url 'consistency-report' %}"{% if '/consistency/' in request.path %} class="is-active" aria-current="page"{% endif %}>Motore C</a>
+    </nav>
+
+    <div class="zeus-app-sidebar-foot">
+        <span class="zeus-app-user-email">{{ user.email|default:"Workspace ZEUS" }}</span>
+        <a href="{% url 'account_logout' %}">Esci</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block shell_header %}
+<div class="zeus-app-header-inner">
+    <button type="button" class="zeus-app-icon-button zeus-app-menu-toggle" data-app-menu-toggle aria-controls="app-sidebar" aria-expanded="false" aria-label="Apri navigazione">
+        <span aria-hidden="true">☰</span>
+    </button>
+    <div class="zeus-app-breadcrumb" aria-label="Posizione corrente">
+        <span>Workspace</span>
+        <span aria-hidden="true">/</span>
+        <strong>{% block shell_page_title %}ZEUS{% endblock %}</strong>
+    </div>
+    <div class="zeus-app-header-actions">
+        <button type="button" class="zeus-app-icon-button" data-app-theme-toggle aria-label="Attiva tema scuro" title="Cambia tema">
+            <span aria-hidden="true">☾</span>
+        </button>
+        <a class="zeus-app-logout" href="{% url 'account_logout' %}">Esci</a>
+    </div>
+</div>
+<button type="button" class="zeus-app-sidebar-overlay" data-app-menu-close aria-label="Chiudi navigazione" tabindex="-1"></button>
+{% endblock %}
+
+{% block shell_main %}
+{% block tenant_main %}{% endblock %}
+{% endblock %}
+
+{% block shell_scripts %}
+<script src="{% static 'zeus-app-shell.js' %}"></script>
+{% endblock %}

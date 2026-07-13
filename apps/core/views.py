@@ -155,7 +155,12 @@ def public_onboarding_redirect(request):
 @login_required
 def tenant_dashboard(request):
     tenant = request.tenant if hasattr(request, "tenant") else None
-    return render(request, "core/tenant_dashboard.html", {
+    template_name = (
+        "core/app_shell_dashboard.html"
+        if settings.ZEUS_APP_SHELL_ENABLED
+        else "core/tenant_dashboard.html"
+    )
+    return render(request, template_name, {
         "tenant": tenant,
         "user": request.user,
     })

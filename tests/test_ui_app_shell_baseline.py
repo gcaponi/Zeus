@@ -68,30 +68,42 @@ def test_app_shell_preview_renders_declared_slots():
 
 
 @override_settings(ROOT_URLCONF="config.urls", ZEUS_APP_SHELL_ENABLED=True)
-def test_app_shell_flag_does_not_change_existing_pages():
+def test_app_shell_flag_does_not_change_public_pages():
     request_factory = RequestFactory()
     login_request = request_factory.get(reverse("account_login"))
     login_request.user = AnonymousUser()
     landing_request = request_factory.get(reverse("tenant-landing"))
     landing_request.user = AnonymousUser()
-    dashboard_request = request_factory.get(reverse("tenant-dashboard"))
-    dashboard_request.user = SimpleNamespace(
-        is_authenticated=True,
-        email="ui-baseline@example.com",
-    )
-    dashboard_request.tenant = SimpleNamespace(
-        name="UI Baseline",
-        schema_name="ui-baseline",
-    )
 
     responses = [
         public_login(login_request),
         tenant_landing(landing_request),
-        tenant_dashboard(dashboard_request),
     ]
 
     assert all(response.status_code == 200 for response in responses)
     assert all(b'id="app-shell"' not in response.content for response in responses)
+
+
+@override_settings(ROOT_URLCONF="config.urls", ZEUS_APP_SHELL_ENABLED=True)
+def test_dashboard_uses_app_shell_when_flag_enabled():
+    request = RequestFactory().get(reverse("tenant-dashboard"))
+    request.user = SimpleNamespace(
+        is_authenticated=True,
+        email="ui-baseline@example.com",
+    )
+    request.tenant = SimpleNamespace(
+        name="UI Baseline",
+        schema_name="ui-baseline",
+    )
+
+    response = tenant_dashboard(request)
+
+    assert response.status_code == 200
+    assert b'id="app-shell"' in response.content
+    assert b"zeus-app-shell--tenant" in response.content
+    assert b"UI Baseline" in response.content
+    assert reverse("onboarding-index").encode() in response.content
+    assert reverse("product-list-create").encode() in response.content
 
 
 @override_settings(ROOT_URLCONF="config.urls")
@@ -113,7 +125,7 @@ def test_public_pages_render_without_tenant_shell():
 
 
 @pytest.mark.django_db
-@override_settings(ROOT_URLCONF="config.urls")
+@override_settings(ROOT_URLCONF="config.urls", ZEUS_APP_SHELL_ENABLED=False)
 def test_dashboard_keeps_authentication_and_navigation_contract(django_user_model):
     request_factory = RequestFactory()
     anonymous_request = request_factory.get(reverse("tenant-dashboard"))

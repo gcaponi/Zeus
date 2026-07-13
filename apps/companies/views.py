@@ -5,6 +5,7 @@ import textwrap
 from urllib.parse import urlparse
 
 import fitz
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
@@ -4288,12 +4289,17 @@ def product_list_create(request):
     if not company:
         return HttpResponse("No tenant", status=400)
 
+    template_name = (
+        "core/app_shell_products.html"
+        if settings.ZEUS_APP_SHELL_ENABLED
+        else "core/product_list.html"
+    )
     products = company.products.all()
 
     if request.method == "POST":
         block_reason = _product_block_reason(company)
         if block_reason:
-            return render(request, "core/product_list.html", {
+            return render(request, template_name, {
                 "company": company,
                 "products": products,
                 "error": block_reason,
@@ -4301,7 +4307,7 @@ def product_list_create(request):
 
         name = request.POST.get("name", "").strip()
         if not name:
-            return render(request, "core/product_list.html", {
+            return render(request, template_name, {
                 "company": company,
                 "products": products,
                 "error": "Nome prodotto obbligatorio.",
@@ -4310,7 +4316,7 @@ def product_list_create(request):
         from django.utils.text import slugify
         slug = slugify(name)
         if Product.objects.filter(company=company, slug=slug).exists():
-            return render(request, "core/product_list.html", {
+            return render(request, template_name, {
                 "company": company,
                 "products": products,
                 "error": "Prodotto con questo nome gia esistente.",
@@ -4319,7 +4325,7 @@ def product_list_create(request):
         tipologia = request.POST.get("tipologia", "").strip()
         codice = request.POST.get("codice", "").strip()
         if codice and Product.objects.filter(company=company, codice=codice).exists():
-            return render(request, "core/product_list.html", {
+            return render(request, template_name, {
                 "company": company,
                 "products": products,
                 "error": "Codice gia in uso per un altro specialista.",
@@ -4339,7 +4345,7 @@ def product_list_create(request):
             subscription.save(update_fields=["product_dnas_used"])
         products = company.products.all()
 
-    return render(request, "core/product_list.html", {
+    return render(request, template_name, {
         "company": company,
         "products": products,
     })
