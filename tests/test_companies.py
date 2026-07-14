@@ -1551,6 +1551,8 @@ class TestDNAReviewViews:
         assert review_response.status_code == 200
         assert b'id="app-shell"' in review_response.content
         assert b'id="dna-review-root"' in review_response.content
+        assert review_response.content.count(b'id="dna-review-sidebar-actions"') == 1
+        assert b'hx-swap-oob="true"' not in review_response.content
         assert visualize_response.status_code == 200
         assert b'id="app-shell"' in visualize_response.content
         assert b"DNA aziendale verificato" in visualize_response.content
@@ -1575,6 +1577,7 @@ class TestDNAReviewViews:
 
         assert resp.status_code == 200
         assert b'id="dna-review-root"' in resp.content
+        assert b'id="dna-review-sidebar-actions" hx-swap-oob="true"' in resp.content
         assert "HX-Redirect" not in resp
         assert SectionApproval.objects.filter(dna=dna, section_key="identita").exists()
 

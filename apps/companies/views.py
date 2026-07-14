@@ -2881,6 +2881,7 @@ def _dna_review_context(company, dna):
 def _render_dna_review_fragment(request, company, dna, status=200):
     context = _dna_review_context(company, dna)
     context["return_product"] = _specialist_feedback_return_product(request, company)
+    context["render_sidebar_oob"] = True
     return render(
         request,
         "core/partials/dna_review_content.html",

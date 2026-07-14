@@ -133,6 +133,7 @@
     </div>
 </div>
 
+{% if render_sidebar_oob %}
 {% if is_fully_approved %}
 <div id="dna-review-sidebar-actions" hx-swap-oob="true">
     <div class="zeus-card p-5 flex flex-col items-center gap-3">
@@ -154,4 +155,5 @@
         <a href="{% url 'onboarding-index' %}?revise=1" class="zeus-btn zeus-btn-ghost w-full">Rivedi dall'inizio</a>
     </div>
 </div>
+{% endif %}
 {% endif %}
