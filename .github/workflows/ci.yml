@@ -48,9 +48,18 @@ jobs:
         env:
           DJANGO_SETTINGS_MODULE: config.settings.test
       - uses: actions/upload-artifact@v5
+        if: always()
         with:
           name: coverage-xml
           path: coverage.xml
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: ui-visual-diagnostics
+          path: test-results/ui
+          if-no-files-found: ignore
+          retention-days: 14
 
   build:
     runs-on: ubuntu-24.04
@@ -58,3 +67,40 @@ jobs:
       - uses: actions/checkout@v5
       - uses: docker/setup-buildx-action@v3
       - run: docker compose build
+
+  release-gate:
+    runs-on: ubuntu-24.04
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+      DJANGO_SECRET_KEY: ci-release-gate-only-7Qx9-Vp2-Mk8-Rs4-Tw6-Yn3-Bf5-Hj1
+      POSTGRES_DB: zeus_ci
+      POSTGRES_USER: zeus_ci
+      POSTGRES_PASSWORD: zeus_ci
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v8.3.2
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: uv sync
+      - name: Check production settings
+        run: uv run python manage.py check --deploy
+      - name: Check Gunicorn application
+        run: uv run gunicorn --check-config config.wsgi:application
+      - name: Check model migrations
+        run: uv run python manage.py makemigrations --check --dry-run
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.test
+      - name: Collect production static assets
+        run: uv run python manage.py collectstatic --noinput
+      - name: Verify release assets
+        run: >-
+          test -f staticfiles/zeus-design.css
+          && test -f staticfiles/zeus-app-shell.js
+          && test -f staticfiles/zeus-admin.css
+          && test -f staticfiles/zeus-admin.js
+          && test -f staticfiles/zeus-admin-detail.js

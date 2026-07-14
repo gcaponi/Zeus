@@ -22,6 +22,7 @@ from apps.companies.models import (
 )
 from apps.core.models import Client as TenantClient
 from apps.core.models import Domain, Plan, WorkspaceSubscription
+from tests.ui_visual import compare_png, write_visual_diagnostics
 
 
 BROWSER_MIDDLEWARE = [
@@ -29,6 +30,7 @@ BROWSER_MIDDLEWARE = [
     *settings.MIDDLEWARE,
 ]
 SCREENSHOT_DIR = Path(settings.BASE_DIR) / "docs" / "ui-baseline"
+UI_ARTIFACT_DIR = Path(settings.BASE_DIR) / "test-results" / "ui"
 VIEWPORTS = {
     "desktop": {"width": 1440, "height": 900},
     "tablet": {"width": 1024, "height": 768},
@@ -71,9 +73,24 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
             baseline_path.exists(),
             f"Baseline assente: eseguire con ZEUS_UPDATE_UI_BASELINE=1 ({baseline_path})",
         )
-        expected_hash = hashlib.sha256(baseline_path.read_bytes()).hexdigest()
+        expected = baseline_path.read_bytes()
+        expected_hash = hashlib.sha256(expected).hexdigest()
         actual_hash = hashlib.sha256(screenshot).hexdigest()
-        self.assertEqual(actual_hash, expected_hash, f"Regressione visuale: {name}")
+        if actual_hash == expected_hash:
+            return
+
+        comparison = compare_png(expected, screenshot)
+        write_visual_diagnostics(
+            UI_ARTIFACT_DIR,
+            name,
+            expected,
+            screenshot,
+            comparison,
+        )
+        self.assertTrue(
+            comparison.passed,
+            f"Regressione visuale: {name}; {comparison.summary()}",
+        )
 
     def test_login_and_dashboard_visual_baselines(self):
         user = get_user_model().objects.create_user(
