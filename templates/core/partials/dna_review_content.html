@@ -102,21 +102,6 @@
         </div>
     </details>
 
-    {% if is_fully_approved %}
-        <div class="sticky bottom-4 zeus-card p-4" style="background: var(--glass-strong); backdrop-filter: blur(20px);">
-            <div class="flex flex-wrap justify-center gap-3">
-                {% if return_product %}
-                    <a href="{% url 'product-review' return_product.pk %}" class="zeus-btn zeus-btn-primary">Torna allo Specialista →</a>
-                {% else %}
-                    <a href="{% url 'product-list-create' %}" class="zeus-btn zeus-btn-primary">Vai agli Specialisti →</a>
-                {% endif %}
-                <a href="{% url 'dna-visualize' %}" class="zeus-btn zeus-btn-secondary">Visualizza DNA</a>
-                <a href="{% url 'dna-download-pdf' %}" class="zeus-btn zeus-btn-secondary">Scarica PDF</a>
-                <a href="{% url 'onboarding-index' %}?revise=1" class="zeus-btn zeus-btn-ghost">Rivedi</a>
-            </div>
-        </div>
-    {% endif %}
-
     <!-- Popup DNA completo -->
     <div id="dna-popup-overlay" class="fixed inset-0 z-50 hidden items-center justify-center" style="background: rgba(2,6,23,0.6); backdrop-filter: blur(8px);">
         <div class="dna-popup-panel relative w-full max-w-2xl max-h-[85vh] overflow-hidden rounded-3xl mx-4"
@@ -151,3 +136,26 @@
         </div>
     </div>
 </div>
+
+{% if is_fully_approved %}
+<div id="dna-review-sidebar-actions" hx-swap-oob="true">
+    <div class="zeus-card p-5 flex flex-col items-center gap-3">
+        <p class="zeus-label mb-1 w-full">DNA Approvato</p>
+        {% if return_product %}
+            <a href="{% url 'product-review' return_product.pk %}" class="zeus-btn zeus-btn-primary w-full">Torna allo Specialista →</a>
+        {% else %}
+            <a href="{% url 'product-list-create' %}" class="zeus-btn zeus-btn-primary w-full">Vai agli Specialisti →</a>
+        {% endif %}
+        <a href="{% url 'dna-visualize' %}" class="zeus-btn zeus-btn-secondary w-full">Visualizza DNA</a>
+        <a href="{% url 'dna-download-pdf' %}" class="zeus-btn zeus-btn-secondary w-full">Scarica PDF</a>
+        <a href="{% url 'onboarding-index' %}?revise=1" class="zeus-btn zeus-btn-ghost w-full">Rivedi</a>
+    </div>
+</div>
+{% elif dna %}
+<div id="dna-review-sidebar-actions" hx-swap-oob="true">
+    <div class="zeus-card p-5 flex flex-col items-center gap-3">
+        <a href="{% url 'dna-download-pdf' %}" class="zeus-btn zeus-btn-secondary w-full">Scarica PDF</a>
+        <a href="{% url 'onboarding-index' %}?revise=1" class="zeus-btn zeus-btn-ghost w-full">Rivedi dall'inizio</a>
+    </div>
+</div>
+{% endif %}

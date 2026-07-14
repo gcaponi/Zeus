@@ -7,13 +7,21 @@
     </div>
     {% endif %}
     {% if dna or complete_dna %}
-    <div class="zeus-card p-5 flex flex-col items-center gap-3">
-        <a href="{% url 'dna-download-pdf' %}" class="zeus-btn zeus-btn-secondary w-full">
-            Scarica PDF
-        </a>
-        <a href="{% url 'onboarding-index' %}?revise=1" class="zeus-btn zeus-btn-ghost w-full">
-            Rivedi dall'inizio
-        </a>
+    <div id="dna-review-sidebar-actions" class="zeus-card p-5 flex flex-col items-center gap-3">
+        {% if is_fully_approved %}
+            <p class="zeus-label mb-1 w-full">DNA Approvato</p>
+            {% if return_product %}
+                <a href="{% url 'product-review' return_product.pk %}" class="zeus-btn zeus-btn-primary w-full">Torna allo Specialista →</a>
+            {% else %}
+                <a href="{% url 'product-list-create' %}" class="zeus-btn zeus-btn-primary w-full">Vai agli Specialisti →</a>
+            {% endif %}
+            <a href="{% url 'dna-visualize' %}" class="zeus-btn zeus-btn-secondary w-full">Visualizza DNA</a>
+            <a href="{% url 'dna-download-pdf' %}" class="zeus-btn zeus-btn-secondary w-full">Scarica PDF</a>
+            <a href="{% url 'onboarding-index' %}?revise=1" class="zeus-btn zeus-btn-ghost w-full">Rivedi</a>
+        {% else %}
+            <a href="{% url 'dna-download-pdf' %}" class="zeus-btn zeus-btn-secondary w-full">Scarica PDF</a>
+            <a href="{% url 'onboarding-index' %}?revise=1" class="zeus-btn zeus-btn-ghost w-full">Rivedi dall'inizio</a>
+        {% endif %}
     </div>
     {% endif %}
     <div class="zeus-card p-5">
