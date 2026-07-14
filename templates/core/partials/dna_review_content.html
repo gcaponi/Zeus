@@ -16,18 +16,14 @@
         <div class="mb-6 zeus-card p-5" style="border-color: rgba(34, 211, 238, 0.28); background: rgba(34, 211, 238, 0.05);">
             <p class="zeus-label text-brand-cyan">Flusso Specialista</p>
             <h2 class="mt-1 text-xl font-bold font-display text-content-primary">DNA Generale aggiornato da {{ return_product.name }}</h2>
-            <p class="mt-2 text-sm text-content-secondary">Approva questa versione del DNA Generale; poi ZEUS ti riporta alle azioni finali dello specialista.</p>
-            <div class="mt-4 flex flex-wrap gap-3">
-                <a href="{% url 'product-review' return_product.pk %}" class="zeus-btn zeus-btn-secondary">Torna allo Specialista</a>
-                <a href="{% url 'product-dna-visualize' return_product.pk %}" class="zeus-btn zeus-btn-ghost">Visualizza DNA Specialista</a>
-            </div>
+            <p class="mt-2 text-sm text-content-secondary">Approva questa versione del DNA Generale; le azioni finali restano disponibili nella barra laterale.</p>
         </div>
     {% endif %}
 
     {% if is_fully_approved %}
         <div class="mb-6 zeus-card p-5" style="border-color: rgba(34, 197, 94, 0.3); background: rgba(34, 197, 94, 0.05);">
             <p class="zeus-label text-brand-lime">DNA aziendale approvato</p>
-            <p class="mt-2 text-lg font-bold font-display">Tutte le sezioni sono state approvate. Le azioni finali sono in fondo alla pagina.</p>
+            <p class="mt-2 text-lg font-bold font-display">Tutte le sezioni sono state approvate. Le azioni finali sono nella barra laterale.</p>
         </div>
     {% elif blocking_flags %}
         <div class="mb-6 zeus-card p-5" style="border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.06);">

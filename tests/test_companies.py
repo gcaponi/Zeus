@@ -2273,6 +2273,97 @@ class TestProductViews:
         assert response.status_code == 204
         assert response["HX-Redirect"] == reverse("product-dna-feedback", args=[product.pk])
 
+    def test_product_dna_feedback_get_does_not_start_generation(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            is_approved=timezone.now(),
+            content={"identita_tecnica": "DNA completo"},
+        )
+        CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            is_current=True,
+            content={"nucleo_tecnico": "DNA Generale"},
+        )
+        request = rf_with_tenant("get", reverse("product-dna-feedback", args=[product.pk]))
+
+        with patch("apps.companies.tasks.generate_specialist_feedback_task.delay") as delay:
+            response = views.product_dna_feedback(request, product.pk)
+
+        assert response.status_code == 200
+        assert b"Avvia analisi feedback" in response.content
+        delay.assert_not_called()
+
+    def test_product_dna_feedback_post_starts_generation(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        specialist_dna = ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            is_approved=timezone.now(),
+            content={"identita_tecnica": "DNA completo"},
+        )
+        company_dna = CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            is_current=True,
+            content={"nucleo_tecnico": "DNA Generale"},
+        )
+        request = rf_with_tenant("post", reverse("product-dna-feedback", args=[product.pk]))
+
+        with patch("apps.companies.tasks.generate_specialist_feedback_task.delay") as delay:
+            response = views.product_dna_feedback(request, product.pk)
+
+        specialist_dna.refresh_from_db()
+        assert response.status_code == 302
+        assert response.url.endswith("?generating=1")
+        assert specialist_dna.content["_feedback_proposals"] is None
+        delay.assert_called_once_with(
+            product.id,
+            specialist_dna.id,
+            company_dna.id,
+            tenant_schema="test-tenant",
+        )
+
+    def test_product_dna_feedback_get_shows_completed_process(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        specialist_dna = ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            is_approved=timezone.now(),
+            content={"identita_tecnica": "DNA completo"},
+        )
+        CompanyDNA.objects.create(
+            company=company,
+            version=2,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            is_current=True,
+            content={
+                "nucleo_tecnico": "DNA Generale aggiornato",
+                "_specialist_feedback": {
+                    "product_id": product.pk,
+                    "specialist_dna_id": specialist_dna.pk,
+                },
+            },
+        )
+        request = rf_with_tenant("get", reverse("product-dna-feedback", args=[product.pk]))
+
+        with patch("apps.companies.tasks.generate_specialist_feedback_task.delay") as delay:
+            response = views.product_dna_feedback(request, product.pk)
+
+        assert response.status_code == 200
+        assert b"Feedback gi\xc3\xa0 applicato" in response.content
+        delay.assert_not_called()
+
     def test_product_dna_visualize_links_to_feedback_when_approved(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
         product = Product.objects.create(company=company, name="Vasca", slug="vasca")

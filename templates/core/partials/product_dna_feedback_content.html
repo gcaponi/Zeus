@@ -23,10 +23,32 @@
             <button type="submit" class="zeus-btn zeus-btn-primary flex-1">Rigenera DNA Generale con proposte selezionate →</button>
         </div>
     </form>
-{% else %}
+{% elif feedback_generated %}
     <div class="zeus-card p-8 text-center">
         <p class="text-lg font-bold font-display text-content-primary">Nessun aggiornamento necessario</p>
         <p class="mt-2 text-content-secondary">Il DNA Generale contiene già tutti i concetti rivelati dal DNA Specialista di "{{ product.name }}".</p>
         <a href="{% url 'product-review' product.pk %}" class="zeus-btn zeus-btn-ghost mt-6">← Torna alla revisione</a>
+    </div>
+{% elif feedback_applied %}
+    <div class="zeus-card p-8 text-center">
+        <p class="text-lg font-bold font-display text-content-primary">Feedback già applicato</p>
+        <p class="mt-2 text-content-secondary">Il processo è concluso e il DNA Generale include gli aggiornamenti approvati da "{{ product.name }}".</p>
+        <div class="mt-6 flex flex-wrap justify-center gap-3">
+            <a href="{% url 'dna-visualize' %}" class="zeus-btn zeus-btn-primary">Visualizza DNA Generale</a>
+            <a href="{% url 'product-review' product.pk %}" class="zeus-btn zeus-btn-ghost">← Torna alla revisione</a>
+        </div>
+        <form method="post" action="{% url 'product-dna-feedback' product.pk %}" class="mt-6">
+            {% csrf_token %}
+            <button type="submit" class="zeus-btn zeus-btn-secondary">Avvia una nuova analisi</button>
+        </form>
+    </div>
+{% else %}
+    <div class="zeus-card p-8 text-center">
+        <p class="text-lg font-bold font-display text-content-primary">Analizza l'impatto sul DNA Generale</p>
+        <p class="mt-2 text-content-secondary">L'analisi parte solo su richiesta e confronta il DNA di "{{ product.name }}" con il DNA Generale.</p>
+        <form method="post" action="{% url 'product-dna-feedback' product.pk %}" class="mt-6">
+            {% csrf_token %}
+            <button type="submit" class="zeus-btn zeus-btn-primary">Avvia analisi feedback</button>
+        </form>
     </div>
 {% endif %}

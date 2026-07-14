@@ -623,6 +623,22 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                         page,
                         f"app-shell-{surface_name}-{viewport_name}",
                     )
+                    if surface_name == "dna-review" and viewport_name == "tablet":
+                        page.set_viewport_size({"width": 768, "height": 900})
+                        main = page.locator(".zeus-app-page-main")
+                        context_panel = page.locator(".zeus-app-page-context")
+                        self.assertGreater(
+                            context_panel.bounding_box()["x"],
+                            main.bounding_box()["x"],
+                        )
+                        page.locator(".zeus-app-shell__main").evaluate(
+                            "element => { element.scrollTop = element.scrollHeight; }"
+                        )
+                        self.assertTrue(context_panel.is_visible())
+                        self.assertLess(
+                            context_panel.bounding_box()["y"],
+                            page.viewport_size["height"],
+                        )
                     page.close()
                 context.close()
             browser.close()

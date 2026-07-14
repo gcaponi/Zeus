@@ -2025,6 +2025,12 @@ html,
   }
 }
 
+@media (min-width: 720px) and (max-width: 959px) {
+  .zeus-app-page--dna-review .zeus-app-page-body {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 240px);
+  }
+}
+
 @media (min-width: 640px) {
   :where(.zeus-app-page--core-flow) .zeus-app-steps li > span.hidden {
     display: inline !important;
@@ -2053,6 +2059,9 @@ html,
   gap: 16px;
   position: sticky;
   top: 76px;
+  align-self: start;
+  max-height: calc(100vh - 92px);
+  overflow-y: auto;
 }
 
 .zeus-app-context-card {
