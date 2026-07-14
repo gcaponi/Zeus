@@ -30,6 +30,7 @@ class VisualComparison:
 
     def summary(self) -> str:
         return (
+            f"passed={str(self.passed).lower()}; "
             f"size={self.actual_size} expected={self.expected_size}; "
             f"mae={self.mean_absolute_error:.3f}/{MAX_MEAN_ABSOLUTE_ERROR}; "
             "significant_pixels="

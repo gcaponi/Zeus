@@ -44,9 +44,20 @@ jobs:
       - run: uv sync --extra dev
       - name: Install Playwright Chromium
         run: uv run playwright install --with-deps chromium
-      - run: uv run pytest --cov --cov-report=term-missing --cov-report=xml
+      - id: pytest
+        continue-on-error: true
+        run: uv run pytest --cov --cov-report=term-missing --cov-report=xml
         env:
           DJANGO_SETTINGS_MODULE: config.settings.test
+      - name: Publish visual comparison metrics
+        if: always()
+        shell: bash
+        run: |
+          shopt -s nullglob
+          for metrics in test-results/ui/*-metrics.txt; do
+            summary="$(tr '\n' ' ' < "$metrics")"
+            echo "::notice file=${metrics}::${summary}"
+          done
       - uses: actions/upload-artifact@v5
         if: always()
         with:
@@ -60,6 +71,9 @@ jobs:
           path: test-results/ui
           if-no-files-found: ignore
           retention-days: 14
+      - name: Enforce test result
+        if: always() && steps.pytest.outcome == 'failure'
+        run: exit 1
 
   build:
     runs-on: ubuntu-24.04
