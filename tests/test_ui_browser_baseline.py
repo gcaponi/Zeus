@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.test import override_settings
 from django.urls import reverse
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 
 from apps.companies.dna_schemas import LAYER_KEYS, PRODUCT_LAYER_KEYS
 from apps.companies.models import (
@@ -284,13 +284,13 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                 command_input = dashboard_page.locator("[data-command-input]")
                 self.assertTrue(command_palette.is_visible())
                 self.assertEqual(command_trigger.get_attribute("aria-expanded"), "true")
-                self.assertTrue(command_input.evaluate("element => element === document.activeElement"))
+                expect(command_input).to_be_focused()
                 dashboard_page.keyboard.press("Control+k")
                 self.assertFalse(command_palette.is_visible())
                 self.assertTrue(command_trigger.evaluate("element => element === document.activeElement"))
                 dashboard_page.keyboard.press("Control+k")
                 self.assertTrue(command_palette.is_visible())
-                self.assertTrue(command_input.evaluate("element => element === document.activeElement"))
+                expect(command_input).to_be_focused()
                 self._assert_visual_baseline(
                     dashboard_page,
                     f"app-shell-command-palette-{viewport_name}",
