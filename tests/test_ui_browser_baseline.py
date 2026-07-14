@@ -363,11 +363,7 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                     menu_toggle.click()
                     self.assertEqual(menu_toggle.get_attribute("aria-expanded"), "true")
                     self.assertTrue(app_main.get_attribute("inert") is not None)
-                    self.assertTrue(
-                        sidebar.locator("[data-app-menu-close]").evaluate(
-                            "element => element === document.activeElement"
-                        )
-                    )
+                    expect(sidebar.locator("[data-app-menu-close]")).to_be_focused()
                     self._assert_visual_baseline(
                         dashboard_page,
                         "app-shell-drawer-mobile",
