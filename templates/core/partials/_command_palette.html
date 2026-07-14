@@ -1,0 +1,68 @@
+<div
+    id="zeus-command-palette"
+    class="zeus-command-palette"
+    data-command-palette
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="zeus-command-title"
+    hidden>
+    <button
+        type="button"
+        class="zeus-command-palette__backdrop"
+        data-command-close
+        tabindex="-1"
+        aria-label="Chiudi navigazione rapida"></button>
+    <section class="zeus-command-palette__panel">
+        <header class="zeus-command-palette__header">
+            <div>
+                <p class="zeus-command-palette__eyebrow">Navigazione rapida</p>
+                <h2 id="zeus-command-title">Vai a una sezione</h2>
+            </div>
+            <button
+                type="button"
+                class="zeus-app-icon-button"
+                data-command-close
+                aria-label="Chiudi navigazione rapida">×</button>
+        </header>
+        <label class="zeus-command-palette__search">
+            <span class="zeus-visually-hidden">Filtra sezioni</span>
+            <span aria-hidden="true">⌕</span>
+            <input
+                type="search"
+                data-command-input
+                autocomplete="off"
+                placeholder="Cerca Dashboard, Specialisti, Motori…">
+            <kbd>Esc</kbd>
+        </label>
+        <nav class="zeus-command-palette__results" aria-label="Destinazioni ZEUS">
+            <a href="{% url 'tenant-dashboard' %}" data-command-item data-command-label="dashboard workspace">
+                <span><strong>Dashboard</strong><small>Panoramica del workspace</small></span>
+                <kbd>↵</kbd>
+            </a>
+            <a href="{% url 'onboarding-index' %}" data-command-item data-command-label="onboarding dna generale azienda">
+                <span><strong>Onboarding</strong><small>Costruisci il DNA Generale</small></span>
+                <kbd>↵</kbd>
+            </a>
+            <a href="{% url 'product-list-create' %}" data-command-item data-command-label="specialisti prodotti dna specialista">
+                <span><strong>Specialisti</strong><small>Gestisci famiglie e DNA Specialisti</small></span>
+                <kbd>↵</kbd>
+            </a>
+            <a href="{% url 'motore-b-report' %}" data-command-item data-command-label="motore b cross specialist consolidamento">
+                <span><strong>Motore B</strong><small>Consolidamento cross-specialist</small></span>
+                <kbd>↵</kbd>
+            </a>
+            <a href="{% url 'consistency-report' %}" data-command-item data-command-label="motore c coerenza issue audit">
+                <span><strong>Motore C</strong><small>Audit di coerenza e issue</small></span>
+                <kbd>↵</kbd>
+            </a>
+        </nav>
+        <p class="zeus-command-palette__empty" data-command-empty role="status" hidden>
+            Nessuna sezione corrisponde alla ricerca.
+        </p>
+        <footer class="zeus-command-palette__footer">
+            <span><kbd>↑</kbd><kbd>↓</kbd> seleziona</span>
+            <span><kbd>Enter</kbd> apri</span>
+            <span><kbd>Esc</kbd> chiudi</span>
+        </footer>
+    </section>
+</div>

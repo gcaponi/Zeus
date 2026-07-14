@@ -241,6 +241,67 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                     f"app-shell-dashboard-{viewport_name}",
                 )
 
+                command_trigger = dashboard_page.locator("[data-command-open]")
+                dashboard_page.keyboard.press("Control+k")
+                command_palette = dashboard_page.locator("[data-command-palette]")
+                command_input = dashboard_page.locator("[data-command-input]")
+                self.assertTrue(command_palette.is_visible())
+                self.assertEqual(command_trigger.get_attribute("aria-expanded"), "true")
+                self.assertTrue(command_input.evaluate("element => element === document.activeElement"))
+                dashboard_page.keyboard.press("Control+k")
+                self.assertFalse(command_palette.is_visible())
+                self.assertTrue(command_trigger.evaluate("element => element === document.activeElement"))
+                dashboard_page.keyboard.press("Control+k")
+                self.assertTrue(command_palette.is_visible())
+                self.assertTrue(command_input.evaluate("element => element === document.activeElement"))
+                self._assert_visual_baseline(
+                    dashboard_page,
+                    f"app-shell-command-palette-{viewport_name}",
+                )
+
+                command_input.fill("motore c")
+                visible_commands = dashboard_page.locator(
+                    "[data-command-item]:not([hidden])"
+                )
+                self.assertEqual(visible_commands.count(), 1)
+                self.assertEqual(
+                    visible_commands.locator("strong").inner_text(),
+                    "Motore C",
+                )
+                command_input.fill("destinazione inesistente")
+                self.assertTrue(
+                    dashboard_page.locator("[data-command-empty]").is_visible()
+                )
+                command_input.fill("")
+                command_input.press("ArrowDown")
+                self.assertEqual(
+                    dashboard_page.locator(":focus strong").inner_text(),
+                    "Dashboard",
+                )
+                dashboard_page.keyboard.press("Escape")
+                self.assertFalse(command_palette.is_visible())
+                self.assertEqual(command_trigger.get_attribute("aria-expanded"), "false")
+                self.assertTrue(command_trigger.evaluate("element => element === document.activeElement"))
+
+                command_trigger.click()
+                last_command = dashboard_page.locator("[data-command-item]").last
+                last_command.focus()
+                dashboard_page.keyboard.press("Tab")
+                self.assertTrue(
+                    dashboard_page.locator(
+                        '[data-command-close]:not([tabindex="-1"])'
+                    ).evaluate("element => element === document.activeElement")
+                )
+                dashboard_page.keyboard.press("Escape")
+
+                command_trigger.click()
+                command_input.press("Enter")
+                dashboard_page.wait_for_load_state("networkidle")
+                self.assertEqual(
+                    dashboard_page.url,
+                    f"{self.live_server_url}{reverse('tenant-dashboard')}",
+                )
+
                 theme_toggle = dashboard_page.locator("[data-app-theme-toggle]")
                 theme_toggle.click()
                 self.assertTrue(

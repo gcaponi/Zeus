@@ -44,6 +44,18 @@
         <strong>{% block shell_page_title %}ZEUS{% endblock %}</strong>
     </div>
     <div class="zeus-app-header-actions">
+        <button
+            type="button"
+            class="zeus-app-command-trigger"
+            data-command-open
+            aria-haspopup="dialog"
+            aria-controls="zeus-command-palette"
+            aria-label="Apri navigazione rapida"
+            aria-expanded="false">
+            <span aria-hidden="true">⌕</span>
+            <span class="zeus-app-command-trigger__label">Naviga</span>
+            <kbd>⌘K</kbd>
+        </button>
         <button type="button" class="zeus-app-icon-button" data-app-theme-toggle aria-label="Attiva tema scuro" title="Cambia tema">
             <span aria-hidden="true">☾</span>
         </button>
@@ -58,5 +70,6 @@
 {% endblock %}
 
 {% block shell_scripts %}
+{% include "core/partials/_command_palette.html" %}
 <script src="{% static 'zeus-app-shell.js' %}"></script>
 {% endblock %}

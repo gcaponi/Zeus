@@ -3,6 +3,15 @@
     var menuToggle = document.querySelector("[data-app-menu-toggle]");
     var menuCloseButtons = document.querySelectorAll("[data-app-menu-close]");
     var themeToggle = document.querySelector("[data-app-theme-toggle]");
+    var commandOpen = document.querySelector("[data-command-open]");
+    var commandPalette = document.querySelector("[data-command-palette]");
+    var commandInput = document.querySelector("[data-command-input]");
+    var commandItems = Array.prototype.slice.call(
+        document.querySelectorAll("[data-command-item]")
+    );
+    var commandCloseButtons = document.querySelectorAll("[data-command-close]");
+    var commandEmpty = document.querySelector("[data-command-empty]");
+    var commandPreviousFocus = null;
 
     if (!shell) {
         return;
@@ -31,7 +40,189 @@
         });
     });
 
+    function visibleCommandItems() {
+        return commandItems.filter(function (item) {
+            return !item.hidden;
+        });
+    }
+
+    function clearCommandSelection() {
+        commandItems.forEach(function (item) {
+            item.classList.remove("is-selected");
+        });
+    }
+
+    function selectCommandItem(item, moveFocus) {
+        if (!item) {
+            return;
+        }
+        clearCommandSelection();
+        item.classList.add("is-selected");
+        if (moveFocus) {
+            item.focus();
+        }
+    }
+
+    function filterCommandItems() {
+        var query = commandInput ? commandInput.value.trim().toLowerCase() : "";
+        var visible = [];
+        commandItems.forEach(function (item) {
+            var label = (item.getAttribute("data-command-label") || "").toLowerCase();
+            item.hidden = Boolean(query && label.indexOf(query) === -1);
+            if (!item.hidden) {
+                visible.push(item);
+            }
+        });
+        clearCommandSelection();
+        if (commandEmpty) {
+            commandEmpty.hidden = visible.length !== 0;
+        }
+        return visible;
+    }
+
+    function openCommandPalette() {
+        if (!commandPalette || !commandInput) {
+            return;
+        }
+        commandPreviousFocus = document.activeElement;
+        if (
+            !commandPreviousFocus ||
+            commandPreviousFocus === document.body ||
+            commandPreviousFocus === document.documentElement
+        ) {
+            commandPreviousFocus = commandOpen;
+        }
+        setMenuOpen(false);
+        commandPalette.hidden = false;
+        document.body.classList.add("is-command-palette-open");
+        if (commandOpen) {
+            commandOpen.setAttribute("aria-expanded", "true");
+        }
+        commandInput.value = "";
+        filterCommandItems();
+        window.requestAnimationFrame(function () {
+            commandInput.focus();
+        });
+    }
+
+    function closeCommandPalette(restoreFocus) {
+        if (!commandPalette || commandPalette.hidden) {
+            return;
+        }
+        commandPalette.hidden = true;
+        document.body.classList.remove("is-command-palette-open");
+        if (commandOpen) {
+            commandOpen.setAttribute("aria-expanded", "false");
+        }
+        clearCommandSelection();
+        if (restoreFocus !== false && commandPreviousFocus) {
+            commandPreviousFocus.focus();
+        }
+    }
+
+    function moveCommandSelection(direction) {
+        var visible = visibleCommandItems();
+        if (!visible.length) {
+            return;
+        }
+        var currentIndex = visible.indexOf(document.activeElement);
+        var nextIndex;
+        if (currentIndex === -1) {
+            nextIndex = direction > 0 ? 0 : visible.length - 1;
+        } else {
+            nextIndex = (currentIndex + direction + visible.length) % visible.length;
+        }
+        selectCommandItem(visible[nextIndex], true);
+    }
+
+    function trapCommandFocus(event) {
+        if (!commandPalette || commandPalette.hidden || event.key !== "Tab") {
+            return;
+        }
+        var focusable = Array.prototype.slice.call(
+            commandPalette.querySelectorAll(
+                'input:not([disabled]), button:not([disabled]):not([tabindex="-1"]), a:not([hidden])'
+            )
+        );
+        if (!focusable.length) {
+            return;
+        }
+        var first = focusable[0];
+        var last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    }
+
+    if (commandOpen) {
+        commandOpen.addEventListener("click", openCommandPalette);
+    }
+
+    commandCloseButtons.forEach(function (button) {
+        button.addEventListener("click", function () {
+            closeCommandPalette(true);
+        });
+    });
+
+    if (commandInput) {
+        commandInput.addEventListener("input", filterCommandItems);
+        commandInput.addEventListener("keydown", function (event) {
+            if (event.key === "ArrowDown") {
+                event.preventDefault();
+                moveCommandSelection(1);
+            } else if (event.key === "ArrowUp") {
+                event.preventDefault();
+                moveCommandSelection(-1);
+            } else if (event.key === "Enter") {
+                var visible = visibleCommandItems();
+                if (visible.length) {
+                    event.preventDefault();
+                    visible[0].click();
+                }
+            }
+        });
+    }
+
+    commandItems.forEach(function (item) {
+        item.addEventListener("focus", function () {
+            selectCommandItem(item, false);
+        });
+        item.addEventListener("keydown", function (event) {
+            if (event.key === "ArrowDown") {
+                event.preventDefault();
+                moveCommandSelection(1);
+            } else if (event.key === "ArrowUp") {
+                event.preventDefault();
+                moveCommandSelection(-1);
+            }
+        });
+        item.addEventListener("click", function () {
+            closeCommandPalette(false);
+        });
+    });
+
     document.addEventListener("keydown", function (event) {
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+            event.preventDefault();
+            if (commandPalette && !commandPalette.hidden) {
+                closeCommandPalette(true);
+            } else {
+                openCommandPalette();
+            }
+            return;
+        }
+        if (commandPalette && !commandPalette.hidden) {
+            if (event.key === "Escape") {
+                event.preventDefault();
+                closeCommandPalette(true);
+                return;
+            }
+            trapCommandFocus(event);
+        }
         if (event.key === "Escape" && shell.classList.contains("is-menu-open")) {
             setMenuOpen(false);
             if (menuToggle) {

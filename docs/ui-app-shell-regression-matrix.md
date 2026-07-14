@@ -74,6 +74,9 @@ Il test `tests/test_ui_browser_baseline.py` usa `StaticLiveServerTestCase`, Chro
 | Domande Specialista loading | `app-shell-specialist-questions-desktop.png` | `app-shell-specialist-questions-tablet.png` | `app-shell-specialist-questions-mobile.png` | Flag on, polling `body`, HTMX disponibile e no overflow. |
 | Review Specialista App Shell | `app-shell-specialist-review-desktop.png` | `app-shell-specialist-review-tablet.png` | `app-shell-specialist-review-mobile.png` | Flag on, sezioni reali, azioni HTMX, sidebar contestuale e no overflow. |
 | DNA Specialista App Shell | `app-shell-specialist-visualize-desktop.png` | `app-shell-specialist-visualize-tablet.png` | `app-shell-specialist-visualize-mobile.png` | Flag on, DNA reale, feedback/PDF, sidebar contestuale e no overflow. |
+| Motore B App Shell | `app-shell-engine-b-desktop.png` | `app-shell-engine-b-tablet.png` | `app-shell-engine-b-mobile.png` | Flag on, analisi cross-specialist, form CSRF, badge/proposte e no overflow. |
+| Motore C App Shell | `app-shell-engine-c-desktop.png` | `app-shell-engine-c-tablet.png` | `app-shell-engine-c-mobile.png` | Flag on, issue reali, azioni, refresh HTMX e no overflow. |
+| Command palette | `app-shell-command-palette-desktop.png` | `app-shell-command-palette-tablet.png` | `app-shell-command-palette-mobile.png` | Dialog aperto, cinque route reali, focus input e no overflow. |
 
 Le immagini sono in `docs/ui-baseline/`. Il confronto e' bloccante e non aggiorna file. Per approvare intenzionalmente una nuova baseline:
 
@@ -155,3 +158,20 @@ uv run playwright install chromium
 - [x] Le 36 baseline precedenti restano byte-identiche; 15 nuove baseline Specialista sono verificate a 1440, 1024 e 390 px. Il timestamp dettaglio e' fissato nella fixture per hash deterministici.
 - [x] Gate mirato Companies: `148 passed`; tutte le baseline browser: `5 passed`; suite completa: `280 passed`, coverage `73.44%`.
 - [x] Ruff, Django system check e migration check SQLite puliti; nessun modello, migration, task Celery o deploy modificato.
+
+## Gate Fase 4
+
+- [x] Motore B e Motore C selezionano legacy/App Shell esclusivamente tramite feature flag.
+- [x] Refresh `#consistency-report-root`, CSRF, POST, redirect e azioni issue restano invariati.
+- [x] Sei baseline nuove Motore B/C; 51 immagini precedenti byte-identiche.
+- [x] Suite completa: `283 passed`, coverage `73.57%`; browser `6 passed`, 57 immagini.
+- [x] Ruff, Django system check e migration check puliti; nessun modello, migration, task Celery o deploy modificato.
+
+## Gate Fase 5.1
+
+- [x] Command palette limitata a cinque route reali: Dashboard, Onboarding, Specialisti, Motore B e Motore C.
+- [x] Trigger topbar nominato, dialog modale, filtro locale e stato vuoto accessibile.
+- [x] `Ctrl/Cmd+K`, toggle, frecce, `Enter`, `Escape`, focus trap e ripristino focus verificati in Chromium.
+- [x] Tre baseline palette nuove; 42 baseline tenant aggiornate intenzionalmente per il trigger topbar; 15 baseline legacy/preview non modificate.
+- [x] Contratti App Shell: `19 passed`; browser: `6 passed`, 60 immagini; suite completa: `284 passed`, coverage `73.57%`.
+- [x] Ruff, Django system check e migration check puliti; nessun modello, migration, task Celery o deploy modificato.

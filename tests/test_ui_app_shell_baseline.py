@@ -106,6 +106,37 @@ def test_dashboard_uses_app_shell_when_flag_enabled():
     assert reverse("product-list-create").encode() in response.content
 
 
+@override_settings(ROOT_URLCONF="config.urls", ZEUS_APP_SHELL_ENABLED=True)
+def test_tenant_shell_exposes_navigation_command_palette():
+    request = RequestFactory().get(reverse("tenant-dashboard"))
+    request.user = SimpleNamespace(
+        is_authenticated=True,
+        email="ui-baseline@example.com",
+    )
+    request.tenant = SimpleNamespace(
+        name="UI Baseline",
+        schema_name="ui-baseline",
+    )
+
+    response = tenant_dashboard(request)
+
+    assert response.status_code == 200
+    assert b'data-command-open' in response.content
+    assert b'aria-label="Apri navigazione rapida"' in response.content
+    assert b'id="zeus-command-palette"' in response.content
+    assert b'role="dialog"' in response.content
+    assert b'aria-modal="true"' in response.content
+    assert b'data-command-input' in response.content
+    for url_name in (
+        "tenant-dashboard",
+        "onboarding-index",
+        "product-list-create",
+        "motore-b-report",
+        "consistency-report",
+    ):
+        assert reverse(url_name).encode() in response.content
+
+
 @override_settings(ROOT_URLCONF="config.urls")
 def test_public_pages_render_without_tenant_shell():
     request_factory = RequestFactory()
