@@ -1,13 +1,12 @@
 # App Shell controlled release record
 
-Status: production preparation complete; deployment blocked pending a green visual CI run
+Status: flag-off deployment complete; tenant App Shell enablement awaits authenticated smoke tests
 
 ## Scope
 
 This release promotes the tenant App Shell phases 0-5, the dedicated ZeusAdmin phase 6, and
 the cross-platform visual/release gate from phase 7.1. The production gap starts after commit
-`ef087d3` and currently ends at `e129e06`; the final release SHA will include this preparation
-record.
+`ef087d3` and the deployed application release is `ba3a7e5`.
 
 There are no Django migration files in the observed commit range. Runtime changes are Python,
 templates, CSS, JavaScript, CI configuration, tests, and static assets.
@@ -33,27 +32,27 @@ by the rollout.
 
 ## Release gates
 
-- [ ] Final-release `lint` green.
-- [ ] Final-release `test` green with coverage at or above 70%.
-- [ ] Final-release `build` green.
-- [ ] Final-release `release-gate` green.
+- [x] Final-release `lint` green.
+- [x] Final-release `test` green with coverage at or above 70%.
+- [x] Final-release `build` green.
+- [x] Final-release `release-gate` green.
 - [x] Production preflight script green.
-- [ ] Final release SHA recorded.
+- [x] Final release SHA recorded.
 - [x] Previous production SHA recorded.
 - [x] No migration files in the final production gap.
 
 ## Deployment evidence
 
-- Latest CI run: `e129e06` has green `lint`, `build`, and `release-gate`; `test` is blocked
-  only by cross-platform visual baseline drift and must be green for the final release SHA.
+- GitHub Actions run: [29339315205](https://github.com/gcaponi/Zeus/actions/runs/29339315205) (all four jobs green).
 - Previous SHA: `ef087d3`.
-- Release SHA: pending.
-- Shared migrations: pending.
-- Tenant migrations: pending.
-- Static collection: pending.
-- Flag-off smoke: pending.
-- Flag-on tenant smoke: pending.
-- ZeusAdmin staff smoke: pending.
-- Rollback required: pending.
+- Release SHA: `ba3a7e537ca1b3046c890931f78f66b7a1c758fe`.
+- Shared migrations: no migrations to apply.
+- Tenant migrations: no migrations to apply.
+- Static collection: 9 files copied, 128 unchanged.
+- Flag-off smoke: health local/public `{"status":"ok"}`, root/login HTTP 200, anonymous ZeusAdmin
+  redirects to login, all services active after `daemon-reload`.
+- Flag-on tenant smoke: pending authenticated verification.
+- ZeusAdmin staff smoke: pending authenticated verification.
+- Rollback required: no.
 
 Execution follows [the production deploy runbook](../deploy-runbook.md).
