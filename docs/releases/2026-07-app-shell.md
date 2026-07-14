@@ -1,6 +1,6 @@
 # App Shell controlled release record
 
-Status: flag-off deployment complete; tenant App Shell enablement awaits authenticated smoke tests
+Status: tenant App Shell enabled; authenticated tenant and staff smoke tests remain pending
 
 ## Scope
 
@@ -56,3 +56,16 @@ by the rollout.
 - Rollback required: no.
 
 Execution follows [the production deploy runbook](../deploy-runbook.md).
+
+## Onboarding and upload hotfix deployment evidence
+
+- GitHub Actions run: [29343543621](https://github.com/gcaponi/Zeus/actions/runs/29343543621) (lint, test, build and release-gate green).
+- Previous SHA: `ba3a7e537ca1b3046c890931f78f66b7a1c758fe`.
+- Release SHA: `75620c82f4a505eb54b96a76871cf64b96212fb2`.
+- Shared and tenant migrations: no migrations to apply.
+- Static collection: 1 file copied, 136 unchanged.
+- App Shell flag: enabled and retained through the restart.
+- Post-deploy smoke: `zeus`, `zeus-celery` and nginx active; local/public health
+  `{"status": "ok"}`; root and login HTTP 200; anonymous ZeusAdmin redirects to login.
+- Recent web and worker logs: no new traceback, exception or error entries.
+- Rollback required: no.
