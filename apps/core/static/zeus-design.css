@@ -439,6 +439,11 @@ body {
   outline: 2px solid var(--accent-cyan-light);
   outline-offset: 3px;
 }
+.zeus-btn#source-submit-btn {
+  width: 100%;
+  min-width: 0;
+  white-space: normal;
+}
 .zeus-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .zeus-btn-primary {
