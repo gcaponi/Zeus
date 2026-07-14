@@ -321,6 +321,8 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                     app_main = dashboard_page.locator("#app-main")
                     sidebar = dashboard_page.locator("#app-sidebar")
                     self.assertTrue(menu_toggle.is_visible())
+                    self.assertTrue(sidebar.get_attribute("inert") is not None)
+                    self.assertEqual(sidebar.get_attribute("aria-hidden"), "true")
                     menu_toggle.click()
                     self.assertEqual(menu_toggle.get_attribute("aria-expanded"), "true")
                     self.assertTrue(app_main.get_attribute("inert") is not None)
@@ -349,6 +351,34 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                             "element => element === document.activeElement"
                         )
                     )
+                    menu_toggle.click()
+                    dashboard_page.set_viewport_size({"width": 768, "height": 844})
+                    self.assertEqual(menu_toggle.get_attribute("aria-expanded"), "false")
+                    self.assertTrue(sidebar.get_attribute("inert") is None)
+                    self.assertTrue(sidebar.get_attribute("aria-hidden") is None)
+                    self.assertTrue(app_main.get_attribute("inert") is None)
+                    self.assertTrue(
+                        sidebar.locator('a[aria-current="page"]').evaluate(
+                            "element => element === document.activeElement"
+                        )
+                    )
+                    dashboard_page.set_viewport_size(viewport)
+                    self.assertTrue(sidebar.get_attribute("inert") is not None)
+                    self.assertEqual(sidebar.get_attribute("aria-hidden"), "true")
+                    self.assertTrue(
+                        menu_toggle.evaluate(
+                            "element => element === document.activeElement"
+                        )
+                    )
+                    transition_seconds = sidebar.evaluate(
+                        """element => {
+                            const value = getComputedStyle(element).transitionDuration;
+                            return value.endsWith('ms')
+                                ? parseFloat(value) / 1000
+                                : parseFloat(value);
+                        }"""
+                    )
+                    self.assertLessEqual(transition_seconds, 0.001)
 
                 products_page = context.new_page()
                 products_response = products_page.goto(
@@ -521,6 +551,22 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                         self.assertTrue(
                             page.evaluate("typeof window.htmx !== 'undefined'")
                         )
+                    if surface_name == "dna-generating":
+                        spinner = page.locator(".animate-spin").first
+                        animation = spinner.evaluate(
+                            """element => {
+                                const style = getComputedStyle(element);
+                                const duration = style.animationDuration;
+                                return {
+                                    duration: duration.endsWith('ms')
+                                        ? parseFloat(duration) / 1000
+                                        : parseFloat(duration),
+                                    iterations: style.animationIterationCount,
+                                };
+                            }"""
+                        )
+                        self.assertLessEqual(animation["duration"], 0.001)
+                        self.assertEqual(animation["iterations"], "1")
                     for overlay_selector in (
                         "#generating-popup",
                         "#dna-popup-overlay",

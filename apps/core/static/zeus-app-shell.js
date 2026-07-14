@@ -119,14 +119,28 @@
         });
     });
 
+    function handleMenuBreakpointChange(event) {
+        var focusedInSidebar = Boolean(
+            sidebar && sidebar.contains(document.activeElement)
+        );
+        var wasOpen = shell.classList.contains("is-menu-open");
+        setMenuOpen(false, false);
+        if (event.matches && focusedInSidebar && menuToggle) {
+            menuToggle.focus();
+        } else if (!event.matches && wasOpen && sidebar) {
+            var currentLink = sidebar.querySelector('a[aria-current="page"]');
+            var focusable = menuFocusableElements();
+            var nextFocus = currentLink || focusable[0];
+            if (nextFocus) {
+                nextFocus.focus();
+            }
+        }
+    }
+
     if (typeof mobileMenuQuery.addEventListener === "function") {
-        mobileMenuQuery.addEventListener("change", function () {
-            setMenuOpen(false, false);
-        });
+        mobileMenuQuery.addEventListener("change", handleMenuBreakpointChange);
     } else {
-        mobileMenuQuery.addListener(function () {
-            setMenuOpen(false, false);
-        });
+        mobileMenuQuery.addListener(handleMenuBreakpointChange);
     }
     syncMenuAccessibility();
 
