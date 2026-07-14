@@ -117,6 +117,11 @@ class TestZeusAdminDashboard:
         assert b"Storage" in response.content
         assert b"/zeus-admin/clients/?segment=active" in response.content
         assert b"/zeus-admin/clients/?segment=complete_dna" in response.content
+        assert b'data-zeus-admin-shell="v1"' in response.content
+        assert b'id="zeus-admin-sidebar"' in response.content
+        assert b'id="zeus-admin-header"' in response.content
+        assert b'id="zeus-admin-main"' in response.content
+        assert b'aria-current="page">Dashboard' in response.content
         main_html = response.content.decode().split("<main", 1)[1]
         assert "Django Admin" not in main_html
 
@@ -200,6 +205,8 @@ class TestZeusAdminDashboard:
         assert "Rossi Metalli" in html
         assert "Bianchi Infissi" not in html
         assert "1 di 2 workspace" in html
+        assert 'data-zeus-admin-shell="v1"' in html
+        assert 'aria-current="page">Clienti' in html
         main_html = html.split("<main", 1)[1]
         assert "Django Admin" not in main_html
 
@@ -223,6 +230,7 @@ class TestZeusAdminDashboard:
         assert response.status_code == 200
         assert "Risultati Clienti" in html
         assert "Clienti ZEUS" not in html
+        assert "data-zeus-admin-shell" not in html
 
     def test_client_detail_shows_configuration_and_uploaded_files(self, monkeypatch):
         monkeypatch.setattr(TenantClient, "auto_create_schema", False)
@@ -306,6 +314,12 @@ class TestZeusAdminDashboard:
         assert "Elimina" in html
         assert "zeus-content-modal" in html
         assert "data-open-content" in html
+        assert 'data-zeus-admin-shell="v1"' in html
+        assert 'aria-current="page">Clienti' in html
+        assert 'role="dialog"' in html
+        assert 'aria-modal="true"' in html
+        assert 'aria-labelledby="zeus-content-title"' in html
+        assert "zeus-admin-detail.js" in html
         assert "Cambia Password" in html
         assert reverse("zeus-admin-company-dna-open", args=[tenant.pk, company_dna.pk]) in html
         assert reverse("zeus-admin-product-dna-open", args=[tenant.pk, product_dna.pk]) in html

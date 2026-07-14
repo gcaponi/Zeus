@@ -1,0 +1,68 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ZEUS Admin · {% block admin_title %}Workspace staff{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        display: ['Space Grotesk', 'Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                },
+            },
+        }
+    </script>
+    <link rel="stylesheet" href="{% static 'zeus-admin.css' %}">
+    {% block admin_head %}{% endblock %}
+</head>
+<body class="zeus-admin-body">
+    <div class="zeus-admin-shell" data-zeus-admin-shell="v1">
+        <aside id="zeus-admin-sidebar" class="zeus-admin-sidebar" aria-label="Navigazione amministrazione">
+            <div class="zeus-admin-sidebar-head">
+                <a href="{% url 'zeus-admin-dashboard' %}" class="zeus-admin-brand">
+                    <span class="zeus-admin-brand-mark" aria-hidden="true">Z</span>
+                    <span><strong>ZEUS</strong><small>Amministrazione</small></span>
+                </a>
+                <button type="button" class="zeus-admin-icon-button zeus-admin-menu-close" data-admin-menu-close aria-label="Chiudi navigazione">×</button>
+            </div>
+            <nav class="zeus-admin-nav" aria-label="Navigazione staff">
+                <a href="{% url 'zeus-admin-dashboard' %}"{% if admin_section == 'dashboard' %} class="nav-active" aria-current="page"{% endif %}>Dashboard</a>
+                <a href="{% url 'zeus-admin-clients' %}"{% if admin_section == 'clients' %} class="nav-active" aria-current="page"{% endif %}>Clienti</a>
+                <a href="/admin/">Django Admin</a>
+            </nav>
+            <div class="zeus-admin-sidebar-foot">
+                <span>{{ user.email|default:"Staff ZEUS" }}</span>
+                <span class="zeus-admin-health"><i aria-hidden="true"></i>Online</span>
+            </div>
+        </aside>
+
+        <header id="zeus-admin-header" class="zeus-admin-header">
+            <button type="button" class="zeus-admin-icon-button zeus-admin-menu-toggle" data-admin-menu-toggle aria-controls="zeus-admin-sidebar" aria-expanded="false" aria-label="Apri navigazione">☰</button>
+            <div class="zeus-admin-breadcrumb" aria-label="Posizione corrente">
+                <a href="{% url 'zeus-admin-dashboard' %}">ZEUS Admin</a>
+                <span aria-hidden="true">/</span>
+                <strong>{% block admin_page_title %}Workspace staff{% endblock %}</strong>
+            </div>
+            <a href="{% url 'account_logout' %}" class="zeus-admin-logout">Esci</a>
+        </header>
+
+        <button type="button" class="zeus-admin-sidebar-overlay" data-admin-menu-close aria-label="Chiudi navigazione" tabindex="-1"></button>
+
+        <main id="zeus-admin-main" class="zeus-admin-main">
+            {% block admin_content %}{% endblock %}
+        </main>
+    </div>
+    <script src="{% static 'zeus-admin.js' %}"></script>
+    {% block admin_scripts %}{% endblock %}
+</body>
+</html>

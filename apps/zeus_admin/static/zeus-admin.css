@@ -1,0 +1,199 @@
+:root {
+  --admin-bg: #020617;
+  --admin-panel: #0f172a;
+  --admin-panel-muted: #111c31;
+  --admin-border: rgba(255, 255, 255, 0.09);
+  --admin-text: #f8fafc;
+  --admin-muted: #94a3b8;
+  --admin-accent: #22d3ee;
+  --admin-accent-soft: rgba(34, 211, 238, 0.12);
+  --admin-lime: #a3e635;
+  --admin-amber: #fbbf24;
+  --admin-red: #fb7185;
+  --admin-sidebar-width: 240px;
+  --admin-header-height: 56px;
+}
+
+* { box-sizing: border-box; }
+
+.zeus-admin-body {
+  min-height: 100vh;
+  margin: 0;
+  background: var(--admin-bg);
+  color: var(--admin-text);
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.zeus-admin-shell {
+  display: grid;
+  grid-template-areas: "sidebar header" "sidebar main";
+  grid-template-columns: var(--admin-sidebar-width) minmax(0, 1fr);
+  grid-template-rows: var(--admin-header-height) minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.zeus-admin-sidebar {
+  grid-area: sidebar;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  overflow-y: auto;
+  border-right: 1px solid var(--admin-border);
+  background: #0b1220;
+  color: #e2e8f0;
+}
+
+.zeus-admin-sidebar-head,
+.zeus-admin-header {
+  min-height: var(--admin-header-height);
+}
+
+.zeus-admin-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.zeus-admin-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.zeus-admin-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: #cffafe;
+  color: #155e75;
+  font-weight: 900;
+}
+
+.zeus-admin-brand strong,
+.zeus-admin-brand small { display: block; }
+.zeus-admin-brand strong { font-size: 0.8125rem; letter-spacing: 0.08em; }
+.zeus-admin-brand small { margin-top: 1px; color: #94a3b8; font-size: 0.625rem; }
+
+.zeus-admin-nav {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 10px;
+}
+
+.zeus-admin-nav a {
+  min-height: 40px;
+  padding: 10px 12px;
+  border-radius: 7px;
+  color: #94a3b8;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.zeus-admin-nav a:hover { background: rgba(255, 255, 255, 0.06); color: #f8fafc; }
+.zeus-admin-nav a.nav-active { background: rgba(34, 211, 238, 0.12); color: #67e8f9; }
+
+.zeus-admin-sidebar-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+  font-size: 0.6875rem;
+}
+
+.zeus-admin-health { display: inline-flex; align-items: center; gap: 5px; color: #bef264; }
+.zeus-admin-health i { width: 7px; height: 7px; border-radius: 50%; background: #a3e635; }
+
+.zeus-admin-header {
+  grid-area: header;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--admin-border);
+  background: var(--admin-panel);
+}
+
+.zeus-admin-breadcrumb { display: flex; align-items: center; min-width: 0; gap: 8px; color: var(--admin-muted); font-size: 0.8125rem; }
+.zeus-admin-breadcrumb a { color: inherit; text-decoration: none; }
+.zeus-admin-breadcrumb strong { overflow: hidden; color: var(--admin-text); text-overflow: ellipsis; white-space: nowrap; }
+.zeus-admin-logout { margin-left: auto; color: var(--admin-muted); font-size: 0.8125rem; font-weight: 700; text-decoration: none; }
+
+.zeus-admin-main {
+  grid-area: main;
+  min-width: 0;
+  overflow: auto;
+  padding: 24px;
+}
+
+.zeus-admin-main > :first-child { margin-top: 0; }
+.zeus-admin-shell :focus-visible { outline: 3px solid rgba(8, 145, 178, 0.32); outline-offset: 2px; }
+
+.zeus-admin-icon-button {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--admin-border);
+  border-radius: 7px;
+  background: var(--admin-panel);
+  color: var(--admin-text);
+  cursor: pointer;
+}
+
+.zeus-admin-menu-close { border-color: rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.04); color: #e2e8f0; }
+.zeus-admin-sidebar-overlay { display: none; }
+
+.glass-card {
+  border: 1px solid var(--admin-border);
+  border-radius: 10px;
+  background: var(--admin-panel);
+  color: var(--admin-text);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+}
+
+.status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 999px; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; }
+.status-dot { flex: 0 0 6px; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.tone-online { background: rgba(163, 230, 53, 0.12); color: var(--admin-lime); }
+.tone-info { background: rgba(34, 211, 238, 0.12); color: var(--admin-accent); }
+.tone-warning { background: rgba(251, 191, 36, 0.13); color: var(--admin-amber); }
+.tone-error { background: rgba(251, 113, 133, 0.13); color: var(--admin-red); }
+.tone-muted { background: rgba(255, 255, 255, 0.06); color: #94a3b8; }
+.kpi-cyan { color: var(--admin-accent); }
+.kpi-violet { color: #a78bfa; }
+.kpi-lime { color: var(--admin-lime); }
+.kpi-amber { color: var(--admin-amber); }
+.kpi-red { color: var(--admin-red); }
+
+@media (max-width: 767px) {
+  .zeus-admin-shell { grid-template-areas: "header" "main"; grid-template-columns: minmax(0, 1fr); }
+  .zeus-admin-sidebar { position: fixed; inset: 0 auto 0 0; z-index: 120; width: min(320px, 86vw); transform: translateX(-100%); transition: transform 180ms ease; }
+  .zeus-admin-shell.is-menu-open .zeus-admin-sidebar { transform: translateX(0); }
+  .zeus-admin-menu-toggle,
+  .zeus-admin-menu-close { display: inline-flex; }
+  .zeus-admin-main { padding: 16px; }
+  .zeus-admin-sidebar-overlay { position: fixed; inset: 0; z-index: 110; width: 100%; height: 100%; padding: 0; border: 0; background: rgba(15, 23, 42, 0.48); }
+  .zeus-admin-shell.is-menu-open .zeus-admin-sidebar-overlay { display: block; }
+  .is-zeus-admin-menu-open { overflow: hidden; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zeus-admin-shell *,
+  .zeus-admin-shell *::before,
+  .zeus-admin-shell *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+}

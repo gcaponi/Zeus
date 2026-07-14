@@ -762,6 +762,7 @@ def dashboard(request):
         },
     ]
     context = {
+        "admin_section": "dashboard",
         "kpis": kpis,
         "clients": rows,
         "attention_clients": [row for row in rows if row["has_warning"]][:6],
@@ -781,6 +782,7 @@ def dashboard(request):
 @staff_member_required
 def clients(request):
     context = _client_rows_context(request)
+    context["admin_section"] = "clients"
     template = "zeus_admin/clients.html"
     if request.headers.get("HX-Request"):
         template = "zeus_admin/_clients_results.html"
@@ -794,6 +796,7 @@ def client_detail(request, client_id):
         _update_client_config(request, client)
         return redirect(f"{reverse('zeus-admin-client-detail', args=[client.pk])}?saved=1")
     context = _client_detail_context(request, client)
+    context["admin_section"] = "clients"
     return render(request, "zeus_admin/client_detail.html", context)
 
 

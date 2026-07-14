@@ -205,7 +205,12 @@
         commandInput.value = "";
         filterCommandItems();
         window.requestAnimationFrame(function () {
-            commandInput.focus();
+            if (
+                !commandPalette.hidden &&
+                !commandPalette.contains(document.activeElement)
+            ) {
+                commandInput.focus();
+            }
         });
     }
 

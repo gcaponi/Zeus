@@ -14,11 +14,14 @@ from apps.companies.dna_schemas import LAYER_KEYS, PRODUCT_LAYER_KEYS
 from apps.companies.models import (
     Company,
     CompanyDNA,
+    CompanyFile,
     CompanyQuestion,
     ConsistencyIssue,
     Product,
     ProductDNA,
 )
+from apps.core.models import Client as TenantClient
+from apps.core.models import Domain, Plan, WorkspaceSubscription
 
 
 BROWSER_MIDDLEWARE = [
@@ -353,6 +356,9 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                     )
                     menu_toggle.click()
                     dashboard_page.set_viewport_size({"width": 768, "height": 844})
+                    dashboard_page.wait_for_function(
+                        "!document.querySelector('#app-sidebar').hasAttribute('inert')"
+                    )
                     self.assertEqual(menu_toggle.get_attribute("aria-expanded"), "false")
                     self.assertTrue(sidebar.get_attribute("inert") is None)
                     self.assertTrue(sidebar.get_attribute("aria-hidden") is None)
@@ -363,6 +369,9 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                         )
                     )
                     dashboard_page.set_viewport_size(viewport)
+                    dashboard_page.wait_for_function(
+                        "document.querySelector('#app-sidebar').hasAttribute('inert')"
+                    )
                     self.assertTrue(sidebar.get_attribute("inert") is not None)
                     self.assertEqual(sidebar.get_attribute("aria-hidden"), "true")
                     self.assertTrue(
@@ -887,5 +896,244 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                         f"app-shell-{surface_name}-{viewport_name}",
                     )
                     page.close()
+                context.close()
+            browser.close()
+
+    def test_zeus_admin_shell_visual_baselines(self):
+        staff = get_user_model().objects.create_user(
+            username="browser-zeus-admin",
+            email="browser-zeus-admin@example.com",
+            password="test-password",
+            is_staff=True,
+        )
+        self.client.force_login(staff)
+        session_cookie = self.client.cookies[settings.SESSION_COOKIE_NAME].value
+
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            for viewport_name, viewport in VIEWPORTS.items():
+                context = browser.new_context(
+                    viewport=viewport,
+                    color_scheme="dark",
+                    reduced_motion="reduce",
+                )
+                context.add_cookies(
+                    [
+                        {
+                            "name": settings.SESSION_COOKIE_NAME,
+                            "value": session_cookie,
+                            "url": self.live_server_url,
+                        }
+                    ]
+                )
+
+                dashboard = context.new_page()
+                response = dashboard.goto(
+                    f"{self.live_server_url}{reverse('zeus-admin-dashboard')}",
+                    wait_until="networkidle",
+                )
+                self.assertTrue(response.ok)
+                self.assertTrue(dashboard.locator('[data-zeus-admin-shell="v1"]').count())
+                self.assertEqual(
+                    dashboard.locator(".zeus-admin-nav a[aria-current='page']").inner_text(),
+                    "Dashboard",
+                )
+                self.assertEqual(
+                    dashboard.locator(".zeus-admin-breadcrumb strong").inner_text(),
+                    "Dashboard",
+                )
+                self._assert_no_horizontal_overflow(dashboard)
+
+                if viewport_name == "mobile":
+                    toggle = dashboard.locator("[data-admin-menu-toggle]")
+                    sidebar = dashboard.locator("#zeus-admin-sidebar")
+                    main = dashboard.locator("#zeus-admin-main")
+                    self.assertTrue(toggle.is_visible())
+                    self.assertTrue(sidebar.get_attribute("inert") is not None)
+                    toggle.click()
+                    self.assertEqual(toggle.get_attribute("aria-expanded"), "true")
+                    self.assertTrue(main.get_attribute("inert") is not None)
+                    self.assertTrue(
+                        sidebar.locator("[data-admin-menu-close]").evaluate(
+                            "element => element === document.activeElement"
+                        )
+                    )
+                    dashboard.keyboard.press("Escape")
+                    self.assertEqual(toggle.get_attribute("aria-expanded"), "false")
+                    self.assertTrue(main.get_attribute("inert") is None)
+                    self.assertTrue(
+                        toggle.evaluate("element => element === document.activeElement")
+                    )
+
+                self._assert_visual_baseline(
+                    dashboard,
+                    f"zeus-admin-dashboard-{viewport_name}",
+                )
+
+                clients = context.new_page()
+                response = clients.goto(
+                    f"{self.live_server_url}{reverse('zeus-admin-clients')}",
+                    wait_until="networkidle",
+                )
+                self.assertTrue(response.ok)
+                self.assertEqual(clients.locator("h1").inner_text(), "Clienti ZEUS")
+                self.assertEqual(
+                    clients.locator(".zeus-admin-nav a[aria-current='page']").inner_text(),
+                    "Clienti",
+                )
+                self.assertTrue(clients.locator("#clients-results").count())
+                self.assertTrue(clients.evaluate("typeof window.htmx !== 'undefined'"))
+                self._assert_no_horizontal_overflow(clients)
+                self._assert_visual_baseline(
+                    clients,
+                    f"zeus-admin-clients-{viewport_name}",
+                )
+                context.close()
+            browser.close()
+
+    def test_zeus_admin_detail_visual_baselines(self):
+        staff = get_user_model().objects.create_user(
+            username="browser-zeus-admin-detail",
+            email="browser-zeus-admin-detail@example.com",
+            password="test-password",
+            is_staff=True,
+        )
+        original_auto_create_schema = TenantClient.auto_create_schema
+        TenantClient.auto_create_schema = False
+        try:
+            tenant = TenantClient.objects.create(
+                schema_name="browser-admin-detail",
+                name="Rossi Metalli",
+            )
+        finally:
+            TenantClient.auto_create_schema = original_auto_create_schema
+        Domain.objects.create(
+            tenant=tenant,
+            domain="rossi.zeus.example.test",
+            is_primary=True,
+        )
+        plan, _ = Plan.objects.update_or_create(
+            slug=Plan.SLUG_STARTER,
+            defaults=Plan.default_values(Plan.SLUG_STARTER),
+        )
+        WorkspaceSubscription.objects.create(
+            client=tenant,
+            plan=plan,
+            status=WorkspaceSubscription.STATUS_ACTIVE,
+            notes="Workspace dimostrativo per la console staff.",
+        )
+        company = Company.objects.create(
+            schema_name=tenant.schema_name,
+            name="Rossi Metalli SRL",
+        )
+        company_dna = CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            content={
+                "chi_siamo": "Produciamo componenti metallici ad alta precisione.",
+                "mission": "Rendere affidabile ogni passaggio produttivo.",
+            },
+        )
+        company_file = CompanyFile.objects.create(
+            company=company,
+            original_name="Scheda tecnica aziendale.txt",
+            content_text="Capacità produttiva e certificazioni del workspace.",
+            file_size=58,
+            uploaded_by=staff,
+        )
+        fixed_created_at = datetime(2026, 7, 14, 10, 30, tzinfo=UTC)
+        CompanyDNA.objects.filter(pk=company_dna.pk).update(
+            created_at=fixed_created_at,
+        )
+        CompanyFile.objects.filter(pk=company_file.pk).update(
+            created_at=fixed_created_at,
+        )
+        self.client.force_login(staff)
+        session_cookie = self.client.cookies[settings.SESSION_COOKIE_NAME].value
+
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            for viewport_name, viewport in VIEWPORTS.items():
+                context = browser.new_context(
+                    viewport=viewport,
+                    color_scheme="dark",
+                    reduced_motion="reduce",
+                )
+                context.add_cookies(
+                    [
+                        {
+                            "name": settings.SESSION_COOKIE_NAME,
+                            "value": session_cookie,
+                            "url": self.live_server_url,
+                        }
+                    ]
+                )
+                page_errors = []
+                page = context.new_page()
+                page.on(
+                    "pageerror",
+                    lambda error, errors=page_errors: errors.append(str(error)),
+                )
+                response = page.goto(
+                    f"{self.live_server_url}"
+                    f"{reverse('zeus-admin-client-detail', args=[tenant.pk])}",
+                    wait_until="networkidle",
+                )
+
+                self.assertTrue(response.ok)
+                self.assertEqual(page.locator("h1").inner_text(), "Rossi Metalli")
+                self.assertEqual(
+                    page.locator(".zeus-admin-nav a[aria-current='page']").inner_text(),
+                    "Clienti",
+                )
+                self.assertTrue(page.locator('[role="dialog"][aria-modal="true"]').count())
+                self.assertFalse(page_errors)
+                self._assert_no_horizontal_overflow(page)
+                self._assert_visual_baseline(
+                    page,
+                    f"zeus-admin-client-detail-{viewport_name}",
+                )
+
+                opener = page.locator("[data-open-content]").first
+                opener.click()
+                dialog = page.locator('[role="dialog"]')
+                page.locator("#zeus-content-title").wait_for(
+                    state="visible",
+                )
+                page.wait_for_function(
+                    "document.querySelector('#zeus-content-title').textContent !== "
+                    "'Caricamento...'"
+                )
+                self.assertTrue(dialog.is_visible())
+                self.assertTrue(
+                    page.locator('[data-zeus-admin-shell="v1"]').get_attribute("inert")
+                    is not None
+                )
+                self.assertTrue(
+                    page.locator("[data-modal-initial-focus]").evaluate(
+                        "element => element === document.activeElement"
+                    )
+                )
+                page.keyboard.press("Tab")
+                self.assertTrue(
+                    page.locator("[data-modal-initial-focus]").evaluate(
+                        "element => element === document.activeElement"
+                    )
+                )
+                self._assert_visual_baseline(
+                    page,
+                    f"zeus-admin-client-modal-{viewport_name}",
+                    full_page=False,
+                )
+                page.keyboard.press("Escape")
+                self.assertFalse(dialog.is_visible())
+                self.assertTrue(
+                    page.locator('[data-zeus-admin-shell="v1"]').get_attribute("inert")
+                    is None
+                )
+                self.assertTrue(
+                    opener.evaluate("element => element === document.activeElement")
+                )
                 context.close()
             browser.close()
