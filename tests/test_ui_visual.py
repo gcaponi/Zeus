@@ -41,3 +41,13 @@ def test_visual_comparison_rejects_dimension_change():
 
     assert not comparison.passed
     assert comparison.expected_size != comparison.actual_size
+
+
+def test_visual_comparison_accepts_small_full_page_height_delta():
+    expected = Image.new("RGB", (100, 112), "#101827")
+    actual = Image.new("RGB", (100, 110), "#101827")
+
+    comparison = compare_png(_png(expected), _png(actual))
+
+    assert comparison.passed
+    assert comparison.size_compatible
