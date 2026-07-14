@@ -51,3 +51,23 @@ def test_visual_comparison_accepts_small_full_page_height_delta():
 
     assert comparison.passed
     assert comparison.size_compatible
+
+
+def test_visual_comparison_accepts_bounded_long_page_height_delta():
+    expected = Image.new("RGB", (390, 882), "#101827")
+    actual = Image.new("RGB", (390, 932), "#101827")
+
+    comparison = compare_png(_png(expected), _png(actual))
+
+    assert comparison.passed
+    assert comparison.size_compatible
+
+
+def test_visual_comparison_rejects_excessive_height_delta():
+    expected = Image.new("RGB", (390, 882), "#101827")
+    actual = Image.new("RGB", (390, 947), "#101827")
+
+    comparison = compare_png(_png(expected), _png(actual))
+
+    assert not comparison.passed
+    assert not comparison.size_compatible

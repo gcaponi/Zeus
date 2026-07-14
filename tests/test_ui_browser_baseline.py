@@ -52,6 +52,7 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
         self.assertFalse(has_overflow, f"Overflow orizzontale su {page.url}")
 
     def _assert_visual_baseline(self, page, name, full_page=True):
+        page.evaluate("() => document.fonts.ready")
         page.add_style_tag(
             content="""
                 *, *::before, *::after {
