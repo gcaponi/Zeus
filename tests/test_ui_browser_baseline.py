@@ -52,7 +52,23 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
         self.assertFalse(has_overflow, f"Overflow orizzontale su {page.url}")
 
     def _assert_visual_baseline(self, page, name, full_page=True):
-        page.evaluate("() => document.fonts.ready")
+        fonts_ready = page.evaluate(
+            """async () => {
+                await Promise.all([
+                    document.fonts.load('400 16px Inter'),
+                    document.fonts.load('500 16px "Space Grotesk"'),
+                    document.fonts.load('400 16px "JetBrains Mono"'),
+                ]);
+                await document.fonts.ready;
+                return ['Inter', 'Space Grotesk', 'JetBrains Mono'].every(
+                    font => document.fonts.check(`16px "${font}"`)
+                );
+            }"""
+        )
+        self.assertTrue(
+            fonts_ready,
+            "I font locali devono essere caricati prima dello screenshot",
+        )
         page.add_style_tag(
             content="""
                 *, *::before, *::after {
