@@ -1398,6 +1398,26 @@ html,
   box-shadow: none;
 }
 
+.zeus-app-state {
+  position: relative;
+}
+
+.zeus-app-state--loading {
+  border-color: rgba(34, 211, 238, 0.28) !important;
+}
+
+.zeus-app-state--error {
+  border-color: rgba(248, 113, 113, 0.32) !important;
+}
+
+.zeus-app-state--completed {
+  border-color: rgba(74, 222, 128, 0.30) !important;
+}
+
+.zeus-app-state--empty {
+  border-style: dashed !important;
+}
+
 .zeus-product-error {
   margin-bottom: 20px;
   padding: 12px 14px;

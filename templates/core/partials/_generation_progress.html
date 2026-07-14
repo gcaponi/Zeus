@@ -1,7 +1,7 @@
 <div class="py-6">
     {% if status == "failed" %}
         {# --- Error state --- #}
-        <div class="mx-auto max-w-xl rounded-3xl p-8 text-center zeus-card" style="border-color: rgba(248,113,113,0.28);">
+        <div class="mx-auto max-w-xl rounded-3xl p-8 text-center zeus-card zeus-app-state zeus-app-state--error" data-app-state="error" role="alert" aria-atomic="true" style="border-color: rgba(248,113,113,0.28);">
             <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-red-400/15">
                 <span class="text-2xl text-red-300">!</span>
             </div>
@@ -13,7 +13,7 @@
         </div>
     {% elif status == "completed" %}
         {# --- Completed state — page will redirect on next poll --- #}
-        <div class="mx-auto max-w-xl rounded-3xl p-8 text-center zeus-card">
+        <div class="mx-auto max-w-xl rounded-3xl p-8 text-center zeus-card zeus-app-state zeus-app-state--completed" data-app-state="completed" role="status" aria-live="polite" aria-atomic="true">
             <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-green-400/15">
                 <span class="text-xl text-green-400">✓</span>
             </div>
@@ -22,9 +22,9 @@
         </div>
     {% else %}
         {# --- Running state --- #}
-        <div class="mx-auto max-w-4xl rounded-3xl p-8 text-center zeus-card">
+        <div class="mx-auto max-w-4xl rounded-3xl p-8 text-center zeus-card zeus-app-state zeus-app-state--loading" data-app-state="loading" role="status" aria-live="polite" aria-atomic="true">
             <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-brand-cyan/10">
-                <div class="w-8 h-8 rounded-full border-[3px] border-brand-cyan-light border-t-transparent animate-spin"></div>
+                <div class="w-8 h-8 rounded-full border-[3px] border-brand-cyan-light border-t-transparent animate-spin" aria-hidden="true"></div>
             </div>
             <h3 class="text-lg font-bold font-display text-content-primary">{{ title|default:"Elaborazione in corso" }}</h3>
             <p class="mt-2 text-sm text-content-secondary">{{ description|default:"ZEUS sta elaborando i dati." }}</p>

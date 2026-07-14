@@ -5,6 +5,7 @@ from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.http import Http404
 from django.middleware.csrf import CsrfViewMiddleware
+from django.template.loader import render_to_string
 from django.test import RequestFactory, override_settings
 from django.urls import resolve, reverse
 
@@ -135,6 +136,44 @@ def test_tenant_shell_exposes_navigation_command_palette():
         "consistency-report",
     ):
         assert reverse(url_name).encode() in response.content
+
+
+def test_shared_generation_progress_exposes_semantic_states():
+    running = render_to_string(
+        "core/partials/_generation_progress.html",
+        {"status": "running", "title": "Elaborazione"},
+    )
+    failed = render_to_string(
+        "core/partials/_generation_progress.html",
+        {"status": "failed", "error_msg": "Servizio non disponibile"},
+    )
+    completed = render_to_string(
+        "core/partials/_generation_progress.html",
+        {"status": "completed"},
+    )
+
+    assert 'data-app-state="loading"' in running
+    assert 'role="status"' in running
+    assert 'aria-live="polite"' in running
+    assert 'data-app-state="error"' in failed
+    assert 'role="alert"' in failed
+    assert 'data-app-state="completed"' in completed
+    assert 'role="status"' in completed
+
+
+def test_product_list_exposes_semantic_empty_and_error_states():
+    empty = render_to_string(
+        "core/partials/product_list_content.html",
+        {"products": []},
+    )
+    error = render_to_string(
+        "core/partials/product_list_content.html",
+        {"products": [], "error": "Specialista già presente"},
+    )
+
+    assert 'data-app-state="empty"' in empty
+    assert 'data-app-state="error"' in error
+    assert 'role="alert"' in error
 
 
 @override_settings(ROOT_URLCONF="config.urls")

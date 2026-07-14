@@ -1,5 +1,7 @@
 (function () {
     var shell = document.getElementById("app-shell");
+    var sidebar = document.getElementById("app-sidebar");
+    var appMain = document.getElementById("app-main");
     var menuToggle = document.querySelector("[data-app-menu-toggle]");
     var menuCloseButtons = document.querySelectorAll("[data-app-menu-close]");
     var themeToggle = document.querySelector("[data-app-theme-toggle]");
@@ -12,16 +14,96 @@
     var commandCloseButtons = document.querySelectorAll("[data-command-close]");
     var commandEmpty = document.querySelector("[data-command-empty]");
     var commandPreviousFocus = null;
+    var mobileMenuQuery = window.matchMedia("(max-width: 767px)");
 
     if (!shell) {
         return;
     }
 
-    function setMenuOpen(isOpen) {
+    function menuFocusableElements() {
+        if (!sidebar) {
+            return [];
+        }
+        return Array.prototype.slice.call(
+            sidebar.querySelectorAll(
+                'a[href], button:not([disabled]):not([tabindex="-1"])'
+            )
+        );
+    }
+
+    function setElementInert(element, isInert) {
+        if (!element) {
+            return;
+        }
+        element.inert = isInert;
+        if (isInert) {
+            element.setAttribute("inert", "");
+        } else {
+            element.removeAttribute("inert");
+        }
+    }
+
+    function syncMenuAccessibility() {
+        var isMobile = mobileMenuQuery.matches;
+        var isOpen = isMobile && shell.classList.contains("is-menu-open");
+        setElementInert(sidebar, isMobile && !isOpen);
+        setElementInert(appMain, isOpen);
+        if (sidebar) {
+            if (isMobile && !isOpen) {
+                sidebar.setAttribute("aria-hidden", "true");
+            } else {
+                sidebar.removeAttribute("aria-hidden");
+            }
+        }
+    }
+
+    function setMenuOpen(isOpen, focusMenu) {
+        isOpen = Boolean(isOpen && mobileMenuQuery.matches);
         shell.classList.toggle("is-menu-open", isOpen);
         document.body.classList.toggle("is-app-menu-open", isOpen);
         if (menuToggle) {
             menuToggle.setAttribute("aria-expanded", String(isOpen));
+        }
+        syncMenuAccessibility();
+        if (isOpen && focusMenu !== false) {
+            window.requestAnimationFrame(function () {
+                var closeButton = sidebar && sidebar.querySelector("[data-app-menu-close]");
+                var focusable = menuFocusableElements();
+                var initialFocus = closeButton || focusable[0];
+                if (initialFocus) {
+                    initialFocus.focus();
+                }
+            });
+        }
+    }
+
+    function closeMenu(restoreFocus) {
+        setMenuOpen(false, false);
+        if (restoreFocus !== false && menuToggle) {
+            menuToggle.focus();
+        }
+    }
+
+    function trapMenuFocus(event) {
+        if (
+            event.key !== "Tab" ||
+            !mobileMenuQuery.matches ||
+            !shell.classList.contains("is-menu-open")
+        ) {
+            return;
+        }
+        var focusable = menuFocusableElements();
+        if (!focusable.length) {
+            return;
+        }
+        var first = focusable[0];
+        var last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
         }
     }
 
@@ -33,12 +115,20 @@
 
     menuCloseButtons.forEach(function (button) {
         button.addEventListener("click", function () {
-            setMenuOpen(false);
-            if (menuToggle) {
-                menuToggle.focus();
-            }
+            closeMenu(true);
         });
     });
+
+    if (typeof mobileMenuQuery.addEventListener === "function") {
+        mobileMenuQuery.addEventListener("change", function () {
+            setMenuOpen(false, false);
+        });
+    } else {
+        mobileMenuQuery.addListener(function () {
+            setMenuOpen(false, false);
+        });
+    }
+    syncMenuAccessibility();
 
     function visibleCommandItems() {
         return commandItems.filter(function (item) {
@@ -92,7 +182,7 @@
         ) {
             commandPreviousFocus = commandOpen;
         }
-        setMenuOpen(false);
+        setMenuOpen(false, false);
         commandPalette.hidden = false;
         document.body.classList.add("is-command-palette-open");
         if (commandOpen) {
@@ -223,11 +313,9 @@
             }
             trapCommandFocus(event);
         }
+        trapMenuFocus(event);
         if (event.key === "Escape" && shell.classList.contains("is-menu-open")) {
-            setMenuOpen(false);
-            if (menuToggle) {
-                menuToggle.focus();
-            }
+            closeMenu(true);
         }
     });
 

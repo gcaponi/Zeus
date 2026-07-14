@@ -1,12 +1,16 @@
 <div
-    class="zeus-card p-8 mt-6 text-center"
+    class="zeus-card p-8 mt-6 text-center zeus-app-state zeus-app-state--loading"
+    data-app-state="loading"
+    role="status"
+    aria-live="polite"
+    aria-atomic="true"
     hx-get="{% url 'product-questions' product.pk %}"
     hx-trigger="every 3s"
     hx-target="body"
     hx-swap="outerHTML"
 >
     <div class="zeus-specialist-loader mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-brand-cyan/10">
-        <div class="zeus-specialist-loader__spinner w-8 h-8 rounded-full border-[3px] border-brand-cyan-light border-t-transparent animate-spin"></div>
+        <div class="zeus-specialist-loader__spinner w-8 h-8 rounded-full border-[3px] border-brand-cyan-light border-t-transparent animate-spin" aria-hidden="true"></div>
     </div>
     <h3 class="text-lg font-bold font-display text-content-primary">ZEUS sta generando le domande</h3>
     <p class="mt-2 text-sm text-content-secondary">Analisi del pre-DNA specialista in corso...</p>

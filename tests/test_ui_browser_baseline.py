@@ -46,7 +46,7 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
         )
         self.assertFalse(has_overflow, f"Overflow orizzontale su {page.url}")
 
-    def _assert_visual_baseline(self, page, name):
+    def _assert_visual_baseline(self, page, name, full_page=True):
         page.add_style_tag(
             content="""
                 *, *::before, *::after {
@@ -57,7 +57,7 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                 .cursor-glow, .scroll-progress { display: none !important; }
             """
         )
-        screenshot = page.screenshot(full_page=True, animations="disabled")
+        screenshot = page.screenshot(full_page=full_page, animations="disabled")
         baseline_path = SCREENSHOT_DIR / f"{name}.png"
 
         if os.environ.get("ZEUS_UPDATE_UI_BASELINE") == "1":
@@ -318,11 +318,37 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
 
                 if viewport_name == "mobile":
                     menu_toggle = dashboard_page.locator("[data-app-menu-toggle]")
+                    app_main = dashboard_page.locator("#app-main")
+                    sidebar = dashboard_page.locator("#app-sidebar")
                     self.assertTrue(menu_toggle.is_visible())
                     menu_toggle.click()
                     self.assertEqual(menu_toggle.get_attribute("aria-expanded"), "true")
+                    self.assertTrue(app_main.get_attribute("inert") is not None)
+                    self.assertTrue(
+                        sidebar.locator("[data-app-menu-close]").evaluate(
+                            "element => element === document.activeElement"
+                        )
+                    )
+                    self._assert_visual_baseline(
+                        dashboard_page,
+                        "app-shell-drawer-mobile",
+                        full_page=False,
+                    )
+                    sidebar.locator("a").last.focus()
+                    dashboard_page.keyboard.press("Tab")
+                    self.assertTrue(
+                        sidebar.locator("a").first.evaluate(
+                            "element => element === document.activeElement"
+                        )
+                    )
                     dashboard_page.keyboard.press("Escape")
                     self.assertEqual(menu_toggle.get_attribute("aria-expanded"), "false")
+                    self.assertTrue(app_main.get_attribute("inert") is None)
+                    self.assertTrue(
+                        menu_toggle.evaluate(
+                            "element => element === document.activeElement"
+                        )
+                    )
 
                 products_page = context.new_page()
                 products_response = products_page.goto(
@@ -345,6 +371,19 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                 self._assert_visual_baseline(
                     products_page,
                     f"app-shell-products-{viewport_name}",
+                )
+                with products_page.expect_navigation(wait_until="networkidle") as navigation:
+                    products_page.locator(".zeus-product-create-form").evaluate(
+                        "form => form.submit()"
+                    )
+                self.assertEqual(navigation.value.status, 400)
+                self.assertTrue(
+                    products_page.locator('[data-app-state="error"][role="alert"]').is_visible()
+                )
+                self._assert_no_horizontal_overflow(products_page)
+                self._assert_visual_baseline(
+                    products_page,
+                    f"app-shell-products-error-{viewport_name}",
                 )
                 context.close()
             browser.close()

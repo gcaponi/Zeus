@@ -9,9 +9,9 @@
     </header>
 
     {% if audit_pending %}
-        <section class="mb-6 zeus-card p-6 text-center" style="border-color: rgba(34, 211, 238, 0.28); background: rgba(34, 211, 238, 0.05);">
+        <section class="mb-6 zeus-card p-6 text-center zeus-app-state zeus-app-state--loading" data-app-state="loading" role="status" aria-live="polite" aria-atomic="true" style="border-color: rgba(34, 211, 238, 0.28); background: rgba(34, 211, 238, 0.05);">
             <div class="mb-5 flex justify-center">
-                <div class="w-12 h-12 rounded-full border-4 border-brand-cyan-light border-t-transparent animate-spin"></div>
+                <div class="w-12 h-12 rounded-full border-4 border-brand-cyan-light border-t-transparent animate-spin" aria-hidden="true"></div>
             </div>
             <p class="zeus-label text-brand-cyan">Audit in corso</p>
             <h2 class="mt-2 text-xl font-bold font-display text-content-primary">ZEUS sta verificando la coerenza</h2>
@@ -75,7 +75,7 @@
                     </div>
                 </article>
             {% empty %}
-                <div class="zeus-card p-6 text-center">
+                <div class="zeus-card p-6 text-center zeus-app-state zeus-app-state--empty" data-app-state="empty" role="status">
                     <p class="text-content-secondary">Nessuna issue aperta.</p>
                 </div>
             {% endfor %}
