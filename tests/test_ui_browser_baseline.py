@@ -15,6 +15,7 @@ from apps.companies.models import (
     Company,
     CompanyDNA,
     CompanyQuestion,
+    ConsistencyIssue,
     Product,
     ProductDNA,
 )
@@ -321,11 +322,14 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
         complete_content["sintesi_cognitiva"] = (
             "UI Baseline traduce il contesto tecnico in decisioni verificabili."
         )
-        CompanyDNA.objects.create(
+        complete_dna = CompanyDNA.objects.create(
             company=company,
             version=2,
             dna_type=CompanyDNA.TYPE_COMPLETE,
             content=complete_content,
+        )
+        CompanyDNA.objects.filter(pk=complete_dna.pk).update(
+            created_at=datetime(2026, 7, 13, 18, 30, tzinfo=UTC)
         )
 
         self.client.force_login(user)
@@ -568,6 +572,168 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                         overlay = page.locator(overlay_selector)
                         if overlay.count():
                             self.assertFalse(overlay.is_visible())
+                    self.assertFalse(page_errors)
+                    self._assert_no_horizontal_overflow(page)
+                    self._assert_visual_baseline(
+                        page,
+                        f"app-shell-{surface_name}-{viewport_name}",
+                    )
+                    page.close()
+                context.close()
+            browser.close()
+
+    @override_settings(ZEUS_APP_SHELL_ENABLED=True)
+    def test_engine_app_shell_visual_baselines(self):
+        user = get_user_model().objects.create_user(
+            username="browser-engine-shell",
+            email="browser-engine-shell@example.com",
+            password="test-password",
+        )
+        company = Company.objects.create(
+            schema_name="ui-baseline",
+            name="UI Baseline",
+        )
+        products = []
+        source_dna_ids = []
+        for index, name in enumerate(("Vasca Premium", "Canale Tecnico"), start=1):
+            product = Product.objects.create(
+                company=company,
+                name=name,
+                slug=f"specialista-{index}",
+                tipologia="Componente",
+                codice=f"ENG-{index:02d}",
+                status=Product.STATUS_ATTIVO,
+            )
+            product_dna = ProductDNA.objects.create(
+                product=product,
+                version=1,
+                dna_type=ProductDNA.TYPE_COMPLETE,
+                content={key: f"{name}: {key}" for key in PRODUCT_LAYER_KEYS},
+            )
+            products.append(product)
+            source_dna_ids.append(product_dna.pk)
+
+        company_dna = CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_COMPLETE,
+            content={
+                **{key: f"Contenuto verificato per {key}." for key in LAYER_KEYS},
+                "_cross_specialist": {
+                    "source_dna_ids": source_dna_ids,
+                    "summary": "I due specialisti condividono una postura tecnica verificabile.",
+                    "shared_patterns": [
+                        {
+                            "theme": "Validazione tecnica",
+                            "evidence": "Entrambi richiedono verifica del contesto applicativo.",
+                            "impact": "Il DNA Generale mantiene una regola trasversale.",
+                        }
+                    ],
+                    "conflicts": [
+                        {
+                            "severity": "medium",
+                            "products": [product.name for product in products],
+                            "issue": "Le soglie operative richiedono contesti distinti.",
+                            "recommendation": "Mantenere il vincolo nello specialista.",
+                        }
+                    ],
+                    "consolidation_proposals": [
+                        {
+                            "target_layer": "logica_decisionale",
+                            "title": "Validazione prima della proposta",
+                            "proposed_value": "Verificare sempre il contesto tecnico.",
+                            "rationale": "Pattern condiviso dai due specialisti.",
+                            "source_products": [product.name for product in products],
+                        }
+                    ],
+                },
+            },
+        )
+        CompanyDNA.objects.filter(pk=company_dna.pk).update(
+            created_at=datetime(2026, 7, 14, 9, 0, tzinfo=UTC)
+        )
+        issue = ConsistencyIssue.objects.create(
+            company=company,
+            scope=ConsistencyIssue.SCOPE_PERIODIC,
+            severity=ConsistencyIssue.SEVERITY_MEDIUM,
+            title="Confine da verificare",
+            description="Un vincolo specialista non deve diventare assoluto.",
+            recommendation="Mantenere il dettaglio nel DNA Specialista.",
+            company_layer="confini",
+            product_layer="vincoli",
+            product=products[0],
+        )
+        ConsistencyIssue.objects.filter(pk=issue.pk).update(
+            created_at=datetime(2026, 7, 14, 9, 5, tzinfo=UTC)
+        )
+
+        self.client.force_login(user)
+        session_cookie = self.client.cookies[settings.SESSION_COOKIE_NAME].value
+        surfaces = [
+            (
+                "engine-b",
+                reverse("motore-b-report"),
+                "Motore B",
+                "Motore B — Cross Specialist",
+                "Rianalizza specialisti",
+            ),
+            (
+                "engine-c",
+                reverse("consistency-report"),
+                "Motore C",
+                "Motore C — Coerenza",
+                "Confine da verificare",
+            ),
+        ]
+
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            for viewport_name, viewport in VIEWPORTS.items():
+                context = browser.new_context(
+                    viewport=viewport,
+                    color_scheme="light",
+                    reduced_motion="reduce",
+                    extra_http_headers={"X-Zeus-Test-Tenant": "ui-baseline"},
+                )
+                context.add_init_script(
+                    "localStorage.setItem('zeus-theme', 'light')"
+                )
+                context.add_cookies(
+                    [
+                        {
+                            "name": settings.SESSION_COOKIE_NAME,
+                            "value": session_cookie,
+                            "url": self.live_server_url,
+                        }
+                    ]
+                )
+
+                for surface_name, path, nav_label, heading, contract in surfaces:
+                    page_errors = []
+                    page = context.new_page()
+                    page.on(
+                        "pageerror",
+                        lambda error, errors=page_errors: errors.append(str(error)),
+                    )
+                    response = page.goto(
+                        f"{self.live_server_url}{path}",
+                        wait_until="networkidle",
+                    )
+
+                    self.assertTrue(response.ok)
+                    self.assertTrue(page.locator(".zeus-app-shell--tenant").count())
+                    self.assertEqual(
+                        page.locator(".zeus-app-breadcrumb strong").inner_text(),
+                        nav_label,
+                    )
+                    self.assertEqual(
+                        page.locator(".zeus-app-nav a.is-active").inner_text(),
+                        nav_label,
+                    )
+                    self.assertEqual(page.locator("h1").first.inner_text(), heading)
+                    self.assertTrue(page.get_by_text(contract, exact=True).count())
+                    self.assertTrue(page.locator('input[name="csrfmiddlewaretoken"]').count())
+                    self.assertTrue(page.evaluate("typeof window.htmx !== 'undefined'"))
                     self.assertFalse(page_errors)
                     self._assert_no_horizontal_overflow(page)
                     self._assert_visual_baseline(

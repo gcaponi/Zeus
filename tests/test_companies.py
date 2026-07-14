@@ -2562,6 +2562,53 @@ class TestConsistencyMotor:
         )
         return product
 
+    @override_settings(ZEUS_APP_SHELL_ENABLED=False, ROOT_URLCONF="config.urls")
+    def test_engine_reports_keep_legacy_layout_when_flag_disabled(self, rf_with_tenant):
+        company = self._make_company_with_dna()
+
+        motore_b_response = views.motore_b_report(
+            rf_with_tenant("get", reverse("motore-b-report"))
+        )
+        consistency_response = views.consistency_report(
+            rf_with_tenant("get", reverse("consistency-report"))
+        )
+
+        assert motore_b_response.status_code == 200
+        assert b'id="app-shell"' not in motore_b_response.content
+        assert b"Motore B" in motore_b_response.content
+        assert consistency_response.status_code == 200
+        assert b'id="app-shell"' not in consistency_response.content
+        assert b'id="consistency-report-root"' in consistency_response.content
+
+    @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
+    def test_engine_reports_use_app_shell_and_keep_hx_fragment(self, rf_with_tenant):
+        company = self._make_company_with_dna()
+        self._make_product(company, "Vasca A", "vasca-a", "A", Product.STATUS_ATTIVO)
+        self._make_product(company, "Vasca B", "vasca-b", "B", Product.STATUS_ATTIVO)
+
+        motore_b_response = views.motore_b_report(
+            rf_with_tenant("get", reverse("motore-b-report"))
+        )
+        consistency_response = views.consistency_report(
+            rf_with_tenant("get", reverse("consistency-report"))
+        )
+        htmx_request = rf_with_tenant("get", reverse("consistency-report"))
+        htmx_request.META["HTTP_HX_REQUEST"] = "true"
+        htmx_response = views.consistency_report(htmx_request)
+
+        assert motore_b_response.status_code == 200
+        assert b'id="app-shell"' in motore_b_response.content
+        assert b"Analizza specialisti attivi" in motore_b_response.content
+        assert b'name="csrfmiddlewaretoken"' in motore_b_response.content
+        assert consistency_response.status_code == 200
+        assert b'id="app-shell"' in consistency_response.content
+        assert b'id="consistency-report-root"' in consistency_response.content
+        assert b'name="csrfmiddlewaretoken"' in consistency_response.content
+        assert htmx_response.status_code == 200
+        assert b'id="consistency-report-root"' in htmx_response.content
+        assert b'id="app-shell"' not in htmx_response.content
+        assert b"<!DOCTYPE" not in htmx_response.content
+
     def test_product_promote_triggers_consistency_audit_every_third_active(
         self, rf_with_tenant, monkeypatch,
     ):

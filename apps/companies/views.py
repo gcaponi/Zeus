@@ -2813,7 +2813,12 @@ def motore_b_report(request):
     ).first()
     if not dna:
         return HttpResponse("DNA Generale non trovato", status=404)
-    return render(request, "core/motore_b.html", {
+    template_name = (
+        "core/app_shell_motore_b.html"
+        if settings.ZEUS_APP_SHELL_ENABLED
+        else "core/motore_b_legacy.html"
+    )
+    return render(request, template_name, {
         "company": company,
         "dna": dna,
         "cross_specialist": _cross_specialist_state(company, dna),
@@ -3470,7 +3475,12 @@ def consistency_report(request):
     }
     if request.headers.get("HX-Request") == "true":
         return render(request, "core/partials/consistency_report_content.html", context)
-    return render(request, "core/consistency_report.html", context)
+    template_name = (
+        "core/app_shell_consistency_report.html"
+        if settings.ZEUS_APP_SHELL_ENABLED
+        else "core/consistency_report.html"
+    )
+    return render(request, template_name, context)
 
 
 @login_required

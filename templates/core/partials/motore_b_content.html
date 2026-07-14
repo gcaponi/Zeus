@@ -1,12 +1,4 @@
-{% extends "core/base.html" %}
-
-{% block title %}Motore B — Cross Specialist · ZEUS{% endblock %}
-
-{% block extra_head %}
-<script src="https://unpkg.com/htmx.org@1.9.12"></script>
-{% endblock %}
-
-{% block content %}
+{# Shared Motore B content fragment for legacy and App Shell wrappers. #}
 <div class="zeus-page-wrap">
     <header class="mb-8">
         <a href="{% url 'dna-review' %}" class="text-sm text-brand-cyan hover:underline">← DNA Generale</a>
@@ -120,4 +112,3 @@
         </section>
     {% endif %}
 </div>
-{% endblock %}

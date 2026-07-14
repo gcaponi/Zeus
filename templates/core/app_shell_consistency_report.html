@@ -1,0 +1,15 @@
+{% extends "core/app_shell_tenant.html" %}
+
+{% block title %}Motore C — Coerenza · ZEUS{% endblock %}
+{% block shell_page_title %}Motore C{% endblock %}
+
+{% block tenant_main %}
+<section class="zeus-app-page zeus-app-page--core-flow zeus-app-page--engine-flow">
+    {% include "core/partials/consistency_report_content.html" %}
+</section>
+{% endblock %}
+
+{% block shell_scripts %}
+{{ block.super }}
+{% include "core/partials/_app_shell_htmx.html" %}
+{% endblock %}

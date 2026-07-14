@@ -1419,6 +1419,42 @@ html,
 
 .zeus-app-page--specialist-flow .items-start { align-items: flex-start; }
 
+/* Fase 4 — Motore B/C compatibility layer. The legacy engine templates use
+   utility classes that are not emitted by Tailwind in the standalone shell. */
+.zeus-app-page--engine-flow .block { display: block; }
+.zeus-app-page--engine-flow .items-start { align-items: flex-start; }
+.zeus-app-page--engine-flow .space-y-3 > * + * { margin-top: 12px; }
+.zeus-app-page--engine-flow .space-y-5 > * + * { margin-top: 20px; }
+.zeus-app-page--engine-flow .rounded-2xl { border-radius: 10px; }
+.zeus-app-page--engine-flow .text-brand-violet { color: #6d28d9; }
+.zeus-app-page--engine-flow .text-amber-200 { color: #b45309; }
+
+.zeus-app-page--engine-flow .zeus-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.zeus-app-page--engine-flow label.block {
+  background: var(--shell-panel-muted);
+}
+
+.zeus-app-page--engine-flow input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 3px;
+  accent-color: var(--shell-accent-strong);
+}
+
 .zeus-app-page--specialist-flow .zeus-badge {
   display: inline-flex;
   align-items: center;
