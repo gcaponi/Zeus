@@ -105,6 +105,8 @@ jobs:
         run: uv run python manage.py check --deploy
       - name: Check Gunicorn application
         run: uv run gunicorn --check-config config.wsgi:application
+      - name: Check production preflight script
+        run: bash -n scripts/production_preflight.sh
       - name: Check model migrations
         run: uv run python manage.py makemigrations --check --dry-run
         env:
