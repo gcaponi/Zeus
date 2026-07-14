@@ -4618,6 +4618,15 @@ def product_dna_generate(request, pk):
     if not product:
         return HttpResponse("Prodotto non trovato", status=404)
 
+    if product.status == Product.STATUS_IN_COSTRUZIONE:
+        target = f"{reverse('product-detail', args=[product.pk])}?generating=1"
+        if not _wants_json(request):
+            return redirect(target)
+        return JsonResponse({
+            "status": "generating",
+            "product_id": product.pk,
+        }, status=202)
+
     block_reason = _workspace_block_reason(company)
     if block_reason:
         if not _wants_json(request):

@@ -1423,6 +1423,150 @@ html,
   border-style: dashed !important;
 }
 
+.zeus-generation-progress-wrap {
+  padding: 24px 0;
+}
+
+.zeus-generation-progress {
+  width: min(100%, 64rem);
+  margin: 0 auto;
+  padding: 32px;
+  border: 1px solid var(--shell-border);
+  border-radius: 8px;
+  background: var(--shell-panel);
+  color: var(--shell-text);
+  text-align: center;
+}
+
+.zeus-generation-progress__loader,
+.zeus-generation-progress__status-icon {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 20px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(8, 145, 178, 0.10);
+}
+
+.zeus-generation-progress__spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--shell-accent-strong);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: zeus-app-spin 0.8s linear infinite;
+}
+
+.zeus-generation-progress--error .zeus-generation-progress__status-icon {
+  background: rgba(220, 38, 38, 0.12);
+  color: #b91c1c;
+}
+
+.zeus-generation-progress--completed .zeus-generation-progress__status-icon {
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+}
+
+.zeus-generation-progress__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.zeus-generation-progress__description {
+  margin: 10px 0 0;
+  color: var(--shell-muted);
+  font-size: 0.875rem;
+}
+
+.zeus-generation-progress__metrics,
+.zeus-generation-progress__phases {
+  width: min(100%, 32rem);
+  margin: 24px auto 0;
+}
+
+.zeus-generation-progress__summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+  color: var(--shell-muted);
+  font-size: 0.75rem;
+  text-align: left;
+}
+
+.zeus-generation-progress__track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--shell-panel-muted);
+}
+
+.zeus-generation-progress__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--shell-accent-strong);
+  transition: width 500ms ease;
+}
+
+.zeus-generation-progress__step,
+.zeus-generation-progress__refresh {
+  margin: 8px 0 0;
+  color: var(--shell-muted);
+  font-size: 0.75rem;
+}
+
+.zeus-generation-progress__phase {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  color: var(--shell-muted);
+  font-size: 0.875rem;
+  text-align: left;
+  opacity: 0.45;
+  transition: opacity 500ms ease, color 500ms ease;
+}
+
+.zeus-generation-progress__phase-marker {
+  display: grid;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border: 1px solid var(--shell-border);
+  border-radius: 50%;
+  font-size: 0.75rem;
+}
+
+.zeus-generation-progress__phase--active {
+  color: var(--shell-accent-strong);
+  opacity: 1;
+}
+
+.zeus-generation-progress__phase--active .zeus-generation-progress__phase-marker {
+  border: 2px solid var(--shell-accent-strong);
+}
+
+.zeus-generation-progress__phase--done {
+  color: var(--shell-text);
+  opacity: 0.75;
+}
+
+.zeus-generation-progress__phase--done .zeus-generation-progress__phase-marker {
+  border-color: rgba(22, 163, 74, 0.32);
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+}
+
+.zeus-generation-progress__actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+}
+
 .zeus-product-error {
   margin-bottom: 20px;
   padding: 12px 14px;
@@ -2057,7 +2201,8 @@ html,
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .zeus-app-overlay__spinner { animation: none; }
+  .zeus-app-overlay__spinner,
+  .zeus-generation-progress__spinner { animation: none; }
 }
 
 /* Sticky action bar per i form domande (sostituisce utility Tailwind legacy) */

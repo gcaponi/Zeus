@@ -595,7 +595,7 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                             page.evaluate("typeof window.htmx !== 'undefined'")
                         )
                     if surface_name == "dna-generating":
-                        spinner = page.locator(".animate-spin").first
+                        spinner = page.locator(".zeus-generation-progress__spinner").first
                         animation = spinner.evaluate(
                             """element => {
                                 const style = getComputedStyle(element);

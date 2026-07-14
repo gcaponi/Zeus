@@ -1971,6 +1971,27 @@ class TestProductViews:
         # so the page can poll the task status.
         assert response["Location"] == reverse("product-detail", args=[product.pk]) + "?generating=1"
 
+    def test_product_dna_generate_is_idempotent_while_running(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(
+            company=company,
+            name="Vasca",
+            slug="vasca",
+            status=Product.STATUS_IN_COSTRUZIONE,
+        )
+        request = rf_with_tenant(
+            "post",
+            reverse("product-dna-generate", args=[product.pk]),
+            form=True,
+        )
+
+        with patch("apps.companies.tasks.generate_product_dna_task.delay") as delay:
+            response = views.product_dna_generate(request, product.pk)
+
+        assert response.status_code == 302
+        assert response["Location"] == reverse("product-detail", args=[product.pk]) + "?generating=1"
+        delay.assert_not_called()
+
     def test_duplicate_product_question_codes_are_normalized(self):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
         product = Product.objects.create(company=company, name="Vasca", slug="vasca")
@@ -2102,6 +2123,9 @@ class TestProductViews:
             assert b'zeus-app-shell--tenant' in response.content
             assert b'hx-target="body"' in response.content
 
+        assert b'zeus-generation-progress__track' in loading_responses[0].content
+        assert b'zeus-generation-progress__track' in loading_responses[2].content
+
     @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
     def test_product_question_forms_use_app_shell(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
@@ -2129,6 +2153,8 @@ class TestProductViews:
         assert questions_response.status_code == 200
         assert b'zeus-app-shell--tenant' in questions_response.content
         assert f'name="answer_{first_question.pk}"'.encode() in questions_response.content
+        assert b'onsubmit="showGeneratingPopup();"' in questions_response.content
+        assert b'id="generating-popup"' in questions_response.content
 
         gap_question = ProductQuestion.objects.create(
             product=product,

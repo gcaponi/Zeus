@@ -1,65 +1,54 @@
-<div class="py-6">
+<div class="zeus-generation-progress-wrap">
     {% if status == "failed" %}
-        {# --- Error state --- #}
-        <div class="mx-auto max-w-xl rounded-3xl p-8 text-center zeus-card zeus-app-state zeus-app-state--error" data-app-state="error" role="alert" aria-atomic="true" style="border-color: rgba(248,113,113,0.28);">
-            <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-red-400/15">
-                <span class="text-2xl text-red-300">!</span>
-            </div>
-            <h3 class="text-lg font-bold font-display text-content-primary">{{ title|default:"Generazione non completata" }}</h3>
-            <p class="mt-2 text-sm text-content-secondary">{{ error_msg|default:"Si è verificato un errore." }}</p>
-            <div class="mt-6 flex flex-wrap justify-center gap-3">
+        <div class="zeus-generation-progress zeus-generation-progress--error zeus-app-state zeus-app-state--error" data-app-state="error" role="alert" aria-atomic="true">
+            <div class="zeus-generation-progress__status-icon" aria-hidden="true">!</div>
+            <h3 class="zeus-generation-progress__title">{{ title|default:"Generazione non completata" }}</h3>
+            <p class="zeus-generation-progress__description">{{ error_msg|default:"Si è verificato un errore." }}</p>
+            <div class="zeus-generation-progress__actions">
                 <a href="{{ retry_url|default:'#' }}" class="zeus-btn zeus-btn-secondary">Riprova</a>
             </div>
         </div>
     {% elif status == "completed" %}
-        {# --- Completed state — page will redirect on next poll --- #}
-        <div class="mx-auto max-w-xl rounded-3xl p-8 text-center zeus-card zeus-app-state zeus-app-state--completed" data-app-state="completed" role="status" aria-live="polite" aria-atomic="true">
-            <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-green-400/15">
-                <span class="text-xl text-green-400">✓</span>
-            </div>
-            <h3 class="text-lg font-bold font-display text-content-primary">Completato</h3>
-            <p class="mt-2 text-sm text-content-secondary">Reindirizzamento in corso...</p>
+        <div class="zeus-generation-progress zeus-generation-progress--completed zeus-app-state zeus-app-state--completed" data-app-state="completed" role="status" aria-live="polite" aria-atomic="true">
+            <div class="zeus-generation-progress__status-icon" aria-hidden="true">✓</div>
+            <h3 class="zeus-generation-progress__title">Completato</h3>
+            <p class="zeus-generation-progress__description">Reindirizzamento in corso...</p>
         </div>
     {% else %}
-        {# --- Running state --- #}
-        <div class="mx-auto max-w-4xl rounded-3xl p-8 text-center zeus-card zeus-app-state zeus-app-state--loading" data-app-state="loading" role="status" aria-live="polite" aria-atomic="true">
-            <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-brand-cyan/10">
-                <div class="w-8 h-8 rounded-full border-[3px] border-brand-cyan-light border-t-transparent animate-spin" aria-hidden="true"></div>
+        <div class="zeus-generation-progress zeus-app-state zeus-app-state--loading" data-app-state="loading" role="status" aria-live="polite" aria-atomic="true">
+            <div class="zeus-generation-progress__loader" aria-hidden="true">
+                <div class="zeus-generation-progress__spinner"></div>
             </div>
-            <h3 class="text-lg font-bold font-display text-content-primary">{{ title|default:"Elaborazione in corso" }}</h3>
-            <p class="mt-2 text-sm text-content-secondary">{{ description|default:"ZEUS sta elaborando i dati." }}</p>
+            <h3 class="zeus-generation-progress__title">{{ title|default:"Elaborazione in corso" }}</h3>
+            <p class="zeus-generation-progress__description">{{ description|default:"ZEUS sta elaborando i dati." }}</p>
 
-            {# --- Progress bar (only when structured steps available) --- #}
             {% if steps_total %}
-            <div class="mt-6 mx-auto" style="max-width: 32rem;">
-                <div class="flex items-center justify-between text-xs text-content-muted mb-2">
+            <div class="zeus-generation-progress__metrics">
+                <div class="zeus-generation-progress__summary">
                     <span>{{ step_label|default:"Avvio..." }}</span>
                     <span>{{ progress_pct|default:0 }}%</span>
                 </div>
-                <div class="h-2 rounded-full bg-white/10 overflow-hidden">
-                    <div class="h-full rounded-full bg-gradient-to-r from-brand-cyan to-brand-cyan-light transition-all duration-500" style="width: {{ progress_pct|default:0 }}%;"></div>
+                <div class="zeus-generation-progress__track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ progress_pct|default:0 }}">
+                    <div class="zeus-generation-progress__fill" style="width: {{ progress_pct|default:0 }}%;"></div>
                 </div>
-                <p class="mt-2 text-xs text-content-muted">Step {{ current_step_num|default:"?" }} di {{ steps_total }}</p>
+                <p class="zeus-generation-progress__step">Step {{ current_step_num|default:"?" }} di {{ steps_total }}</p>
             </div>
             {% endif %}
 
-            {# --- Phase list --- #}
             {% if phases %}
-            <div class="mt-6 space-y-3 text-sm text-left mx-auto" style="max-width: 32rem;">
+            <div class="zeus-generation-progress__phases">
                 {% for phase in phases %}
-                <div class="flex items-center gap-3 transition-all duration-500
-                    {% if phase.status == 'pending' %}opacity-30{% elif phase.status == 'done' %}opacity-70{% endif %}">
-                    <div class="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-xs
-                        {% if phase.status == 'done' %}bg-green-400/20 text-green-400{% elif phase.status == 'active' %}border-2 border-brand-cyan{% else %}border border-white/15{% endif %}">
+                <div class="zeus-generation-progress__phase zeus-generation-progress__phase--{{ phase.status }}">
+                    <span class="zeus-generation-progress__phase-marker" aria-hidden="true">
                         {% if phase.status == 'done' %}✓{% endif %}
-                    </div>
-                    <span class="text-sm">{{ phase.label }}</span>
+                    </span>
+                    <span>{{ phase.label }}</span>
                 </div>
                 {% endfor %}
             </div>
             {% endif %}
 
-            <p class="mt-4 text-xs text-content-muted">Aggiornamento automatico ogni 3 secondi...</p>
+            <p class="zeus-generation-progress__refresh">Aggiornamento automatico ogni 3 secondi...</p>
         </div>
     {% endif %}
 </div>
