@@ -226,7 +226,7 @@ def _company_file_bytes_used(company):
     return company.company_files.aggregate(t=Sum("file_size"))["t"] or 0
 
 
-def _company_file_block_reason(company, additional_bytes=0):
+def _company_file_block_reason(company):
     subscription = _subscription_for_company(company)
     if not subscription:
         return None
@@ -236,9 +236,6 @@ def _company_file_block_reason(company, additional_bytes=0):
         subscription.save(update_fields=["company_files_bytes_used"])
     if not subscription.can_use_workspace():
         return "Workspace sospeso. Contatta l'amministratore ZEUS."
-    if not subscription.can_add_company_file(additional_bytes):
-        limit_mb = subscription.plan.max_company_files_mb
-        return f"Limite di {limit_mb} MB di documenti raggiunto per il piano attuale."
     return None
 
 
@@ -599,11 +596,6 @@ def _existing_company_documents(company):
 
 
 def _source_form_context(company, *, error=None, notice=None, review_mode=False):
-    subscription = _subscription_for_company(company)
-    plan = subscription.plan if subscription else None
-    max_mb = plan.max_company_files_mb if plan else 5
-    unlimited = plan.unlimited_company_files if plan else False
-    bytes_used = _company_file_bytes_used(company)
     return {
         "error": error,
         "notice": notice,
@@ -615,9 +607,6 @@ def _source_form_context(company, *, error=None, notice=None, review_mode=False)
             original_name="note-azienda.txt",
         ).order_by("-created_at"),
         "has_existing_dna": company.dna_versions.exists(),
-        "max_company_files_mb": max_mb,
-        "unlimited_company_files": unlimited,
-        "company_files_bytes_used": bytes_used,
         "settore_primario": company.settore_primario,
         "prodotto_fisico": company.prodotto_fisico,
         "cliente_diretto": company.cliente_diretto,
@@ -2270,7 +2259,7 @@ def onboarding_file_upload(request):
 
     file_size = uploaded_file.size
 
-    block_reason = _company_file_block_reason(company, additional_bytes=file_size)
+    block_reason = _company_file_block_reason(company)
     if block_reason:
         return _company_files_response(request, company, error=block_reason)
 
@@ -4307,9 +4296,6 @@ def _product_file_block_reason(product):
         return None
     if not subscription.can_use_workspace():
         return "Workspace sospeso. Contatta l'amministratore ZEUS."
-    current_bytes = _product_file_bytes_used(product)
-    if not subscription.can_add_product_file_bytes():
-        return "Spazio file per specialista esaurito per il piano attuale."
     return None
 
 
@@ -4425,10 +4411,6 @@ def _product_detail_context(product, error=None):
     dna = product.dna_versions.filter(is_current=True).first()
     sections = _product_dna_sections(dna.content) if dna else []
     product_files = list(product.product_files.all())
-    subscription = _subscription_for_company(product.company)
-    bytes_used = _product_file_bytes_used(product)
-    max_mb = subscription.plan.max_product_files_mb if subscription and subscription.plan else 5
-    unlimited = subscription.plan.unlimited_product_files if subscription and subscription.plan else False
     company_dna = CompanyDNA.objects.filter(company=product.company, is_current=True).first()
     return {
         "product": product,
@@ -4436,9 +4418,6 @@ def _product_detail_context(product, error=None):
         "sections": sections,
         "product_files": product_files,
         "product_files_count": len(product_files),
-        "product_files_bytes_used": bytes_used,
-        "max_product_files_mb": max_mb,
-        "unlimited_product_files": unlimited,
         "is_updating": product.status == Product.STATUS_UPDATING,
         "product_step": 1,
         "error": error,
@@ -4577,18 +4556,6 @@ def product_file_upload(request, pk):
         file_size = len(content_text.encode("utf-8"))
         original_name = "note-prodotto.txt"
 
-    subscription = _subscription_for_company(company)
-    if subscription and not subscription.can_add_product_file_bytes(file_size):
-        error = "File troppo grande. Spazio rimanente insufficiente."
-        if not _wants_json(request):
-            return render(
-                request,
-                _product_detail_template_name(),
-                _product_detail_context(product, error),
-                status=400,
-            )
-        return JsonResponse({"error": error}, status=400)
-
     if not content_text.strip():
         if not _wants_json(request):
             return render(
@@ -4599,6 +4566,7 @@ def product_file_upload(request, pk):
             )
         return JsonResponse({"error": "Contenuto vuoto"}, status=400)
 
+    subscription = _subscription_for_company(company)
     ProductFile.objects.create(
         product=product,
         original_name=original_name,

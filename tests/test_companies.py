@@ -633,6 +633,9 @@ class TestOnboardingViews:
         assert b"cais.uno" in resp.content
         assert b"hx-post" in resp.content
         assert b"hx-target=\"#onboarding-step\"" in resp.content
+        assert b"Genera pre-DNA e vai alle domande" in resp.content
+        assert b'id="source-submit-btn" class="zeus-btn zeus-btn-primary w-full"' in resp.content
+        assert b"Spazio disponibile" not in resp.content
 
     @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
     def test_onboarding_app_shell_preserves_full_page_and_htmx_fragment(self, rf_with_tenant):
@@ -767,7 +770,7 @@ class TestOnboardingViews:
         assert "Certificazione ISO 9001" in company.company_files.first().content_text
         assert "Certificazione ISO 9001" in LLMCall.objects.first().prompt_text
 
-    def test_company_file_quota_blocks_onboarding(self, rf_with_tenant, monkeypatch):
+    def test_company_file_quota_does_not_block_onboarding(self, rf_with_tenant, monkeypatch):
         monkeypatch.setattr(Client, "auto_create_schema", False)
         tenant = Client.objects.create(schema_name="test-tenant", name="Test Tenant")
         WorkspaceSubscription.objects.create(client=tenant, plan=Plan.get_default())
@@ -785,11 +788,14 @@ class TestOnboardingViews:
             "company_notes": "Nuovo documento oltre quota.",
         }, form=True)
         req.META["HTTP_HX_REQUEST"] = "true"
-        resp = views.onboarding_source_create(req)
+        from apps.companies.llm_client import MockLLMClient
 
-        assert resp.status_code == 403
-        assert b"Limite" in resp.content
-        assert Source.objects.count() == 0
+        with patch("apps.companies.tasks.get_llm_client", return_value=MockLLMClient()):
+            resp = views.onboarding_source_create(req)
+
+        assert resp.status_code == 200
+        assert b"Limite di" not in resp.content
+        assert Source.objects.filter(company=company).count() == 1
 
     def test_onboarding_source_create_invalid_url(self, rf_with_tenant):
         Company.objects.create(schema_name="test-tenant", name="Test Tenant")
@@ -1890,6 +1896,30 @@ class TestProductViews:
 
         assert response.status_code == 302
         assert response["Location"] == reverse("product-detail", args=[product.pk])
+        assert product.product_files.filter(original_name="note-prodotto.txt").exists()
+
+    def test_product_file_quota_does_not_block_upload(self, rf_with_tenant, monkeypatch):
+        monkeypatch.setattr(Client, "auto_create_schema", False)
+        tenant = Client.objects.create(schema_name="test-tenant", name="Test Tenant")
+        WorkspaceSubscription.objects.create(client=tenant, plan=Plan.get_default())
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        ProductFile.objects.create(
+            product=product,
+            original_name="big-doc.pdf",
+            content_text="test",
+            file_size=5 * 1024 * 1024,
+        )
+        request = rf_with_tenant(
+            "post",
+            reverse("product-file-upload", args=[product.pk]),
+            {"notes": "Nuova nota oltre quota."},
+            form=True,
+        )
+
+        response = views.product_file_upload(request, product.pk)
+
+        assert response.status_code == 302
         assert product.product_files.filter(original_name="note-prodotto.txt").exists()
 
     def test_product_image_upload_stores_placeholder_text(self, rf_with_tenant):
