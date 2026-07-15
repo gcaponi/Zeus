@@ -1,4 +1,6 @@
+from contextlib import nullcontext
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from django.conf import settings
@@ -9,6 +11,7 @@ from django.template.loader import render_to_string
 from django.test import RequestFactory, override_settings
 from django.urls import resolve, reverse
 
+from apps.core import views as core_views
 from apps.core.views import (
     WORKSPACE_COOKIE,
     app_shell_preview,
@@ -86,6 +89,37 @@ def test_app_shell_flag_does_not_change_public_pages():
     assert all(b'id="app-shell"' not in response.content for response in responses)
 
 
+@override_settings(ROOT_URLCONF="config.urls", LOGIN_REDIRECT_URL="/dashboard/")
+def test_login_redirects_to_tenant_dashboard(monkeypatch):
+    access = SimpleNamespace(tenant_domain="ui-baseline.zeus.cais.uno")
+    authenticated_user = SimpleNamespace()
+    monkeypatch.setattr(
+        core_views.WorkspaceAccess.objects,
+        "filter",
+        Mock(return_value=SimpleNamespace(first=lambda: access)),
+    )
+    monkeypatch.setattr(
+        core_views,
+        "schema_context",
+        Mock(return_value=nullcontext()),
+    )
+    monkeypatch.setattr(
+        core_views,
+        "authenticate",
+        Mock(return_value=authenticated_user),
+    )
+    monkeypatch.setattr(core_views, "auth_login", Mock())
+    request = RequestFactory().post(
+        reverse("account_login"),
+        {"login": "ui-baseline@example.com", "password": "test-password"},
+    )
+
+    response = public_login(request)
+
+    assert response.status_code == 302
+    assert response.url == "https://ui-baseline.zeus.cais.uno/dashboard/"
+
+
 @override_settings(ROOT_URLCONF="config.urls", ZEUS_APP_SHELL_ENABLED=True)
 def test_dashboard_uses_app_shell_when_flag_enabled():
     request = RequestFactory().get(reverse("tenant-dashboard"))
@@ -106,6 +140,7 @@ def test_dashboard_uses_app_shell_when_flag_enabled():
     assert b"UI Baseline" in response.content
     assert reverse("onboarding-index").encode() in response.content
     assert reverse("product-list-create").encode() in response.content
+    assert b"Workspace pubblico" not in response.content
 
 
 @override_settings(ROOT_URLCONF="config.urls", ZEUS_APP_SHELL_ENABLED=True)

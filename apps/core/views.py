@@ -103,7 +103,7 @@ class ZEUSSignupView(SignupView):
 
 
 def public_login(request):
-    """Login su zeus.cais.uno che trova workspace e redirect a onboarding."""
+    """Login su zeus.cais.uno che trova workspace e redirect alla dashboard."""
     if request.method == "POST":
         email = request.POST.get("login", "").strip()
         password = request.POST.get("password", "")
@@ -128,7 +128,9 @@ def public_login(request):
                 "error": "Email o password non validi.",
             })
 
-        response = redirect(f"https://{access.tenant_domain}/onboarding/")
+        response = redirect(
+            f"https://{access.tenant_domain}{settings.LOGIN_REDIRECT_URL}"
+        )
         return _set_workspace_cookie(response, access.tenant_domain)
 
     return render(request, "account/login.html", {"error": None})
