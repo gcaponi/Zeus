@@ -65,6 +65,7 @@ def test_app_shell_preview_renders_declared_slots():
     assert b'id="app-sidebar"' in response.content
     assert b'id="app-header"' in response.content
     assert b'id="app-main"' in response.content
+    assert b"zeus-design.css?v=20260715-3" in response.content
     assert b"Feature flag attivo" in response.content
 
 
