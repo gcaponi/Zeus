@@ -219,5 +219,6 @@ uv run playwright install chromium
 - [x] Test mirato verde; suite browser `8 passed`; suite completa `299 passed`, coverage `73.93%`;
     Ruff, Django system check e migration check puliti; baseline visuali verdi.
 - [x] Tentativo `2133ea5` identificato come non conforme: la sidebar statica usciva dal viewport.
-- [ ] Commit, CI e deploy della correzione sticky effettiva.
-- [ ] Smoke autenticato a scroll intermedio e a fondo Revisione DNA.
+- [x] Correzione sticky `9e9118f` e cache-buster stylesheet `6ceb141` con CI #46/#47 verdi e deploy completati.
+- [x] Smoke autenticato a 768x900: sticky a 76 px, sidebar completamente visibile a scroll intermedio
+    e a fondo pagina, CSS versionato e nessun overflow orizzontale.

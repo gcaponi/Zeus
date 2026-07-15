@@ -2,7 +2,7 @@
 
 All notable ZEUS changes are documented in this file.
 
-## Unreleased - DNA review sticky sidebar correction
+## 2026-07-15 - DNA review sticky sidebar correction
 
 ### Fixed
 
@@ -10,12 +10,17 @@ All notable ZEUS changes are documented in this file.
   scrolls, including at the bottom of the document.
 - The DNA review main container now exposes document scrolling so the existing sticky sidebar can
   bind to the real scrolling element without changing other App Shell pages.
+- The App Shell stylesheet URL is versioned so browsers load the corrected CSS immediately after
+  deployment instead of retaining the previous cached behavior.
 - Browser coverage verifies the sticky offset and full viewport visibility at intermediate and
   maximum document scroll positions.
 
 ### Deployment
 
-- Pending commit, CI, deployment, and authenticated production smoke.
+- Sticky correction commit `9e9118f` passed CI #46 and was deployed successfully.
+- Stylesheet cache-buster commit `6ceb141` passed CI #47 and was deployed successfully.
+- Authenticated production smoke confirmed the sidebar at 76 px after intermediate and maximum
+  document scrolling, with no horizontal overflow.
 
 ## 2026-07-15 - DNA review sidebar normal-flow attempt
 

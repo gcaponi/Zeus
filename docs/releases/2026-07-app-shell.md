@@ -1,6 +1,6 @@
 # App Shell controlled release record
 
-Status: DNA review sticky sidebar correction validated locally and pending deployment
+Status: complete; DNA review sticky sidebar correction deployed and authenticated smoke-tested
 
 ## Scope
 
@@ -121,5 +121,16 @@ Execution follows [the production deploy runbook](../deploy-runbook.md).
 - Previous attempt: commit `2133ea5`, CI run
   [29396582780](https://github.com/gcaponi/Zeus/actions/runs/29396582780), deployed successfully but
   behavior rejected during production review.
-- Current correction status: pending commit, CI, production deployment, and authenticated smoke at
-  intermediate and maximum document scroll.
+- Sticky correction: commit `9e9118f`, CI run
+  [29398632739](https://github.com/gcaponi/Zeus/actions/runs/29398632739) (#46), all four jobs green.
+- First corrective deploy advanced production from `2133ea5` to `9e9118f`; services and health were
+  green, but the authenticated browser retained the old unversioned stylesheet from cache.
+- Cache correction: commit `6ceb141` versions the App Shell stylesheet URL and adds a rendering
+  regression; CI run [29399998010](https://github.com/gcaponi/Zeus/actions/runs/29399998010) (#47)
+  completed with all four jobs green.
+- Final production SHA: `6ceb141c9b152436ce36c3f9cefff8a0333158a6`; tracked worktree clean;
+  `zeus`, `zeus-celery`, and nginx active; local/public health green; recent journals clean.
+- Authenticated production smoke at 768x900: stylesheet URL includes `?v=20260715-3`, main overflow
+  is visible, sidebar computes to `position: sticky` with `top: 76px`, remains fully visible after
+  intermediate and maximum document scrolling, and introduces no horizontal overflow.
+- Rollback required: no.
