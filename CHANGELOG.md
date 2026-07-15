@@ -2,6 +2,23 @@
 
 All notable ZEUS changes are documented in this file.
 
+## 2026-07-15 - Tenant login opens the Dashboard
+
+### Fixed
+
+- Successful tenant login now opens the tenant Dashboard instead of Onboarding.
+- The custom public login follows the central `LOGIN_REDIRECT_URL` policy.
+- The redundant "Workspace pubblico" entry was removed from Dashboard quick access.
+- Login redirect and Dashboard rendering contracts are covered by tests; the six affected
+  Dashboard and command-palette baselines were updated without touching unrelated images.
+
+### Deployment
+
+- Commit `b4705b1` passed CI #51 and was deployed successfully.
+- Authenticated production smoke confirmed the final `/dashboard/` URL, active Dashboard
+  navigation, exactly two quick links, no "Workspace pubblico" text, and no horizontal overflow.
+- Production services and public health remained green; recent web and worker journals were clean.
+
 ## 2026-07-15 - Tenant context sidebar correction generalized
 
 ### Fixed
