@@ -51,6 +51,34 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
         )
         self.assertFalse(has_overflow, f"Overflow orizzontale su {page.url}")
 
+    def _assert_context_sidebar_sticks(self, page):
+        context_panel = page.locator(".zeus-app-page-context")
+        self.assertEqual(
+            context_panel.evaluate(
+                "element => getComputedStyle(element).position"
+            ),
+            "sticky",
+        )
+        initial_context_box = context_panel.bounding_box()
+        scroll_top = page.evaluate(
+            """() => {
+                const scrollingElement = document.scrollingElement;
+                const scrollRange =
+                    scrollingElement.scrollHeight - scrollingElement.clientHeight;
+                scrollingElement.scrollTop = Math.min(600, scrollRange);
+                return scrollingElement.scrollTop;
+            }"""
+        )
+        self.assertGreater(scroll_top, 0)
+        sticky_context_box = context_panel.bounding_box()
+        self.assertLess(sticky_context_box["y"], initial_context_box["y"])
+        self.assertGreaterEqual(sticky_context_box["y"], 0)
+        self.assertLessEqual(
+            sticky_context_box["y"] + sticky_context_box["height"],
+            page.viewport_size["height"],
+        )
+        page.evaluate("document.scrollingElement.scrollTop = 0")
+
     def _assert_visual_baseline(self, page, name, full_page=True):
         fonts_ready = page.evaluate(
             """async () => {
@@ -580,6 +608,17 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
 
                     self.assertTrue(response.ok)
                     self.assertTrue(page.locator(".zeus-app-shell--tenant").count())
+                    shell_main = page.locator(".zeus-app-shell__main")
+                    self.assertIn(
+                        "zeus-app-shell__main--document-scroll",
+                        shell_main.get_attribute("class").split(),
+                    )
+                    self.assertEqual(
+                        shell_main.evaluate(
+                            "element => getComputedStyle(element).overflowY"
+                        ),
+                        "visible",
+                    )
                     self.assertEqual(page.locator("h1").first.inner_text(), heading)
                     self.assertEqual(
                         page.locator(".zeus-app-nav a.is-active").inner_text(),
@@ -619,10 +658,12 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                         page,
                         f"app-shell-{surface_name}-{viewport_name}",
                     )
+                    context_panel = page.locator(".zeus-app-page-context")
+                    if context_panel.count() and viewport_name == "tablet":
+                        self._assert_context_sidebar_sticks(page)
                     if surface_name == "dna-review" and viewport_name == "tablet":
                         page.set_viewport_size({"width": 768, "height": 900})
                         main = page.locator(".zeus-app-page-main")
-                        context_panel = page.locator(".zeus-app-page-context")
                         self.assertGreater(
                             context_panel.bounding_box()["x"],
                             main.bounding_box()["x"],
@@ -780,6 +821,17 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
 
                     self.assertTrue(response.ok)
                     self.assertTrue(page.locator(".zeus-app-shell--tenant").count())
+                    shell_main = page.locator(".zeus-app-shell__main")
+                    self.assertIn(
+                        "zeus-app-shell__main--document-scroll",
+                        shell_main.get_attribute("class").split(),
+                    )
+                    self.assertEqual(
+                        shell_main.evaluate(
+                            "element => getComputedStyle(element).overflowY"
+                        ),
+                        "visible",
+                    )
                     self.assertEqual(
                         page.locator(".zeus-app-breadcrumb strong").inner_text(),
                         title,
@@ -806,6 +858,9 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                         page,
                         f"app-shell-{surface_name}-{viewport_name}",
                     )
+                    context_panel = page.locator(".zeus-app-page-context")
+                    if context_panel.count() and viewport_name == "tablet":
+                        self._assert_context_sidebar_sticks(page)
                     page.close()
                 context.close()
             browser.close()
