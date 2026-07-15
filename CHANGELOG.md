@@ -2,14 +2,29 @@
 
 All notable ZEUS changes are documented in this file.
 
-## Unreleased - DNA review sidebar scroll correction
+## Unreleased - DNA review sticky sidebar correction
 
 ### Fixed
 
-- The right-hand context sidebar on tenant DNA review now remains in the normal page flow and
-  scrolls together with the review content instead of sticking to the viewport.
-- Browser coverage now verifies the computed non-sticky position and the sidebar movement during
-  document scrolling at the 768 px boundary.
+- The right-hand context sidebar on tenant DNA review remains visible while the long review page
+  scrolls, including at the bottom of the document.
+- The DNA review main container now exposes document scrolling so the existing sticky sidebar can
+  bind to the real scrolling element without changing other App Shell pages.
+- Browser coverage verifies the sticky offset and full viewport visibility at intermediate and
+  maximum document scroll positions.
+
+### Deployment
+
+- Pending commit, CI, deployment, and authenticated production smoke.
+
+## 2026-07-15 - DNA review sidebar normal-flow attempt
+
+### Changed
+
+- Commit `2133ea5` moved the DNA review sidebar into normal page flow. Production review showed
+  that the sidebar then left the viewport and the right column became empty during long scrolling.
+- This behavior did not meet the clarified requirement that the sidebar remain visible and is
+  superseded by the sticky correction above.
 
 ## 2026-07-14 - App Shell controlled release
 

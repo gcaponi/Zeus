@@ -628,22 +628,39 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                             main.bounding_box()["x"],
                         )
                         self.assertEqual(
+                            page.locator(".zeus-app-shell__main").evaluate(
+                                "element => getComputedStyle(element).overflowY"
+                            ),
+                            "visible",
+                        )
+                        self.assertEqual(
                             context_panel.evaluate(
                                 "element => getComputedStyle(element).position"
                             ),
-                            "static",
+                            "sticky",
                         )
                         initial_context_y = context_panel.bounding_box()["y"]
                         scroll_top = page.evaluate(
                             """() => {
-                                document.scrollingElement.scrollTop = 320;
+                                document.scrollingElement.scrollTop = 600;
                                 return document.scrollingElement.scrollTop;
                             }"""
                         )
                         self.assertGreater(scroll_top, 0)
-                        self.assertLess(
-                            context_panel.bounding_box()["y"],
-                            initial_context_y,
+                        sticky_context_box = context_panel.bounding_box()
+                        self.assertLess(sticky_context_box["y"], initial_context_y)
+                        self.assertAlmostEqual(sticky_context_box["y"], 76, delta=1)
+                        page.evaluate(
+                            """() => {
+                                document.scrollingElement.scrollTop =
+                                    document.scrollingElement.scrollHeight;
+                            }"""
+                        )
+                        bottom_context_box = context_panel.bounding_box()
+                        self.assertGreaterEqual(bottom_context_box["y"], 0)
+                        self.assertLessEqual(
+                            bottom_context_box["y"] + bottom_context_box["height"],
+                            page.viewport_size["height"],
                         )
                     page.close()
                 context.close()

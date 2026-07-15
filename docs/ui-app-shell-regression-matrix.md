@@ -1,6 +1,6 @@
 # ZEUS App Shell - Matrice di regressione
 
-Stato: Fasi 0-7 rilasciate; correzione scroll sidebar Revisione DNA validata localmente e in attesa di deploy.
+Stato: Fasi 0-7 e correzione scroll sidebar Revisione DNA rilasciate e verificate in produzione.
 
 ## Invarianti
 
@@ -213,9 +213,11 @@ uv run playwright install chromium
 ## Gate correttivo - scroll sidebar Revisione DNA
 
 - [x] Sidebar destra mantenuta nella colonna contestuale a 768 px.
-- [x] Sidebar Revisione DNA rimossa dal comportamento sticky senza modificare le altre sidebar contestuali.
-- [x] Test browser discriminante su `position: static` e movimento verticale durante lo scroll documento.
+- [x] Requisito chiarito: sidebar sempre visibile durante lo scroll della lunga Revisione DNA.
+- [x] Main della sola Revisione DNA con overflow visibile; altre pagine App Shell invariate.
+- [x] Test browser discriminante su `position: sticky`, offset 76 px e visibilita' completa anche a fondo pagina.
 - [x] Test mirato verde; suite browser `8 passed`; suite completa `299 passed`, coverage `73.93%`;
     Ruff, Django system check e migration check puliti; baseline visuali verdi.
-- [ ] Commit, CI e deploy produzione.
-- [ ] Smoke autenticato sulla Revisione DNA in produzione.
+- [x] Tentativo `2133ea5` identificato come non conforme: la sidebar statica usciva dal viewport.
+- [ ] Commit, CI e deploy della correzione sticky effettiva.
+- [ ] Smoke autenticato a scroll intermedio e a fondo Revisione DNA.

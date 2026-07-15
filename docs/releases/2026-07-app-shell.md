@@ -1,6 +1,6 @@
 # App Shell controlled release record
 
-Status: deployed release complete; DNA review sidebar scroll correction validated locally and pending deployment
+Status: DNA review sticky sidebar correction validated locally and pending deployment
 
 ## Scope
 
@@ -104,15 +104,22 @@ Execution follows [the production deploy runbook](../deploy-runbook.md).
 
 ## Corrective follow-up - DNA review sidebar scrolling
 
-- Production review on 2026-07-15 confirmed that the right-hand DNA review sidebar remained sticky
-  while the user expected it to scroll together with the page.
-- Root cause: the shared `.zeus-app-page-context` rule applied `position: sticky`; the existing
-  browser assertion only checked that the sidebar remained visible after scrolling.
-- Local fix: DNA review overrides the context sidebar to normal flow while other contextual
-  sidebars retain their existing sticky behavior.
-- Regression: the tablet browser test now requires computed `position: static` and verifies that
-  the sidebar's viewport position changes during document scrolling.
+- Commit `2133ea5` moved the sidebar into normal flow, but authenticated production review showed
+  that it left the viewport and produced an empty right column during long scrolling.
+- Clarified requirement: the right-hand controls must remain visible while the DNA document scrolls.
+- Root cause: `.zeus-app-shell__main { overflow: auto; }` became the nearest sticky scroll ancestor,
+  but that element expanded with the 11,000+ px document and never scrolled; the document scrolled
+  instead, so the sidebar's declared `position: sticky` was ineffective.
+- Local fix: DNA review adds a dedicated main-container class with `overflow: visible`, allowing the
+  existing context sidebar to stick to document scrolling without altering other App Shell pages.
+- Regression: the tablet browser test requires main overflow to be visible, computed sidebar
+  `position: sticky`, a 76 px sticky offset after intermediate scrolling, and full sidebar viewport
+  visibility at maximum document scroll.
 - Validation: targeted onboarding App Shell test passed; complete browser suite `8 passed`; full
   suite `299 passed` with `73.93%` coverage; Ruff, Django system check, and migration check passed;
   existing visual baselines remained green.
-- Deployment status: pending commit, CI, production deploy, and authenticated review-page smoke.
+- Previous attempt: commit `2133ea5`, CI run
+  [29396582780](https://github.com/gcaponi/Zeus/actions/runs/29396582780), deployed successfully but
+  behavior rejected during production review.
+- Current correction status: pending commit, CI, production deployment, and authenticated smoke at
+  intermediate and maximum document scroll.

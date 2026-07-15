@@ -28,7 +28,7 @@
         <header id="app-header" class="zeus-app-shell__header">
             {% block shell_header %}{% endblock %}
         </header>
-        <main id="app-main" class="zeus-app-shell__main" tabindex="-1">
+        <main id="app-main" class="zeus-app-shell__main {% block shell_main_class %}{% endblock %}" tabindex="-1">
             {% block shell_main %}{% endblock %}
         </main>
     </div>

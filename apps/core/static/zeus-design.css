@@ -777,6 +777,10 @@ html,
   padding: 24px;
 }
 
+.zeus-app-shell__main--document-scroll {
+  overflow: visible;
+}
+
 .zeus-app-shell a {
   color: inherit;
 }
@@ -2062,12 +2066,6 @@ html,
   align-self: start;
   max-height: calc(100vh - 92px);
   overflow-y: auto;
-}
-
-.zeus-app-page--dna-review .zeus-app-page-context {
-  position: static;
-  max-height: none;
-  overflow-y: visible;
 }
 
 .zeus-app-context-card {
