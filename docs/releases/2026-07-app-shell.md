@@ -1,6 +1,6 @@
 # App Shell controlled release record
 
-Status: complete; DNA review sticky sidebar correction deployed and authenticated smoke-tested
+Status: complete; tenant context sidebar correction deployed globally and authenticated smoke-tested
 
 ## Scope
 
@@ -133,4 +133,31 @@ Execution follows [the production deploy runbook](../deploy-runbook.md).
 - Authenticated production smoke at 768x900: stylesheet URL includes `?v=20260715-3`, main overflow
   is visible, sidebar computes to `position: sticky` with `top: 76px`, remains fully visible after
   intermediate and maximum document scrolling, and introduces no horizontal overflow.
+- Rollback required: no.
+
+## Global follow-up - tenant context sidebars
+
+- The previous correction was scoped only to DNA review. The shared tenant parent now applies
+  `zeus-app-shell__main--document-scroll` to every tenant App Shell page, and the Review-only
+  override has been removed.
+- Context sidebars keep `position: sticky` with a 76 px offset. Tenant bottom action bars are kept
+  static so the global scroll change does not alter their established behavior or visual baselines.
+- Regression coverage checks the shared main class and visible overflow across the core and
+  Specialist flows. Every surface containing `.zeus-app-page-context` is then scrolled for real and
+  must move toward the sticky offset while remaining fully inside the viewport.
+- Validation: focused core and Specialist browser tests `2 passed`; complete browser suite
+  `8 passed`; full suite `299 passed` with `73.93%` coverage; Ruff, Django system check, and migration
+  check passed; the 24 canonical visual baselines remained unchanged.
+- Release commit: `c336af7`; CI run
+  [29403513380](https://github.com/gcaponi/Zeus/actions/runs/29403513380) (#49) completed with `lint`,
+  `test`, `build`, and `release-gate` green.
+- Production advanced from `6ceb141` to `c336af7`; no migrations were required, one static file was
+  collected, and `zeus`, `zeus-celery`, and nginx remained active.
+- Authenticated production smoke at 1024x768 verified stylesheet `?v=20260715-4`, shared main
+  overflow, sticky movement to 76 px, full sidebar viewport visibility, and no horizontal overflow
+  on Onboarding, core DNA Questions/Review/Visualization, and Specialist Review/Visualization.
+  Specialist Detail, Questions, and Feedback also inherited the shared main behavior without layout
+  overflow; those steps do not render a context sidebar.
+- Final production SHA: `c336af79b0dc3714c781cdd13a7360a21b5e04f8`; tracked worktree clean,
+  public health HTTP 200 with `{"status":"ok"}`, and no recent web or worker errors.
 - Rollback required: no.

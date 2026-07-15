@@ -2,6 +2,27 @@
 
 All notable ZEUS changes are documented in this file.
 
+## 2026-07-15 - Tenant context sidebar correction generalized
+
+### Fixed
+
+- Every tenant App Shell page now uses document scrolling through the shared tenant shell, rather
+  than enabling the corrected sticky behavior only on DNA review.
+- Right-hand context sidebars remain visible at the 76 px sticky offset across onboarding, core DNA,
+  and Specialist review/visualization workflows.
+- Tenant bottom action bars retain their previous non-sticky behavior while the context sidebar fix
+  is applied globally.
+- Browser coverage performs real document scrolling on every core and Specialist surface that owns
+  a context sidebar; existing visual baselines remain unchanged.
+
+### Deployment
+
+- Global correction commit `c336af7` passed CI #49 and was deployed successfully.
+- Authenticated production smoke confirmed stylesheet `?v=20260715-4`, shared main overflow,
+  sticky movement and full viewport visibility on four core steps and both Specialist context pages.
+- All checked tenant steps had no horizontal overflow; services, public health and recent journals
+  remained green.
+
 ## 2026-07-15 - DNA review sticky sidebar correction
 
 ### Fixed

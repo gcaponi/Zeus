@@ -1,6 +1,6 @@
 # ZEUS App Shell - Matrice di regressione
 
-Stato: Fasi 0-7 e correzione scroll sidebar Revisione DNA rilasciate e verificate in produzione.
+Stato: Fasi 0-7 e correzione globale delle sidebar contestuali rilasciate e verificate in produzione.
 
 ## Invarianti
 
@@ -210,15 +210,18 @@ uv run playwright install chromium
 - [x] Smoke tenant autenticato su cinque route, palette, tema, drawer mobile e partial HTMX Motore C.
 - [x] Smoke autenticati tenant e staff registrati nella release note il 2026-07-15.
 
-## Gate correttivo - scroll sidebar Revisione DNA
+## Gate correttivo - scroll sidebar contestuali tenant
 
 - [x] Sidebar destra mantenuta nella colonna contestuale a 768 px.
-- [x] Requisito chiarito: sidebar sempre visibile durante lo scroll della lunga Revisione DNA.
-- [x] Main della sola Revisione DNA con overflow visibile; altre pagine App Shell invariate.
-- [x] Test browser discriminante su `position: sticky`, offset 76 px e visibilita' completa anche a fondo pagina.
+- [x] Requisito chiarito: sidebar sempre visibile durante lo scroll dei flussi tenant lunghi.
+- [x] Parent App Shell tenant condiviso con overflow visibile; override locale della Revisione rimosso.
+- [x] Action bar inferiori tenant mantenute statiche per preservare il comportamento precedente.
+- [x] Test browser discriminante su ogni sidebar core/Specialista: scroll reale, `position: sticky`,
+    movimento verso l'offset 76 px e visibilita' completa nel viewport.
 - [x] Test mirato verde; suite browser `8 passed`; suite completa `299 passed`, coverage `73.93%`;
     Ruff, Django system check e migration check puliti; baseline visuali verdi.
 - [x] Tentativo `2133ea5` identificato come non conforme: la sidebar statica usciva dal viewport.
 - [x] Correzione sticky `9e9118f` e cache-buster stylesheet `6ceb141` con CI #46/#47 verdi e deploy completati.
-- [x] Smoke autenticato a 768x900: sticky a 76 px, sidebar completamente visibile a scroll intermedio
-    e a fondo pagina, CSS versionato e nessun overflow orizzontale.
+- [x] Generalizzazione `c336af7` con CI #49 verde e deploy completato senza migration.
+- [x] Smoke autenticato a 1024x768 su Onboarding, DNA Domande/Revisione/Visualizzazione e Specialista
+    Review/Visualizzazione: CSS `?v=20260715-4`, sticky a 76 px, piena visibilita' e zero overflow.
