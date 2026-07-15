@@ -2,7 +2,16 @@
 
 All notable ZEUS changes are documented in this file.
 
-## Unreleased — App Shell controlled release
+## Unreleased - DNA review sidebar scroll correction
+
+### Fixed
+
+- The right-hand context sidebar on tenant DNA review now remains in the normal page flow and
+  scrolls together with the review content instead of sticking to the viewport.
+- Browser coverage now verifies the computed non-sticky position and the sidebar movement during
+  document scrolling at the 768 px boundary.
+
+## 2026-07-14 - App Shell controlled release
 
 ### Added
 
@@ -32,7 +41,7 @@ All notable ZEUS changes are documented in this file.
 
 ### Deployment
 
-- Tenant App Shell remains disabled unless `ZEUS_APP_SHELL_ENABLED=true` is configured.
-- ZeusAdmin is not controlled by the tenant flag and requires staff smoke testing after code
-  deployment.
+- Tenant App Shell is enabled in production through `ZEUS_APP_SHELL_ENABLED=true`.
+- ZeusAdmin is not controlled by the tenant flag; its authenticated staff smoke test passed on
+  2026-07-15.
 - No database migrations are introduced by this release.

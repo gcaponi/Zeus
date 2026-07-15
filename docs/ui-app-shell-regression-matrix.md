@@ -1,6 +1,6 @@
 # ZEUS App Shell - Matrice di regressione
 
-Stato: Fasi 0-3, baseline locale del 2026-07-13.
+Stato: Fasi 0-7 rilasciate; correzione scroll sidebar Revisione DNA validata localmente e in attesa di deploy.
 
 ## Invarianti
 
@@ -175,3 +175,47 @@ uv run playwright install chromium
 - [x] Tre baseline palette nuove; 42 baseline tenant aggiornate intenzionalmente per il trigger topbar; 15 baseline legacy/preview non modificate.
 - [x] Contratti App Shell: `19 passed`; browser: `6 passed`, 60 immagini; suite completa: `284 passed`, coverage `73.57%`.
 - [x] Ruff, Django system check e migration check puliti; nessun modello, migration, task Celery o deploy modificato.
+
+## Gate Fase 5.2
+
+- [x] Stati `empty`, `error`, `loading` e `completed` uniformati senza cambiare view, payload o polling.
+- [x] Errori, progressi e spinner espongono ruoli ARIA e live region coerenti.
+- [x] Drawer mobile con focus iniziale, trap, ripristino, `Escape` e background `inert` verificato.
+- [x] Browser: `6 passed`, 64 immagini; suite completa: `286 passed`, coverage `73.57%`.
+- [x] Ruff, Django system check e migration check puliti; commit `812204f` pubblicato.
+
+## Gate Fase 5.3
+
+- [x] Audit responsive a 1440, 1024 e 390 px e transizione dinamica `767↔768` verificati.
+- [x] Focus, `inert`, `aria-hidden` e `prefers-reduced-motion` verificati in Chromium.
+- [x] Tutte le 64 baseline restano byte-identiche; browser `6 passed` e suite completa `286 passed`.
+- [x] Ruff, Django system check e migration check puliti; commit `972baad` pubblicato.
+
+## Gate Fase 6
+
+- [x] ZeusAdmin usa una shell staff dedicata, separata dal chrome tenant.
+- [x] Dashboard, lista Clienti, dettaglio e modali mantengono autorizzazioni staff e azioni protette.
+- [x] I filtri Clienti preservano il partial HTMX puro `#clients-results`.
+- [x] Drawer e modale coprono focus trap, `Escape`, ripristino focus e background `inert`.
+- [x] Implementazione pubblicata nel commit `a9a9e91`.
+- [x] Smoke ZeusAdmin con account staff autorizzato in produzione: Dashboard, Clienti, filtro HTMX,
+  dettaglio Cais, modale DNA e drawer mobile verificati senza eseguire azioni distruttive.
+
+## Gate Fase 7
+
+- [x] CI `lint`, `test`, `build` e `release-gate` verdi.
+- [x] Preflight, deploy controllato, feature flag e rollback documentati.
+- [x] Produzione aggiornata al commit `516f5ef`; nessuna migration, servizi e health verdi, journal puliti.
+- [x] App Shell tenant abilitata in produzione; rollback non necessario.
+- [x] Smoke tenant autenticato su cinque route, palette, tema, drawer mobile e partial HTMX Motore C.
+- [x] Smoke autenticati tenant e staff registrati nella release note il 2026-07-15.
+
+## Gate correttivo - scroll sidebar Revisione DNA
+
+- [x] Sidebar destra mantenuta nella colonna contestuale a 768 px.
+- [x] Sidebar Revisione DNA rimossa dal comportamento sticky senza modificare le altre sidebar contestuali.
+- [x] Test browser discriminante su `position: static` e movimento verticale durante lo scroll documento.
+- [x] Test mirato verde; suite browser `8 passed`; suite completa `299 passed`, coverage `73.93%`;
+    Ruff, Django system check e migration check puliti; baseline visuali verdi.
+- [ ] Commit, CI e deploy produzione.
+- [ ] Smoke autenticato sulla Revisione DNA in produzione.

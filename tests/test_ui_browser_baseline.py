@@ -627,13 +627,23 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                             context_panel.bounding_box()["x"],
                             main.bounding_box()["x"],
                         )
-                        page.locator(".zeus-app-shell__main").evaluate(
-                            "element => { element.scrollTop = element.scrollHeight; }"
+                        self.assertEqual(
+                            context_panel.evaluate(
+                                "element => getComputedStyle(element).position"
+                            ),
+                            "static",
                         )
-                        self.assertTrue(context_panel.is_visible())
+                        initial_context_y = context_panel.bounding_box()["y"]
+                        scroll_top = page.evaluate(
+                            """() => {
+                                document.scrollingElement.scrollTop = 320;
+                                return document.scrollingElement.scrollTop;
+                            }"""
+                        )
+                        self.assertGreater(scroll_top, 0)
                         self.assertLess(
                             context_panel.bounding_box()["y"],
-                            page.viewport_size["height"],
+                            initial_context_y,
                         )
                     page.close()
                 context.close()

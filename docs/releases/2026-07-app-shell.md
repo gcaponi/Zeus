@@ -1,12 +1,12 @@
 # App Shell controlled release record
 
-Status: tenant App Shell enabled; authenticated tenant and staff smoke tests remain pending
+Status: deployed release complete; DNA review sidebar scroll correction validated locally and pending deployment
 
 ## Scope
 
 This release promotes the tenant App Shell phases 0-5, the dedicated ZeusAdmin phase 6, and
-the cross-platform visual/release gate from phase 7.1. The production gap starts after commit
-`ef087d3` and the deployed application release is `ba3a7e5`.
+the cross-platform visual/release gate from phase 7.1. The initial production gap started after
+commit `ef087d3`; subsequent verified hotfix deployments advanced production to `516f5ef`.
 
 There are no Django migration files in the observed commit range. Runtime changes are Python,
 templates, CSS, JavaScript, CI configuration, tests, and static assets.
@@ -69,3 +69,50 @@ Execution follows [the production deploy runbook](../deploy-runbook.md).
   `{"status": "ok"}`; root and login HTTP 200; anonymous ZeusAdmin redirects to login.
 - Recent web and worker logs: no new traceback, exception or error entries.
 - Rollback required: no.
+
+## Specialist feedback and DNA review deployment evidence
+
+- GitHub Actions run: [29356550506](https://github.com/gcaponi/Zeus/actions/runs/29356550506) (lint, test, build and release-gate green).
+- Release SHA: `0017ee5ec6c34db8b87c3b6cb5bf3e1ce31458fb`.
+- Shared and tenant migrations: no migrations to apply.
+- App Shell flag: enabled and retained through the restart.
+- Post-deploy smoke: `zeus`, `zeus-celery` and nginx active; local/public health green; recent journals clean.
+- Corrective GitHub Actions run: [29358232431](https://github.com/gcaponi/Zeus/actions/runs/29358232431) (all four jobs green).
+- Current production SHA: `516f5efdd1119e3277da5d0daaaec57536deac1e`.
+- Corrective postflight: no migrations, services active, local/public health green and journals clean.
+- Rollback required: no.
+
+## Authenticated smoke evidence - 2026-07-15
+
+- Authorized tenant role: Dashboard, Onboarding, Specialisti, Motore B, and Motore C returned
+  HTTP 200 inside the App Shell with active navigation and no desktop overflow.
+- Tenant interactions: command palette exposed five real routes and preserved focus across button,
+  `Ctrl+K`, and `Escape`; mobile drawer focus, `inert`, `Escape`, theme persistence, and 390 px
+  overflow checks passed.
+- Tenant HTMX: authenticated Motore C refresh returned only `#consistency-report-root`, without a
+  document wrapper or App Shell, while the current shell remained mounted.
+- Authorized staff role: ZeusAdmin Dashboard, Clienti, and Cais detail rendered inside the staff
+  shell with no desktop or mobile overflow.
+- Staff interactions: Clienti filtering updated the results from 3 to 1 workspace; the DNA modal
+  loaded real content, trapped and restored focus, marked the shell `inert`, and closed with
+  `Escape`; the mobile drawer passed the same focus and `inert` checks.
+- Protected staff actions were not executed. Delete forms remained POST-only with CSRF and an
+  explicit confirmation; configuration remained a separate POST form.
+- Production SHA: `516f5efdd1119e3277da5d0daaaec57536deac1e`; tracked worktree clean; `zeus`,
+  `zeus-celery`, and nginx active; public health HTTP 200.
+- Rollback required: no.
+
+## Corrective follow-up - DNA review sidebar scrolling
+
+- Production review on 2026-07-15 confirmed that the right-hand DNA review sidebar remained sticky
+  while the user expected it to scroll together with the page.
+- Root cause: the shared `.zeus-app-page-context` rule applied `position: sticky`; the existing
+  browser assertion only checked that the sidebar remained visible after scrolling.
+- Local fix: DNA review overrides the context sidebar to normal flow while other contextual
+  sidebars retain their existing sticky behavior.
+- Regression: the tablet browser test now requires computed `position: static` and verifies that
+  the sidebar's viewport position changes during document scrolling.
+- Validation: targeted onboarding App Shell test passed; complete browser suite `8 passed`; full
+  suite `299 passed` with `73.93%` coverage; Ruff, Django system check, and migration check passed;
+  existing visual baselines remained green.
+- Deployment status: pending commit, CI, production deploy, and authenticated review-page smoke.
