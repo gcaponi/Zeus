@@ -1362,6 +1362,48 @@ html,
   transform: none;
 }
 
+.zeus-suggested-answer-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.zeus-suggested-answer {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--shell-border);
+  border-radius: 7px;
+  background: var(--shell-panel);
+  color: var(--shell-text);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.zeus-suggested-answer:hover {
+  border-color: #0891b2;
+  background: rgba(8, 145, 178, 0.06);
+}
+
+.zeus-suggested-answer[aria-pressed="true"] {
+  border-color: #0e7490;
+  background: rgba(8, 145, 178, 0.1);
+  box-shadow: inset 3px 0 0 #0e7490;
+}
+
+.zeus-suggested-answer:focus-visible {
+  outline: 2px solid #0891b2;
+  outline-offset: 2px;
+}
+
 .zeus-app-quick-links {
   overflow: hidden;
 }

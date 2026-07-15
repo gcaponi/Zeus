@@ -11,6 +11,7 @@ from django.test import Client as TestClient
 from django.test import RequestFactory, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import escape
 
 from apps.companies import tasks, views
 from apps.companies.models import (
@@ -1405,6 +1406,12 @@ class TestDNAQuestions:
                     "question": f"Domanda {index}",
                     "answer_depth": "generica",
                     "answer_guidance": "Guida",
+                    # Foundation contract: 3 distinct grounded suggestions per question.
+                    "suggested_answers": [
+                        f"Risposta {index} - conservativa",
+                        f"Risposta {index} - bilanciata",
+                        f"Risposta {index} - innovativa",
+                    ],
                 }
                 for index in range(10)
             ]
@@ -1527,6 +1534,165 @@ class TestDNAQuestions:
         assert resp["Location"] == reverse("dna-generating")
         follow_up.refresh_from_db()
         assert follow_up.answer == "Risposta approfondita"
+
+    def test_foundation_questions_include_three_suggested_answers(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        self._make_pre_dna(company)
+
+        resp = views.dna_questions(rf_with_tenant("get", reverse("dna-questions")))
+
+        assert resp.status_code == 200
+        questions = list(CompanyQuestion.objects.filter(company=company).order_by("id"))
+        assert len(questions) == 10
+        for question in questions:
+            assert question.plan_slug == Plan.SLUG_STARTER
+            assert len(question.suggested_answers) == 3
+            assert len(set(question.suggested_answers)) == 3
+            assert all(isinstance(answer, str) and answer.strip() for answer in question.suggested_answers)
+        assert b"Possibili risposte" in resp.content
+        assert b"zeus-suggested-answer" in resp.content
+        first = questions[0]
+        first_suggestion = escape(first.suggested_answers[0]).encode()
+        assert first_suggestion in resp.content
+
+    def test_professional_questions_have_no_suggested_answers(self, rf_with_tenant, monkeypatch):
+        monkeypatch.setattr(Client, "auto_create_schema", False)
+        tenant = Client.objects.create(schema_name="test-tenant", name="Test Tenant")
+        plan, _ = Plan.objects.update_or_create(
+            slug=Plan.SLUG_PROFESSIONAL,
+            defaults=Plan.default_values(Plan.SLUG_PROFESSIONAL),
+        )
+        WorkspaceSubscription.objects.create(client=tenant, plan=plan)
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        self._make_pre_dna(company)
+
+        resp = views.dna_questions(rf_with_tenant("get", reverse("dna-questions")))
+
+        assert resp.status_code == 200
+        questions = list(CompanyQuestion.objects.filter(company=company))
+        for question in questions:
+            assert question.plan_slug == Plan.SLUG_PROFESSIONAL
+            assert question.suggested_answers == []
+        assert b"Possibili risposte" not in resp.content
+        assert b"zeus-suggested-answer" not in resp.content
+
+    def test_parse_question_generation_validates_foundation_suggested_answers(self):
+        base_template = {
+            "code": "A1",
+            "pool": "template",
+            "section_key": "identita",
+            "principle": "P",
+            "question": "Q?",
+            "answer_depth": "generica",
+            "answer_guidance": "G",
+        }
+
+        def make_payload(suggested):
+            return {
+                "questions": [
+                    {**base_template, "code": f"A{i + 1}", "suggested_answers": suggested}
+                    for i in range(10)
+                ]
+            }
+
+        valid = views._parse_question_generation(
+            json.dumps(make_payload(["one", "two", "three"])),
+            plan_slug=Plan.SLUG_STARTER,
+        )
+        assert valid[0]["suggested_answers"] == ["one", "two", "three"]
+
+        with pytest.raises(ValueError):
+            views._parse_question_generation(
+                json.dumps(make_payload(["only one", "two"])),
+                plan_slug=Plan.SLUG_STARTER,
+            )
+
+        with pytest.raises(ValueError):
+            views._parse_question_generation(
+                json.dumps(make_payload(["same", " Same ", "other"])),
+                plan_slug=Plan.SLUG_STARTER,
+            )
+
+        with pytest.raises(ValueError):
+            views._parse_question_generation(
+                json.dumps(make_payload(["ok", "", "fine"])),
+                plan_slug=Plan.SLUG_STARTER,
+            )
+
+        with pytest.raises(ValueError):
+            views._parse_question_generation(
+                json.dumps(make_payload(["ok", 2, "fine"])),
+                plan_slug=Plan.SLUG_STARTER,
+            )
+
+        payload_no_key = {
+            "questions": [{**base_template, "code": f"A{i + 1}"} for i in range(10)]
+        }
+        with pytest.raises(ValueError):
+            views._parse_question_generation(
+                json.dumps(payload_no_key),
+                plan_slug=Plan.SLUG_STARTER,
+            )
+
+        payload_non_object = {
+            "questions": ["invalid", *make_payload(["one", "two", "three"])["questions"][1:]]
+        }
+        with pytest.raises(ValueError):
+            views._parse_question_generation(
+                json.dumps(payload_non_object),
+                plan_slug=Plan.SLUG_STARTER,
+            )
+
+        non_foundation = views._parse_question_generation(
+            json.dumps(payload_no_key),
+            plan_slug=Plan.SLUG_PROFESSIONAL,
+        )
+        assert "suggested_answers" not in non_foundation[0]
+
+    def test_foundation_parse_exhaustion_returns_http_400_not_500(
+        self, rf_with_tenant, monkeypatch
+    ):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        self._make_pre_dna(company)
+
+        bad_payload = {
+            "questions": [
+                {
+                    "code": f"A{i + 1}",
+                    "pool": "template",
+                    "section_key": "identita",
+                    "principle": "P",
+                    "question": "Q?",
+                    "answer_depth": "generica",
+                    "answer_guidance": "G",
+                }
+                for i in range(10)
+            ]
+        }
+        result = SimpleNamespace(
+            text=json.dumps(bad_payload),
+            tokens_in=1,
+            tokens_out=1,
+            cost=0,
+            latency_ms=1,
+        )
+        client = SimpleNamespace(generate=lambda prompt, **kw: result)
+        monkeypatch.setattr(views, "get_llm_client", lambda: client)
+
+        resp = views.dna_questions(rf_with_tenant("get", reverse("dna-questions")))
+
+        assert resp.status_code == 400
+        assert b"non e riuscito a generare le domande" in resp.content
+        assert CompanyQuestion.objects.filter(company=company).count() == 0
+
+    def test_foundation_suggested_answers_helper_is_plan_aware(self):
+        raw = {"suggested_answers": ["one", "two", "three"]}
+        assert views._foundation_suggested_answers(raw, Plan.SLUG_STARTER) == [
+            "one",
+            "two",
+            "three",
+        ]
+        assert views._foundation_suggested_answers(raw, Plan.SLUG_PROFESSIONAL) == []
 
 
 @pytest.mark.django_db

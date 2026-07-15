@@ -646,6 +646,38 @@ def _question_generation_prompt(company, dna, plan_slug):
     profile = QUESTION_GENERATION_PROFILES[plan_slug]
     content = json.dumps(dna.content, ensure_ascii=False, indent=2)
     documents = _company_document_context(company)
+    is_foundation = plan_slug == Plan.SLUG_STARTER
+    suggested_block = (
+        """
+RISPOSTE_SUGGERITE_FONDAMENTALE:
+Per il piano Foundation, per OGNI domanda devi anche generare 3 risposte
+suggerite plausibili che il cliente potrebbe dare, salvandole nel campo
+`suggested_answers` (array di 3 stringhe distinte). Queste risposte servono
+come guida per un cliente che non sa cosa scrivere: devono essere coerenti
+con TUTTO cio che hai letto (pre-DNA, sito, note, documenti).
+
+Regole per le 3 risposte suggerite:
+- Devono essere 3 alternative DIVERSE tra loro (es. prospettive diverse, o
+  varianti concrete plausibili per quell'azienda).
+- Devono essere coerenti con il pre-DNA e i documenti: non inventare fatti,
+  numeri, certificazioni o prodotti non supportati dal contesto.
+- Ogni risposta e una frase autonoma comprensibile, non una lista, non un
+  marcatore, non un'annotazione tra parentesi.
+- Le alternative possono differire per formulazione o enfasi, ma non devono
+    introdurre orientamenti che il contesto non sostiene.
+- Se il contesto non supporta 3 alternative sostanziali, genera 3 formulazioni
+    distinte della stessa interpretazione e segnala cio che resta da confermare.
+- Le risposte suggerite NON sostituiscono la risposta del cliente: il cliente
+  potra scegliere una e modificarla, oppure scrivere liberamente.
+"""
+        if is_foundation
+        else ""
+    )
+    suggested_format = (
+        '\n      "suggested_answers": ["risposta 1", "risposta 2", "risposta 3"],'
+        if is_foundation
+        else ""
+    )
     return f"""
 GENERA_DOMANDE_A1_A20
 
@@ -672,7 +704,7 @@ Regole obbligatorie:
 - Non chiedere numeri, percentuali o statistiche se non sono indispensabili: chiedi
   criteri, decisioni, confini, trade-off, filosofia produttiva e verita da confermare.
 - Se ZEUS ha un dubbio, la domanda deve esplicitarlo. Non lasciare zone oscure.
-
+{suggested_block}
 GAP DETECTION — dimensioni tecniche da verificare:
 Prima di generare le domande, controlla se nel pre-DNA e nei documenti sono assenti
 o deboli queste dimensioni tecniche. Se lo sono, le domande kb_anchored DEVONO
@@ -698,7 +730,7 @@ Formato JSON:
       "principle": "nome breve del principio usato",
       "question": "domanda al cliente",
       "answer_depth": "generica|mirata|analitica",
-      "answer_guidance": "che tipo di risposta ti aspetti dal cliente"
+      "answer_guidance": "che tipo di risposta ti aspetti dal cliente"{suggested_format}
     }}
   ]
 }}
@@ -711,12 +743,36 @@ CONTESTO ORIGINALE (SITO + NOTE + DOCUMENTI):
 """.strip()
 
 
-def _parse_question_generation(text):
+def _parse_question_generation(text, plan_slug=None):
     payload = _parse_llm_json(text, context="question-generation")
     questions = payload.get("questions") if isinstance(payload, dict) else payload
     if not isinstance(questions, list) or len(questions) != 10:
         raise ValueError("LLM must return exactly 10 questions")
+    if plan_slug == Plan.SLUG_STARTER:
+        _validate_foundation_suggested_answers(questions)
     return questions
+
+
+def _validate_foundation_suggested_answers(questions):
+    for index, raw in enumerate(questions):
+        if not isinstance(raw, dict):
+            raise ValueError(f"Foundation question #{index + 1} must be an object")
+        code = raw.get("code", f"#{index + 1}")
+        suggested = raw.get("suggested_answers")
+        if not isinstance(suggested, list) or len(suggested) != 3:
+            raise ValueError(
+                f"Foundation question {code} must provide exactly 3 non-empty answers"
+            )
+        if any(not isinstance(item, str) or not item.strip() for item in suggested):
+            raise ValueError(
+                f"Foundation question {code} must provide exactly 3 non-empty answers"
+            )
+        cleaned = [item.strip() for item in suggested]
+        if len({item.casefold() for item in cleaned}) != 3:
+            raise ValueError(
+                f"Foundation question {code} suggested answers must be distinct"
+            )
+        raw["suggested_answers"] = cleaned
 
 
 def _question_pool(raw_question, index):
@@ -725,6 +781,12 @@ def _question_pool(raw_question, index):
     if pool in valid_pools:
         return pool
     return CompanyQuestion.POOL_TEMPLATE if index < 5 else CompanyQuestion.POOL_KB_ANCHORED
+
+
+def _foundation_suggested_answers(raw_question, plan_slug):
+    if plan_slug != Plan.SLUG_STARTER:
+        return []
+    return raw_question["suggested_answers"]
 
 
 def _gap_engine_limits(plan_slug):
@@ -1402,13 +1464,17 @@ def _generate_company_questions(company, dna):
     profile = QUESTION_GENERATION_PROFILES[plan_slug]
     prompt = _question_generation_prompt(company, dna, plan_slug)
     client = get_llm_client()
+
+    def _parse(text):
+        return _parse_question_generation(text, plan_slug=plan_slug)
+
     result, questions_data = _generate_with_retry(
         client,
         prompt,
         model=LLM_MODEL,
         system_prompt=ZEUS_SYSTEM_PROMPT,
         temperatures=(0.5, 0.3, 0.2),
-        parse=_parse_question_generation,
+        parse=_parse,
         context="company-questions",
     )
     LLMCall.objects.create(
@@ -1442,6 +1508,9 @@ def _generate_company_questions(company, dna):
                     raw_question.get("answer_depth") or profile["answer_depth"]
                 )[:40],
                 "answer_guidance": str(raw_question.get("answer_guidance", "")).strip(),
+                # Foundation ships 3 grounded proposals; other plans keep []
+                # so the UI shows the plain free-text textarea as today.
+                "suggested_answers": _foundation_suggested_answers(raw_question, plan_slug),
                 "question_round": 1,
             },
         )
@@ -2613,7 +2682,7 @@ def dna_questions(request):
     error = None
     try:
         questions = _generate_company_questions(company, pre_dna)
-    except ValueError as exc:
+    except (ValueError, RuntimeError) as exc:
         questions = []
         error = f"ZEUS non e riuscito a generare le domande: {exc}"
     if request.method == "POST" and not error:

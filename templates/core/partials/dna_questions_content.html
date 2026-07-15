@@ -13,7 +13,7 @@
     </div>
 {% endif %}
 
-<form method="post" class="space-y-4" onsubmit="showGeneratingPopup();">
+<form method="post" class="space-y-4" data-dna-question-form onsubmit="showGeneratingPopup();">
     {% csrf_token %}
     {% for question in questions %}
         <section class="zeus-card p-5">
@@ -26,7 +26,25 @@
             {% if question.answer_guidance %}
                 <p class="mt-3 rounded-xl border border-white/10 bg-white/5 p-3 text-xs leading-5 text-content-muted">{{ question.answer_guidance }}</p>
             {% endif %}
-            <textarea name="answer_{{ question.id }}" rows="4" class="zeus-input mt-4" placeholder="Risposta libera, anche sintetica">{{ question.answer }}</textarea>
+            {% if question.suggested_answers %}
+                <div class="mt-4 zeus-suggested-answers" data-suggested-for="answer_{{ question.id }}">
+                    <p class="mb-2 text-xs font-semibold uppercase tracking-wider text-content-muted">
+                        Possibili risposte
+                    </p>
+                    <div class="zeus-suggested-answer-list">
+                        {% for suggestion in question.suggested_answers %}
+                            <button type="button"
+                                class="zeus-suggested-answer"
+                                data-suggestion-text="{{ suggestion|escape }}"
+                                aria-pressed="false"
+                                aria-label="Usa risposta suggerita: {{ suggestion|escape }}">
+                                {{ suggestion }}
+                            </button>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+            <textarea id="answer_{{ question.id }}" name="answer_{{ question.id }}" rows="4" class="zeus-input mt-4" placeholder="Risposta libera, anche sintetica">{{ question.answer }}</textarea>
         </section>
     {% endfor %}
     <div class="sticky-bottom-bar">
@@ -36,3 +54,39 @@
         </button>
     </div>
 </form>
+{% if plan_slug == "starter" %}
+<script>
+(function () {
+    var form = document.querySelector('[data-dna-question-form]');
+    if (!form) { return; }
+
+    function syncSelection(textarea) {
+        var group = textarea.closest('section').querySelector('.zeus-suggested-answers');
+        if (!group) { return; }
+        group.querySelectorAll('.zeus-suggested-answer').forEach(function (button) {
+            var selected = button.getAttribute('data-suggestion-text') === textarea.value;
+            button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+        });
+    }
+
+    form.addEventListener('click', function (event) {
+        var button = event.target.closest('.zeus-suggested-answer');
+        if (!button || !form.contains(button)) { return; }
+        var group = button.closest('.zeus-suggested-answers');
+        var textarea = document.getElementById(group.getAttribute('data-suggested-for'));
+        if (!textarea) { return; }
+        textarea.value = button.getAttribute('data-suggestion-text') || '';
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        textarea.dispatchEvent(new Event('change', { bubbles: true }));
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    });
+
+    form.addEventListener('input', function (event) {
+        if (event.target.matches('textarea[id^="answer_"]')) {
+            syncSelection(event.target);
+        }
+    });
+})();
+</script>
+{% endif %}

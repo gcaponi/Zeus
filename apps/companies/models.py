@@ -273,6 +273,7 @@ class CompanyQuestion(models.Model):
     answer_guidance = models.TextField(blank=True)
     answer = models.TextField(blank=True)
     answered_at = models.DateTimeField(null=True, blank=True)
+    suggested_answers = models.JSONField(default=list, blank=True)
     # Gap Engine support (PIANO 3): follow-up questions live in later rounds and
     # can optionally point to the parent question that triggered them.
     question_round = models.PositiveSmallIntegerField(default=1)

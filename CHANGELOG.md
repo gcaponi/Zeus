@@ -2,6 +2,21 @@
 
 All notable ZEUS changes are documented in this file.
 
+## 2026-07-15 - Foundation onboarding offers grounded answer options
+
+### Added
+
+- Each of the 10 initial DNA Generale questions generated for Foundation now includes exactly
+  three possible answers grounded in the same pre-DNA, website, notes, and documents.
+- Users can select a proposed answer to populate the existing textarea and edit it before submit;
+  only the confirmed textarea value enters the complete DNA and Gap Engine.
+- Suggested answers are persisted on `CompanyQuestion` through migration `0023` and remain empty
+  for Professional, Enterprise, existing questions, and Gap Engine follow-ups.
+- Parser validation rejects missing, duplicate, empty, non-string, or malformed proposals and
+  returns a controlled page error after retry exhaustion instead of an HTTP 500.
+- Browser coverage validates selection, manual editing, accessibility state, wrapping, overflow,
+  and visual baselines on desktop, tablet, and mobile.
+
 ## 2026-07-15 - Tenant login opens the Dashboard
 
 ### Fixed

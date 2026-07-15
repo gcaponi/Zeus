@@ -512,6 +512,11 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
             question="Quale principio guida le decisioni tecniche del workspace?",
             answer_depth="mirata",
             answer_guidance="Descrivi una scelta concreta e il criterio usato.",
+            suggested_answers=[
+                "Privilegiamo decisioni tecniche verificabili prima di accelerare la consegna.",
+                "Bilanciamo rapidita e controllo, rendendo espliciti i compromessi tecnici.",
+                "Coinvolgiamo un tecnico senior quando una scelta supera i confini gia validati.",
+            ],
         )
         complete_content = {
             key: f"Contenuto verificato per {key}." for key in LAYER_KEYS
@@ -629,6 +634,18 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                         self.assertTrue(
                             page.evaluate("typeof window.htmx !== 'undefined'")
                         )
+                    if surface_name == "dna-questions":
+                        suggestions = page.locator(".zeus-suggested-answer")
+                        self.assertEqual(suggestions.count(), 3)
+                        selected_suggestion = suggestions.nth(1)
+                        selected_text = selected_suggestion.inner_text().strip()
+                        answer = page.locator('textarea[name^="answer_"]').first
+                        selected_suggestion.click()
+                        self.assertEqual(answer.input_value(), selected_text)
+                        self.assertEqual(
+                            selected_suggestion.get_attribute("aria-pressed"),
+                            "true",
+                        )
                     if surface_name == "dna-generating":
                         spinner = page.locator(".zeus-generation-progress__spinner").first
                         animation = spinner.evaluate(
@@ -658,6 +675,13 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                         page,
                         f"app-shell-{surface_name}-{viewport_name}",
                     )
+                    if surface_name == "dna-questions":
+                        answer.fill(f"{selected_text} Con una verifica finale condivisa.")
+                        self.assertEqual(
+                            selected_suggestion.get_attribute("aria-pressed"),
+                            "false",
+                        )
+                        page.evaluate("document.scrollingElement.scrollTop = 0")
                     context_panel = page.locator(".zeus-app-page-context")
                     if context_panel.count() and viewport_name == "tablet":
                         self._assert_context_sidebar_sticks(page)

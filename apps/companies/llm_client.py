@@ -491,7 +491,7 @@ class MockLLMClient(LLMClient):
             sections = list(LAYER_KEYS)
             for index in range(10):
                 code = f"A{index + 1}"
-                questions.append({
+                question_obj = {
                     "code": code,
                     "pool": "template" if index < 5 else "kb_anchored",
                     "section_key": sections[index % len(sections)],
@@ -502,7 +502,14 @@ class MockLLMClient(LLMClient):
                     ),
                     "answer_depth": answer_depth,
                     "answer_guidance": guidance,
-                })
+                }
+                if plan_slug == "starter":
+                    question_obj["suggested_answers"] = [
+                        f"Per {code}, confermiamo l'interpretazione basata su {anchor}.",
+                        f"Per {code}, usiamo il criterio emerso da {anchor} come riferimento.",
+                        f"Per {code}, validiamo {anchor} prima della decisione finale.",
+                    ]
+                questions.append(question_obj)
             return LLMResult(
                 text=json.dumps({"questions": questions}, ensure_ascii=False),
                 tokens_in=500,
