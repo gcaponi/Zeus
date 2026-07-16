@@ -470,6 +470,11 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                         "element => element.classList.contains('dark')"
                     )
                 )
+                self._assert_no_horizontal_overflow(dashboard_page)
+                self._assert_visual_baseline(
+                    dashboard_page,
+                    f"app-shell-dashboard-dark-{viewport_name}",
+                )
                 theme_toggle.click()
                 self.assertFalse(
                     dashboard_page.locator("html").evaluate(

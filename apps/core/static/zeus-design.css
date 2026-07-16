@@ -1270,8 +1270,8 @@ html,
 
 .zeus-app-dashboard-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(260px, 0.75fr);
-  gap: 16px;
+  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+  gap: 24px;
   align-items: start;
 }
 
@@ -1294,6 +1294,10 @@ html,
   margin: 10px 0 0;
   color: var(--shell-muted);
   font-size: 0.875rem;
+}
+
+.zeus-app-dashboard-overview .zeus-app-workspace-details {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .zeus-app-workspace-details {
@@ -1432,6 +1436,207 @@ html,
   font-size: 0.8125rem;
   font-weight: 700;
   text-decoration: none;
+}
+
+.zeus-method {
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.zeus-method-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 0 2px 18px;
+  border-bottom: 1px solid var(--shell-border);
+}
+
+.zeus-method-head h2 {
+  max-width: 560px;
+  margin: 0;
+  color: var(--shell-text);
+  font-family: var(--font-display);
+  font-size: clamp(1.35rem, 2vw, 1.65rem);
+  line-height: 1.18;
+}
+
+.zeus-method-head > p {
+  max-width: 220px;
+  margin: 0;
+  color: var(--shell-muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  text-align: right;
+}
+
+.zeus-method-flow {
+  position: relative;
+  margin: 0;
+  padding: 12px 0 0;
+  list-style: none;
+}
+
+.zeus-method-flow::before {
+  position: absolute;
+  top: 48px;
+  bottom: 52px;
+  left: 27px;
+  width: 2px;
+  background: linear-gradient(to bottom, #0891b2, #16845b, #b46a08, #c2414b);
+  content: "";
+}
+
+.zeus-method-step {
+  --method-color: #0e7490;
+  --method-soft: #ecfeff;
+  position: relative;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) minmax(155px, 185px);
+  gap: 16px;
+  align-items: center;
+  min-height: 118px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--shell-border);
+}
+
+.zeus-method-step:last-child {
+  border-bottom: 0;
+}
+
+.zeus-method-step--specialists {
+  --method-color: #16845b;
+  --method-soft: #eaf8f1;
+}
+
+.zeus-method-step--engine-b {
+  --method-color: #b46a08;
+  --method-soft: #fff5df;
+}
+
+.zeus-method-step--engine-c {
+  --method-color: #c2414b;
+  --method-soft: #fff0ef;
+}
+
+.zeus-method-marker {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  border: 5px solid var(--shell-canvas);
+  border-radius: 50%;
+  background: var(--method-soft);
+  color: var(--method-color);
+  font-size: 0.6875rem;
+  font-weight: 900;
+}
+
+.zeus-method-copy {
+  min-width: 0;
+}
+
+.zeus-method-copy h3 {
+  margin: 0;
+  color: var(--shell-text);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+.zeus-method-copy p {
+  margin: 5px 0 6px;
+  color: var(--shell-muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.zeus-method-copy a {
+  color: var(--method-color);
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.zeus-method-copy a:hover,
+.zeus-method-copy a:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.zeus-method-when {
+  min-height: 76px;
+  padding: 12px 13px;
+  border-left: 3px solid var(--method-color);
+  border-radius: 0 6px 6px 0;
+  background: color-mix(in srgb, var(--method-color) 6%, var(--shell-panel));
+}
+
+.zeus-method-when span,
+.zeus-method-cadence span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--shell-muted);
+  font-size: 0.625rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.zeus-method-when strong {
+  display: block;
+  color: var(--shell-text);
+  font-size: 0.6875rem;
+  line-height: 1.45;
+}
+
+.zeus-method-cadence {
+  display: grid;
+  grid-template-columns: 130px repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  margin-top: 18px;
+  border: 1px solid var(--shell-border);
+  border-radius: 7px;
+  background: var(--shell-border);
+}
+
+.zeus-method-cadence > div {
+  min-width: 0;
+  min-height: 64px;
+  padding: 11px 12px;
+  background: var(--shell-panel);
+}
+
+.zeus-method-cadence-title {
+  display: flex;
+  align-items: center;
+  color: var(--shell-text);
+  font-size: 0.6875rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.zeus-method-cadence strong {
+  display: block;
+  color: var(--shell-text);
+  font-size: 0.625rem;
+  line-height: 1.35;
+}
+
+.dark .zeus-method-step {
+  --method-soft: color-mix(in srgb, var(--method-color) 14%, var(--shell-canvas));
+}
+
+@media (max-width: 1100px) {
+  .zeus-app-dashboard-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .zeus-app-dashboard-overview .zeus-app-workspace-details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .zeus-app-quick-links > a:hover {
@@ -2423,6 +2628,50 @@ html,
 
   .zeus-app-dashboard-overview {
     padding: 20px;
+  }
+
+  .zeus-app-dashboard-overview .zeus-app-workspace-details {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .zeus-method-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .zeus-method-head > p {
+    max-width: none;
+    text-align: left;
+  }
+
+  .zeus-method-flow::before {
+    left: 22px;
+  }
+
+  .zeus-method-step {
+    grid-template-columns: 46px minmax(0, 1fr);
+    gap: 12px;
+    padding: 16px 0;
+  }
+
+  .zeus-method-marker {
+    width: 44px;
+    height: 44px;
+    border-width: 4px;
+  }
+
+  .zeus-method-when {
+    grid-column: 2;
+    min-height: 0;
+  }
+
+  .zeus-method-cadence {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .zeus-method-cadence > div {
+    min-height: 0;
   }
 
   .zeus-product-item-layout {

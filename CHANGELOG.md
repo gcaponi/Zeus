@@ -2,6 +2,24 @@
 
 All notable ZEUS changes are documented in this file.
 
+## 2026-07-16 - Dashboard explains the ZEUS operating workflow
+
+### Added
+
+- The tenant Dashboard now presents the ZEUS method as a four-step operational path:
+  Company Foundation, Specialists, Engine B consolidation, and Engine C verification.
+- Every step explains what the user does, when to use it, why it matters, and links directly
+  to the corresponding workspace tool.
+- A compact cadence guide clarifies when each layer should be created, revised, or audited.
+- The infographic adapts from a side-by-side desktop workflow to readable tablet and mobile
+  layouts, with dedicated light and dark visual baselines.
+
+### Validation
+
+- Exact CI command: 314 tests passed; total coverage 81.00%.
+- Playwright validates dashboard, command palette, navigation drawer, horizontal overflow,
+  and light/dark visual baselines across desktop, tablet, and mobile.
+
 ## 2026-07-16 - Foundation and Gap Engine LLM work runs asynchronously
 
 ### Changed

@@ -9,7 +9,7 @@
         <div>
             <p class="zeus-app-eyebrow">Dashboard</p>
             <h1>{{ tenant.name|default:"Workspace ZEUS" }}</h1>
-            <p>Configura il DNA aziendale e gestisci gli specialisti dal tuo workspace.</p>
+            <p>Configura il DNA aziendale e guida i motori cognitivi dal tuo workspace.</p>
         </div>
         <span class="zeus-app-status"><span aria-hidden="true"></span> Workspace attivo</span>
     </header>
@@ -18,7 +18,7 @@
         <article class="zeus-app-panel zeus-app-dashboard-overview">
             <p class="zeus-app-section-label">Prossimo passo</p>
             <h2>Costruisci il DNA aziendale</h2>
-            <p>Completa l’onboarding per fornire a ZEUS il contesto necessario ai motori di analisi.</p>
+            <p>Completa le fondamenta una volta sola. ZEUS userà questo contesto per creare domande migliori, specialisti coerenti e controlli affidabili.</p>
             <dl class="zeus-app-workspace-details">
                 <div>
                     <dt>Dominio</dt>
@@ -35,20 +35,74 @@
             </div>
         </article>
 
-        <aside class="zeus-app-panel zeus-app-quick-links" aria-labelledby="quick-links-title">
-            <div class="zeus-app-quick-links-head">
-                <p class="zeus-app-section-label">Accesso rapido</p>
-                <h2 id="quick-links-title">Strumenti</h2>
+        <section id="zeus-method" class="zeus-method" aria-labelledby="zeus-method-title">
+            <header class="zeus-method-head">
+                <div>
+                    <p class="zeus-app-section-label">Il metodo ZEUS</p>
+                    <h2 id="zeus-method-title">Dai dati grezzi a decisioni verificabili, in 4 passaggi</h2>
+                </div>
+                <p>Segui l’ordine: ogni fase prepara il contesto necessario alla successiva.</p>
+            </header>
+
+            <ol class="zeus-method-flow">
+                <li class="zeus-method-step zeus-method-step--foundation">
+                    <span class="zeus-method-marker" aria-hidden="true">01</span>
+                    <div class="zeus-method-copy">
+                        <h3>Fondamenta · DNA aziendale</h3>
+                        <p>Inserisci sito e documenti, poi rispondi alle domande. ZEUS apprende identità, confini, tono e logica decisionale dell’azienda.</p>
+                        <a href="{% url 'onboarding-index' %}">Apri Onboarding <span aria-hidden="true">→</span></a>
+                    </div>
+                    <div class="zeus-method-when">
+                        <span>Quando e perché</span>
+                        <strong>Inizia sempre da qui. È la fonte comune di tutto.</strong>
+                    </div>
+                </li>
+                <li class="zeus-method-step zeus-method-step--specialists">
+                    <span class="zeus-method-marker" aria-hidden="true">02</span>
+                    <div class="zeus-method-copy">
+                        <h3>Specialisti · DNA tecnici</h3>
+                        <p>Crea uno Specialista per ogni prodotto o servizio. Aggiungi schede, vincoli e conoscenza operativa per ottenere competenze verticali.</p>
+                        <a href="{% url 'product-list-create' %}">Gestisci Specialisti <span aria-hidden="true">→</span></a>
+                    </div>
+                    <div class="zeus-method-when">
+                        <span>Quando e perché</span>
+                        <strong>Dopo le Fondamenta, per risposte tecniche precise.</strong>
+                    </div>
+                </li>
+                <li class="zeus-method-step zeus-method-step--engine-b">
+                    <span class="zeus-method-marker" aria-hidden="true">03</span>
+                    <div class="zeus-method-copy">
+                        <h3>Motore B · Consolida</h3>
+                        <p>Confronta due o più Specialisti, individua conflitti e propone come integrare le competenze nel DNA aziendale senza perdere precisione.</p>
+                        <a href="{% url 'motore-b-report' %}">Apri Motore B <span aria-hidden="true">→</span></a>
+                    </div>
+                    <div class="zeus-method-when">
+                        <span>Quando e perché</span>
+                        <strong>Con 2+ Specialisti o dopo cambi importanti, per allineare.</strong>
+                    </div>
+                </li>
+                <li class="zeus-method-step zeus-method-step--engine-c">
+                    <span class="zeus-method-marker" aria-hidden="true">04</span>
+                    <div class="zeus-method-copy">
+                        <h3>Motore C · Verifica</h3>
+                        <p>Esegue l’audit finale: misura coerenza, lacune e rischi tra DNA aziendale e Specialistici, indicando cosa correggere prima dell’uso.</p>
+                        <a href="{% url 'consistency-report' %}">Apri Motore C <span aria-hidden="true">→</span></a>
+                    </div>
+                    <div class="zeus-method-when">
+                        <span>Quando e perché</span>
+                        <strong>Prima del go-live o dopo un aggiornamento, per validare.</strong>
+                    </div>
+                </li>
+            </ol>
+
+            <div class="zeus-method-cadence" aria-label="Cadenza consigliata">
+                <div class="zeus-method-cadence-title">Il ciclo giusto</div>
+                <div><span>Fondamenta</span><strong>Una volta, poi quando cambia l’azienda</strong></div>
+                <div><span>Specialisti</span><strong>Uno per ogni offerta da presidiare</strong></div>
+                <div><span>Motore B</span><strong>Dopo nuove competenze o revisioni</strong></div>
+                <div><span>Motore C</span><strong>Prima del go-live e nei controlli periodici</strong></div>
             </div>
-            <a href="{% url 'onboarding-index' %}">
-                <span>Onboarding aziendale</span>
-                <span aria-hidden="true">→</span>
-            </a>
-            <a href="{% url 'product-list-create' %}">
-                <span>Specialisti</span>
-                <span aria-hidden="true">→</span>
-            </a>
-        </aside>
+        </section>
     </div>
 </section>
 {% endblock %}

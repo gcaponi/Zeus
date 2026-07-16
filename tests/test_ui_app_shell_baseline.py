@@ -68,7 +68,7 @@ def test_app_shell_preview_renders_declared_slots():
     assert b'id="app-sidebar"' in response.content
     assert b'id="app-header"' in response.content
     assert b'id="app-main"' in response.content
-    assert b"zeus-design.css?v=20260716-1" in response.content
+    assert b"zeus-design.css?v=20260716-2" in response.content
     assert b"Feature flag attivo" in response.content
 
 
@@ -140,6 +140,13 @@ def test_dashboard_uses_app_shell_when_flag_enabled():
     assert b"UI Baseline" in response.content
     assert reverse("onboarding-index").encode() in response.content
     assert reverse("product-list-create").encode() in response.content
+    assert b'id="zeus-method"' in response.content
+    assert response.content.count(b'class="zeus-method-step ') == 4
+    assert b"Fondamenta" in response.content
+    assert b"Motore B" in response.content
+    assert b"Motore C" in response.content
+    assert reverse("motore-b-report").encode() in response.content
+    assert reverse("consistency-report").encode() in response.content
     assert b"Workspace pubblico" not in response.content
 
 
