@@ -96,9 +96,14 @@ export DJANGO_SETTINGS_MODULE=config.settings.prod
 .venv/bin/python manage.py shell -c "from django.template.loader import get_template; [get_template(name) for name in ('core/app_shell_tenant.html', 'zeus_admin/base.html', 'zeus_admin/client_detail.html')]"
 systemctl restart zeus zeus-celery
 systemctl is-active zeus zeus-celery
+.venv/bin/celery -A config inspect registered --timeout=10 | grep -E 'generate_company_questions_task|process_company_gap_round_task'
 curl -fsS -H 'Host: zeus.cais.uno' http://127.0.0.1:8000/health/
 curl -fsS https://zeus.cais.uno/health/
 ```
+
+The Celery inspection must report both Company Foundation tasks on every active worker:
+`apps.companies.tasks.generate_company_questions_task` and
+`apps.companies.tasks.process_company_gap_round_task`. Stop the release if either task is absent.
 
 ### Flag-off smoke tests
 
@@ -132,6 +137,12 @@ Using an authorized tenant account, verify:
 - Dashboard, Onboarding, Specialisti, Motore B, and Motore C open inside the App Shell.
 - Active navigation, breadcrumbs, theme toggle, and command palette work.
 - HTMX partial updates do not replace the shell.
+- Opening Foundation questions shows the processing page immediately while the worker generates
+  the initial questions, then redirects automatically to the questionnaire.
+- Submitting Foundation or Gap answers shows the processing page while the worker evaluates the
+  round, then redirects automatically to the next follow-up round or complete-DNA generation.
+- Recent `zeus-celery` logs show successful `generate_company_questions_task` and
+  `process_company_gap_round_task` execution without tenant schema or timeout errors.
 - Mobile drawer, keyboard focus, and Escape behavior work.
 - Existing upload, generation, review, PDF, and feedback actions remain reachable.
 

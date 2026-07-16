@@ -973,6 +973,103 @@ class TestDNAQuestions:
         assert "almeno 2 pagine" in first_question.answer_guidance
         assert LLMCall.objects.filter(company=company).count() == 1
 
+    def test_questions_page_queues_generation_without_inline_llm(
+        self,
+        rf_with_tenant,
+        monkeypatch,
+    ):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        pre_dna = self._make_pre_dna(company)
+        queued = {}
+
+        def fake_delay(company_id, pre_dna_id, tenant_schema=None):
+            queued.update({
+                "company_id": company_id,
+                "pre_dna_id": pre_dna_id,
+                "tenant_schema": tenant_schema,
+            })
+
+        monkeypatch.setattr(
+            tasks,
+            "generate_company_questions_task",
+            SimpleNamespace(delay=fake_delay),
+            raising=False,
+        )
+        monkeypatch.setattr(
+            views,
+            "_generate_company_questions",
+            lambda *args: pytest.fail("LLM generation ran inside the HTTP request"),
+        )
+
+        response = views.dna_questions(
+            rf_with_tenant("get", reverse("dna-questions"))
+        )
+
+        assert response.status_code == 302
+        assert response["Location"] == reverse(
+            "dna-processing",
+            args=["questions", 1],
+        )
+        assert queued == {
+            "company_id": company.id,
+            "pre_dna_id": pre_dna.id,
+            "tenant_schema": "test-tenant",
+        }
+
+    @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
+    def test_dna_processing_page_polls_and_hx_redirects_when_ready(
+        self,
+        rf_with_tenant,
+    ):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        pre_dna = self._make_pre_dna(company)
+        views._set_company_async_processing(
+            pre_dna,
+            operation="questions",
+            round=1,
+            status="running",
+            step_num=2,
+            steps_total=4,
+            step_label="Generazione delle domande",
+        )
+
+        response = views.dna_processing(
+            rf_with_tenant(
+                "get",
+                reverse("dna-processing", args=["questions", 1]),
+            ),
+            "questions",
+            1,
+        )
+
+        assert response.status_code == 200
+        assert b'zeus-app-shell--tenant' in response.content
+        assert b'hx-trigger="every 4s"' in response.content
+        assert reverse("dna-processing", args=["questions", 1]).encode() in response.content
+
+        CompanyQuestion.objects.create(
+            company=company,
+            dna=pre_dna,
+            code="A1",
+            section_key="identita",
+            principle="Identita",
+            question="Qual e il principio guida?",
+            question_round=1,
+        )
+        htmx_request = rf_with_tenant(
+            "get",
+            reverse("dna-processing", args=["questions", 1]),
+        )
+        htmx_request.META["HTTP_HX_REQUEST"] = "true"
+        htmx_response = views.dna_processing(
+            htmx_request,
+            "questions",
+            1,
+        )
+
+        assert htmx_response.status_code == 204
+        assert htmx_response["HX-Redirect"] == reverse("dna-questions")
+
     @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
     def test_question_gap_and_generating_pages_use_app_shell(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
@@ -1108,7 +1205,15 @@ class TestDNAQuestions:
         resp = views.dna_questions(post_req)
 
         assert resp.status_code == 302
-        assert resp["Location"] == reverse("dna-generating")
+        assert resp["Location"] == reverse("dna-processing", args=["gap", 1])
+        processing_req = rf_with_tenant(
+            "get",
+            reverse("dna-processing", args=["gap", 1]),
+        )
+        processing_req.session = {}
+        processing_resp = views.dna_processing(processing_req, "gap", 1)
+        assert processing_resp.status_code == 302
+        assert processing_resp["Location"] == reverse("dna-generating")
         complete_dna = CompanyDNA.objects.get(company=company, dna_type=CompanyDNA.TYPE_COMPLETE)
         assert complete_dna.version == 2
         assert complete_dna.is_current is True
@@ -1192,12 +1297,21 @@ class TestDNAQuestions:
         resp = views.dna_questions(req)
 
         assert resp.status_code == 302
-        assert resp["Location"] == reverse("dna-generating")
-        assert req.session["pending_complete_min_version"] == 3
+        assert resp["Location"] == reverse("dna-processing", args=["gap", 1])
         assert CompanyDNA.objects.filter(
             company=company,
             dna_type=CompanyDNA.TYPE_COMPLETE,
         ).count() == 2
+
+        processing_req = rf_with_tenant(
+            "get",
+            reverse("dna-processing", args=["gap", 1]),
+        )
+        processing_req.session = req.session
+        processing_resp = views.dna_processing(processing_req, "gap", 1)
+        assert processing_resp.status_code == 302
+        assert processing_resp["Location"] == reverse("dna-generating")
+        assert req.session["pending_complete_min_version"] == 3
 
         wait_req = rf_with_tenant("get", reverse("dna-generating"))
         wait_req.session = req.session
@@ -1433,6 +1547,80 @@ class TestDNAQuestions:
         assert [question.pool for question in questions[:5]] == ["template"] * 5
         assert [question.pool for question in questions[5:]] == ["kb_anchored"] * 5
 
+    def test_submit_answers_queues_gap_without_inline_llm(
+        self,
+        rf_with_tenant,
+        monkeypatch,
+    ):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        pre_dna = self._make_pre_dna(company)
+        views.dna_questions(rf_with_tenant("get", reverse("dna-questions")))
+        questions = list(pre_dna.questions.filter(question_round=1))
+        data = {
+            f"answer_{question.id}": f"Risposta {question.code}"
+            for question in questions
+        }
+        queued = {}
+        inline_evaluation = {"called": False}
+
+        def fake_delay(
+            company_id,
+            pre_dna_id,
+            current_round,
+            user_id=None,
+            tenant_schema=None,
+        ):
+            queued.update({
+                "company_id": company_id,
+                "pre_dna_id": pre_dna_id,
+                "current_round": current_round,
+                "user_id": user_id,
+                "tenant_schema": tenant_schema,
+            })
+
+        def fake_inline_evaluation(*args, **kwargs):
+            inline_evaluation["called"] = True
+            return {"overall_sufficient": True, "evaluations": [], "follow_ups": []}
+
+        monkeypatch.setattr(
+            tasks,
+            "process_company_gap_round_task",
+            SimpleNamespace(delay=fake_delay),
+            raising=False,
+        )
+        monkeypatch.setattr(
+            tasks,
+            "generate_complete_dna",
+            SimpleNamespace(delay=lambda *args, **kwargs: None),
+        )
+        monkeypatch.setattr(
+            views,
+            "_evaluate_answer_sufficiency",
+            fake_inline_evaluation,
+        )
+
+        request = rf_with_tenant(
+            "post",
+            reverse("dna-questions"),
+            data,
+            form=True,
+        )
+        response = views.dna_questions(request)
+
+        assert response.status_code == 302
+        assert response["Location"] == reverse(
+            "dna-processing",
+            args=["gap", 1],
+        )
+        assert inline_evaluation["called"] is False
+        assert queued == {
+            "company_id": company.id,
+            "pre_dna_id": pre_dna.id,
+            "current_round": 1,
+            "user_id": request.user.id,
+            "tenant_schema": "test-tenant",
+        }
+
     def test_gap_engine_creates_follow_up_round(self, rf_with_tenant, monkeypatch):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
         pre_dna = self._make_pre_dna(company)
@@ -1466,7 +1654,17 @@ class TestDNAQuestions:
         assert resp.status_code == 302
         follow_ups = list(pre_dna.questions.filter(question_round=2))
         assert len(follow_ups) == 1
-        assert resp["Location"] == reverse("dna-gap-questions", args=[2])
+        assert resp["Location"] == reverse("dna-processing", args=["gap", 1])
+        processing_resp = views.dna_processing(
+            rf_with_tenant(
+                "get",
+                reverse("dna-processing", args=["gap", 1]),
+            ),
+            "gap",
+            1,
+        )
+        assert processing_resp.status_code == 302
+        assert processing_resp["Location"] == reverse("dna-gap-questions", args=[2])
         assert follow_ups[0].pool == CompanyQuestion.POOL_KB_ANCHORED
         assert follow_ups[0].parent_question.code == "A1"
 
@@ -1487,7 +1685,17 @@ class TestDNAQuestions:
         resp = views.dna_questions(req)
 
         assert resp.status_code == 302
-        assert resp["Location"] == reverse("dna-generating")
+        assert resp["Location"] == reverse("dna-processing", args=["gap", 1])
+        processing_resp = views.dna_processing(
+            rf_with_tenant(
+                "get",
+                reverse("dna-processing", args=["gap", 1]),
+            ),
+            "gap",
+            1,
+        )
+        assert processing_resp.status_code == 302
+        assert processing_resp["Location"] == reverse("dna-generating")
         assert CompanyDNA.objects.filter(company=company, dna_type=CompanyDNA.TYPE_COMPLETE).exists()
 
     def test_gap_round_view_saves_answers_and_triggers_next_evaluation(
@@ -1531,7 +1739,17 @@ class TestDNAQuestions:
         resp = views.dna_gap_questions(req, round_number=2)
 
         assert resp.status_code == 302
-        assert resp["Location"] == reverse("dna-generating")
+        assert resp["Location"] == reverse("dna-processing", args=["gap", 2])
+        processing_resp = views.dna_processing(
+            rf_with_tenant(
+                "get",
+                reverse("dna-processing", args=["gap", 2]),
+            ),
+            "gap",
+            2,
+        )
+        assert processing_resp.status_code == 302
+        assert processing_resp["Location"] == reverse("dna-generating")
         follow_up.refresh_from_db()
         assert follow_up.answer == "Risposta approfondita"
 
@@ -1649,11 +1867,11 @@ class TestDNAQuestions:
         )
         assert "suggested_answers" not in non_foundation[0]
 
-    def test_foundation_parse_exhaustion_returns_http_400_not_500(
+    def test_foundation_parse_exhaustion_persists_failed_async_state(
         self, rf_with_tenant, monkeypatch
     ):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        self._make_pre_dna(company)
+        pre_dna = self._make_pre_dna(company)
 
         bad_payload = {
             "questions": [
@@ -1681,8 +1899,15 @@ class TestDNAQuestions:
 
         resp = views.dna_questions(rf_with_tenant("get", reverse("dna-questions")))
 
-        assert resp.status_code == 400
-        assert b"non e riuscito a generare le domande" in resp.content
+        assert resp.status_code == 302
+        assert resp["Location"] == reverse(
+            "dna-processing",
+            args=["questions", 1],
+        )
+        pre_dna.refresh_from_db()
+        state = pre_dna.content["_async_processing"]
+        assert state["status"] == "failed"
+        assert "LLM generation failed after 3 attempts" in state["error"]
         assert CompanyQuestion.objects.filter(company=company).count() == 0
 
     def test_foundation_suggested_answers_helper_is_plan_aware(self):

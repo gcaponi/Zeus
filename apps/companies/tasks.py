@@ -1082,6 +1082,198 @@ def run_pipeline(pipeline_run_id: int, tenant_schema: str | None = None):
 
 
 @shared_task(soft_time_limit=600, time_limit=660)
+def generate_company_questions_task(company_id, pre_dna_id, tenant_schema=None):
+    """Generate Foundation questions outside the HTTP request."""
+    def _run():
+        from apps.companies.models import Company
+        from apps.companies.views import (
+            _generate_company_questions,
+            _set_company_async_processing,
+        )
+
+        try:
+            company = Company.objects.get(pk=company_id)
+            pre_dna = CompanyDNA.objects.get(pk=pre_dna_id)
+        except (Company.DoesNotExist, CompanyDNA.DoesNotExist):
+            logger.error("generate_company_questions: company or pre_dna not found")
+            return
+
+        try:
+            _set_company_async_processing(
+                pre_dna,
+                operation="questions",
+                round=1,
+                status="running",
+                step_num=2,
+                steps_total=4,
+                step_label="Generazione delle domande",
+            )
+            _generate_company_questions(company, pre_dna)
+            _set_company_async_processing(
+                pre_dna,
+                operation="questions",
+                round=1,
+                status="completed",
+                result="questions",
+                step_num=4,
+                steps_total=4,
+                step_label="Questionario pronto",
+                error="",
+            )
+            logger.info("Company questions generated for company %s", company.schema_name)
+        except Exception as exc:
+            _set_company_async_processing(
+                pre_dna,
+                operation="questions",
+                round=1,
+                status="failed",
+                step_num=2,
+                steps_total=4,
+                step_label="Generazione non completata",
+                error=str(exc)[:500],
+            )
+            logger.exception(
+                "Company question generation failed for company %s",
+                company.schema_name,
+            )
+
+    if tenant_schema and hasattr(connection, "tenant"):
+        with schema_context(tenant_schema):
+            _run()
+    else:
+        _run()
+
+
+@shared_task(soft_time_limit=600, time_limit=660)
+def process_company_gap_round_task(
+    company_id,
+    pre_dna_id,
+    current_round,
+    user_id=None,
+    tenant_schema=None,
+):
+    """Evaluate Company answers outside the HTTP request to avoid 504s."""
+    def _run():
+        from apps.companies.models import Company
+        from apps.companies.views import (
+            _create_gap_followups,
+            _evaluate_answer_sufficiency,
+            _gap_engine_limits,
+            _plan_slug_for_company,
+            _set_company_async_processing,
+            _set_company_generation_progress,
+        )
+
+        try:
+            company = Company.objects.get(pk=company_id)
+            pre_dna = CompanyDNA.objects.get(pk=pre_dna_id)
+        except (Company.DoesNotExist, CompanyDNA.DoesNotExist):
+            logger.error("process_company_gap_round: company or pre_dna not found")
+            return
+
+        plan_slug = _plan_slug_for_company(company)
+        limits = _gap_engine_limits(plan_slug)
+
+        def _dispatch_complete():
+            latest_complete = company.dna_versions.filter(
+                dna_type=CompanyDNA.TYPE_COMPLETE,
+            ).order_by("-version").first()
+            expected_version = latest_complete.version + 1 if latest_complete else 1
+            _set_company_async_processing(
+                pre_dna,
+                operation="gap",
+                round=current_round,
+                status="complete_pending",
+                result="complete",
+                expected_complete_version=expected_version,
+                step_num=4,
+                steps_total=4,
+                step_label="Avvio DNA Generale completo",
+                error="",
+            )
+            _set_company_generation_progress(
+                pre_dna,
+                1,
+                4,
+                "Lettura risposte",
+                status="running",
+                flow="company_complete_dna",
+            )
+            generate_complete_dna.delay(
+                company.id,
+                pre_dna.id,
+                user_id,
+                tenant_schema=tenant_schema,
+            )
+
+        try:
+            _set_company_async_processing(
+                pre_dna,
+                operation="gap",
+                round=current_round,
+                status="evaluating",
+                step_num=2,
+                steps_total=4,
+                step_label="Verifica lacune e contraddizioni",
+            )
+            if current_round > limits["max_rounds"] + 1:
+                _dispatch_complete()
+                return
+
+            answered_questions = list(
+                pre_dna.questions.exclude(answer="").order_by("question_round", "id")
+            )
+            evaluation = _evaluate_answer_sufficiency(
+                company,
+                pre_dna,
+                answered_questions,
+                plan_slug,
+            )
+            followups = evaluation.get("follow_ups", [])[: limits["max_followups"]]
+            if evaluation.get("overall_sufficient") or not followups:
+                _dispatch_complete()
+                return
+
+            _create_gap_followups(
+                company,
+                pre_dna,
+                followups,
+                current_round,
+                plan_slug,
+            )
+            _set_company_async_processing(
+                pre_dna,
+                operation="gap",
+                round=current_round,
+                status="followups_ready",
+                result="followups",
+                target_round=current_round + 1,
+                step_num=4,
+                steps_total=4,
+                step_label="Approfondimenti pronti",
+                error="",
+            )
+            logger.info(
+                "Company gap follow-ups created for company %s round %s",
+                company.schema_name,
+                current_round,
+            )
+        except Exception:
+            logger.exception(
+                "Company gap processing failed for company %s round %s; dispatching complete DNA",
+                company.schema_name,
+                current_round,
+            )
+            _dispatch_complete()
+
+    if tenant_schema and hasattr(connection, "tenant"):
+        with schema_context(tenant_schema):
+            _run()
+    else:
+        _run()
+
+
+@shared_task(soft_time_limit=600, time_limit=660)
 def generate_complete_dna(company_id, pre_dna_id, user_id, tenant_schema=None):
     def _run():
         from django.contrib.auth import get_user_model

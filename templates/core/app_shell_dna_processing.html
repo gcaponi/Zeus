@@ -1,0 +1,23 @@
+{% extends "core/app_shell_tenant.html" %}
+
+{% block title %}Elaborazione Foundation - ZEUS{% endblock %}
+{% block shell_page_title %}Foundation{% endblock %}
+
+{% block tenant_main %}
+<section class="zeus-app-page zeus-app-page--core-flow">
+    <header class="zeus-app-page-header">
+        <div>
+            <p class="zeus-app-eyebrow">DNA Generale - Step 2</p>
+            <h1>Elaborazione Foundation</h1>
+            <p>ZEUS sta preparando il prossimo passaggio.</p>
+        </div>
+    </header>
+    {% include "core/onboarding/_step_indicator.html" with step=2 %}
+    {% include "core/partials/dna_processing_content.html" %}
+</section>
+{% endblock %}
+
+{% block shell_scripts %}
+{{ block.super }}
+{% include "core/partials/_app_shell_htmx.html" %}
+{% endblock %}

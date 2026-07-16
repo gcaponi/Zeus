@@ -1,0 +1,18 @@
+{% extends "core/base.html" %}
+
+{% block title %}Elaborazione Foundation - ZEUS{% endblock %}
+
+{% block extra_head %}
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+{% endblock %}
+
+{% block content %}
+<div class="zeus-page-wrap">
+    <header class="mb-8">
+        <h1 class="text-3xl font-bold tracking-tight sm:text-4xl font-display">Elaborazione in corso...</h1>
+    </header>
+
+    {% include "core/onboarding/_step_indicator.html" with step=step %}
+    {% include "core/partials/dna_processing_content.html" %}
+</div>
+{% endblock %}

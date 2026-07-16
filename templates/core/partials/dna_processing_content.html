@@ -1,0 +1,17 @@
+{% with phases_list=phases|default:None %}
+{% include "core/partials/_generation_progress.html" with title="ZEUS sta preparando il prossimo passaggio" description="L'elaborazione continua in background. Puoi lasciare aperta questa pagina: si aggiornerà automaticamente." status=task_status error_msg=task_error phases=phases_list steps_total=steps_total current_step_num=current_step_num step_label=step_label progress_pct=progress_pct %}
+{% endwith %}
+
+{% if state.status == "failed" %}
+    <div class="mt-5 rounded-xl border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-300">
+        Elaborazione non completata. Torna al questionario per riprovare.
+    </div>
+{% endif %}
+
+<div
+    class="mt-8"
+    hx-get="{% url 'dna-processing' operation round_number %}"
+    hx-trigger="every 4s"
+    hx-target="body"
+    hx-swap="outerHTML"
+></div>

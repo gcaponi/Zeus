@@ -949,39 +949,139 @@ def _round_questions(dna, round_number):
     return list(dna.questions.filter(question_round=round_number).order_by("id"))
 
 
-def _process_answers_after_round(request, company, pre_dna, current_round):
-    """Save answers, run Gap Engine, create follow-ups or trigger complete DNA."""
-    plan_slug = _plan_slug_for_company(company)
-    limits = _gap_engine_limits(plan_slug)
+def _set_company_async_processing(pre_dna, **data):
+    content = dict(pre_dna.content) if isinstance(pre_dna.content, dict) else {}
+    state = dict(content.get("_async_processing") or {})
+    state.update(data)
+    state["updated_at"] = timezone.now().isoformat()
+    content["_async_processing"] = state
+    pre_dna.content = content
+    pre_dna.save(update_fields=["content"])
+    return state
 
-    # Collect all answered questions across rounds for the synthesis.
-    answered_questions = list(
-        pre_dna.questions.exclude(answer="").order_by("question_round", "id")
+
+def _company_async_processing_state(pre_dna):
+    if not isinstance(pre_dna.content, dict):
+        return {}
+    state = pre_dna.content.get("_async_processing") or {}
+    return state if isinstance(state, dict) else {}
+
+
+def _company_async_progress_context(operation, round_number, state):
+    step_num = int(state.get("step_num") or 1)
+    steps_total = int(state.get("steps_total") or 4)
+    if operation == "questions":
+        phase_labels = [
+            "Lettura del Pre-DNA",
+            "Generazione delle domande",
+            "Validazione delle risposte suggerite",
+            "Preparazione del questionario",
+        ]
+        default_label = "Lettura del Pre-DNA"
+    else:
+        phase_labels = [
+            f"Lettura delle risposte del round {round_number}",
+            "Verifica lacune e contraddizioni",
+            "Decisione sugli approfondimenti",
+            "Preparazione del prossimo passaggio",
+        ]
+        default_label = f"Lettura risposte round {round_number}"
+    phases = []
+    for index, phase_label in enumerate(phase_labels, start=1):
+        if index < step_num:
+            status = "done"
+        elif index == step_num:
+            status = "active"
+        else:
+            status = "pending"
+        phases.append({"label": phase_label, "status": status})
+    return {
+        "task_status": "failed" if state.get("status") == "failed" else "running",
+        "task_error": state.get("error", ""),
+        "phases": phases,
+        "steps_total": steps_total,
+        "current_step_num": step_num,
+        "step_label": state.get("step_label") or default_label,
+        "progress_pct": min(int(step_num / steps_total * 100), 95),
+    }
+
+
+def _start_company_questions_processing(request, company, pre_dna):
+    state = _company_async_processing_state(pre_dna)
+    already_running = (
+        state.get("operation") == "questions"
+        and state.get("status") in {"queued", "running"}
+    )
+    if not already_running:
+        _set_company_async_processing(
+            pre_dna,
+            operation="questions",
+            round=1,
+            status="queued",
+            step_num=1,
+            steps_total=4,
+            step_label="Lettura del Pre-DNA",
+            started_at=timezone.now().isoformat(),
+            error="",
+        )
+        tenant = getattr(request, "tenant", None)
+        from apps.companies.tasks import generate_company_questions_task
+        generate_company_questions_task.delay(
+            company.id,
+            pre_dna.id,
+            tenant_schema=tenant.schema_name if tenant else None,
+        )
+    return redirect("dna-processing", operation="questions", round_number=1)
+
+
+def _latest_unanswered_company_round(pre_dna, after_round=0):
+    return (
+        pre_dna.questions.filter(answer="", question_round__gt=after_round)
+        .order_by("question_round")
+        .values_list("question_round", flat=True)
+        .first()
     )
 
-    # max_rounds = number of follow-up rounds allowed (excluding round 1).
-    # If current_round > max_rounds + 1, we have used all allowed follow-ups.
-    if current_round > limits["max_rounds"] + 1:
-        _trigger_complete_dna(request, company, pre_dna)
-        return redirect("dna-generating")
 
-    try:
-        evaluation = _evaluate_answer_sufficiency(
-            company, pre_dna, answered_questions, plan_slug
+def _start_company_gap_processing(request, company, pre_dna, current_round):
+    state = _company_async_processing_state(pre_dna)
+    already_running = (
+        state.get("operation") == "gap"
+        and state.get("round") == current_round
+        and state.get("status") in {"queued", "evaluating"}
+    )
+    if not already_running:
+        _set_company_async_processing(
+            pre_dna,
+            operation="gap",
+            round=current_round,
+            status="queued",
+            step_num=1,
+            steps_total=4,
+            step_label=f"Lettura risposte round {current_round}",
+            started_at=timezone.now().isoformat(),
+            error="",
         )
-    except Exception:
-        logger.exception("Gap Engine evaluation failed for %s", company.schema_name)
-        # Fail-safe: proceed with synthesis rather than blocking the user.
-        _trigger_complete_dna(request, company, pre_dna)
-        return redirect("dna-generating")
+        tenant = getattr(request, "tenant", None)
+        from apps.companies.tasks import process_company_gap_round_task
+        process_company_gap_round_task.delay(
+            company.id,
+            pre_dna.id,
+            current_round,
+            request.user.id if request.user.is_authenticated else None,
+            tenant_schema=tenant.schema_name if tenant else None,
+        )
+    return redirect("dna-processing", operation="gap", round_number=current_round)
 
-    followups = evaluation.get("follow_ups", [])[: limits["max_followups"]]
-    if evaluation.get("overall_sufficient") or not followups:
-        _trigger_complete_dna(request, company, pre_dna)
-        return redirect("dna-generating")
 
-    _create_gap_followups(company, pre_dna, followups, current_round, plan_slug)
-    return redirect("dna-gap-questions", round_number=current_round + 1)
+def _process_answers_after_round(request, company, pre_dna, current_round):
+    """Queue Gap Engine processing after answers have been saved."""
+    return _start_company_gap_processing(
+        request,
+        company,
+        pre_dna,
+        current_round,
+    )
 
 
 # --- Gap Engine for ProductDNA (Specialista) ---
@@ -2679,12 +2779,18 @@ def dna_questions(request):
     if latest_unanswered_round and latest_unanswered_round > 1:
         return redirect("dna-gap-questions", round_number=latest_unanswered_round)
 
+    questions = _round_questions(pre_dna, 1)
+    if not questions:
+        processing_response = _start_company_questions_processing(
+            request,
+            company,
+            pre_dna,
+        )
+        questions = _round_questions(pre_dna, 1)
+        if not questions:
+            return processing_response
+
     error = None
-    try:
-        questions = _generate_company_questions(company, pre_dna)
-    except (ValueError, RuntimeError) as exc:
-        questions = []
-        error = f"ZEUS non e riuscito a generare le domande: {exc}"
     if request.method == "POST" and not error:
         body = _request_data(request)
         missing = []
@@ -2797,6 +2903,65 @@ def dna_gap_questions(request, round_number):
         "step_has_dna": company.dna_versions.filter(is_current=True).exists(),
         "step_has_questions": True,
     }, status=status_code)
+
+
+@login_required
+def dna_processing(request, operation, round_number):
+    """Wait for asynchronous Company question or Gap Engine processing."""
+    if operation not in {"questions", "gap"}:
+        return HttpResponse("Operazione non valida", status=404)
+
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    pre_dna = company.dna_versions.filter(
+        dna_type=CompanyDNA.TYPE_PRE,
+    ).order_by("-version").first()
+    if not pre_dna:
+        return HttpResponse("Pre-DNA not found", status=404)
+
+    if operation == "questions" and _round_questions(pre_dna, 1):
+        return _redirect_after_htmx_action(request, "dna-questions")
+
+    state = _company_async_processing_state(pre_dna)
+    if operation == "gap":
+        next_round = _latest_unanswered_company_round(
+            pre_dna,
+            after_round=round_number,
+        )
+        if next_round:
+            return _redirect_after_htmx_action(
+                request,
+                "dna-gap-questions",
+                next_round,
+            )
+        if state.get("status") == "complete_pending":
+            _set_pending_complete_generation(
+                request,
+                state.get("expected_complete_version") or 1,
+                source_dna_id=pre_dna.pk,
+            )
+            return _redirect_after_htmx_action(request, "dna-generating")
+
+    progress_context = _company_async_progress_context(
+        operation,
+        round_number,
+        state,
+    )
+    template_name = (
+        "core/app_shell_dna_processing.html"
+        if settings.ZEUS_APP_SHELL_ENABLED
+        else "core/dna_processing.html"
+    )
+    return render(request, template_name, {
+        "company": company,
+        "pre_dna": pre_dna,
+        "operation": operation,
+        "round_number": round_number,
+        "state": state,
+        "step": 2,
+        **progress_context,
+    })
 
 
 @login_required

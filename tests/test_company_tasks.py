@@ -284,6 +284,97 @@ class TestAsyncCompanyTasks:
 
         assert called == {"company": company, "pre_dna": pre_dna, "user": user}
 
+    def test_generate_company_questions_task_updates_state(self, monkeypatch):
+        company = _make_company()
+        pre_dna = CompanyDNA.objects.create(
+            company=company,
+            version=2,
+            dna_type=CompanyDNA.TYPE_PRE,
+            content={"identita": "pre"},
+            is_current=False,
+        )
+        called = {}
+        states = []
+
+        def fake_generate(company_arg, pre_dna_arg):
+            called.update({"company": company_arg, "pre_dna": pre_dna_arg})
+
+        def fake_set(pre_dna_arg, **kwargs):
+            assert pre_dna_arg == pre_dna
+            states.append(kwargs)
+
+        monkeypatch.setattr(
+            "apps.companies.views._generate_company_questions",
+            fake_generate,
+        )
+        monkeypatch.setattr(
+            "apps.companies.views._set_company_async_processing",
+            fake_set,
+        )
+
+        tasks.generate_company_questions_task(company.id, pre_dna.id)
+
+        assert called == {"company": company, "pre_dna": pre_dna}
+        assert [state["status"] for state in states] == ["running", "completed"]
+
+    def test_process_company_gap_round_dispatches_complete(self, monkeypatch):
+        company = _make_company()
+        pre_dna = CompanyDNA.objects.create(
+            company=company,
+            version=2,
+            dna_type=CompanyDNA.TYPE_PRE,
+            content={"identita": "pre"},
+            is_current=False,
+        )
+        state = {}
+
+        monkeypatch.setattr(
+            "apps.companies.views._plan_slug_for_company",
+            lambda company_arg: "starter",
+        )
+        monkeypatch.setattr(
+            "apps.companies.views._gap_engine_limits",
+            lambda plan_slug: {"max_rounds": 1, "max_followups": 3},
+        )
+        monkeypatch.setattr(
+            "apps.companies.views._evaluate_answer_sufficiency",
+            lambda *args: {
+                "overall_sufficient": True,
+                "evaluations": [],
+                "follow_ups": [],
+            },
+        )
+
+        def fake_set(pre_dna_arg, **kwargs):
+            assert pre_dna_arg == pre_dna
+            state.update(kwargs)
+
+        def fake_delay(company_id, pre_dna_id, user_id, tenant_schema=None):
+            state["delay"] = (company_id, pre_dna_id, user_id, tenant_schema)
+
+        monkeypatch.setattr(
+            "apps.companies.views._set_company_async_processing",
+            fake_set,
+        )
+        monkeypatch.setattr(
+            "apps.companies.views._set_company_generation_progress",
+            lambda *args, **kwargs: None,
+        )
+        monkeypatch.setattr(tasks.generate_complete_dna, "delay", fake_delay)
+
+        tasks.process_company_gap_round_task(
+            company.id,
+            pre_dna.id,
+            current_round=1,
+            user_id=7,
+            tenant_schema="tenant1",
+        )
+
+        assert state["status"] == "complete_pending"
+        assert state["result"] == "complete"
+        assert state["expected_complete_version"] == 2
+        assert state["delay"] == (company.id, pre_dna.id, 7, "tenant1")
+
     def test_generate_complete_product_dna_task_calls_view_helper(self, monkeypatch):
         user = get_user_model().objects.create_user("p", "p@example.com", "pw")
         company = _make_company()

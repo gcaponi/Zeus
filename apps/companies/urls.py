@@ -14,6 +14,11 @@ urlpatterns = [
         views.dna_gap_questions,
         name="dna-gap-questions",
     ),
+    path(
+        "company/dna/processing/<str:operation>/<int:round_number>/",
+        views.dna_processing,
+        name="dna-processing",
+    ),
     path("company/dna/<int:pk>/feedback/", views.dna_feedback, name="dna-feedback"),
     path("company/dna/review/", views.dna_review, name="dna-review"),
     path(
