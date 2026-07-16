@@ -615,6 +615,14 @@ a.zeus-card:hover {
   transform: translateY(-1px);
 }
 
+.zeus-dna-section-editor {
+  min-height: clamp(20rem, 48vh, 36rem);
+  max-height: 70vh;
+  line-height: 1.55;
+  resize: vertical;
+  overflow-y: auto;
+}
+
 /* ---------- 9. BADGE / STATUS PILL ---------- */
 .zeus-pill {
   display: inline-flex;

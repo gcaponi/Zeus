@@ -863,6 +863,32 @@ class TestOnboardingViews:
         assert b"Analisi Neurale in corso" in resp.content
         assert b'"current_step"' not in resp.content
 
+    def test_onboarding_status_renders_real_pipeline_progress(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        source = Source.objects.create(
+            company=company,
+            url="https://rossi-metalli.it",
+            status=Source.STATUS_SCRAPED,
+        )
+        run = PipelineRun.objects.create(
+            company=company,
+            source=source,
+            status=PipelineRun.STATUS_RUNNING,
+            current_step="2/4: Generazione Pre-DNA",
+        )
+        request = rf_with_tenant("get", f"/onboarding/status/{run.id}/")
+        request.META["HTTP_HX_REQUEST"] = "true"
+
+        response = views.onboarding_status(request, pk=run.id)
+
+        assert response.status_code == 200
+        assert b'aria-valuenow="50"' in response.content
+        assert b"Step 2 di 4" in response.content
+        assert b"Generazione Pre-DNA" in response.content
+        assert response.content.count(b"zeus-generation-progress__phase--done") == 1
+        assert response.content.count(b"zeus-generation-progress__phase--active") == 1
+        assert b"setInterval" not in response.content
+
     def test_onboarding_status_htmx_returns_dna_html(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
         source = Source.objects.create(
@@ -1106,9 +1132,9 @@ class TestDNAQuestions:
         assert b"Round 2" in gap_response.content
         assert generating_response.status_code == 200
         assert b'id="app-shell"' in generating_response.content
-        assert b'hx-target="body"' in generating_response.content
-        assert htmx_response.status_code == 204
-        assert not htmx_response.content
+        assert b'hx-target="#dna-generation-status"' in generating_response.content
+        assert htmx_response.status_code == 200
+        assert b'id="dna-generation-status"' in htmx_response.content
 
     @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
     def test_dna_generating_hx_redirect_preserved_with_app_shell(self, rf_with_tenant):
@@ -1116,13 +1142,13 @@ class TestDNAQuestions:
         HX-Redirect verso la review non appena il DNA completo e pronto."""
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
 
-        # DNA completo ancora assente: il polling resta in attesa (204 vuoto,
-        # nessun HX-Redirect) anche se la pagina di attesa usa la shell.
+        # DNA completo ancora assente: il polling aggiorna il pannello di
+        # avanzamento senza sostituire l'App Shell.
         hx_req = rf_with_tenant("get", reverse("dna-generating"))
         hx_req.META["HTTP_HX_REQUEST"] = "true"
         resp = views.dna_generating(hx_req)
-        assert resp.status_code == 204
-        assert not resp.content
+        assert resp.status_code == 200
+        assert b'id="dna-generation-status"' in resp.content
         assert "HX-Redirect" not in resp
 
         # DNA completo disponibile: il polling rilascia il redirect verso la
@@ -1139,6 +1165,38 @@ class TestDNAQuestions:
         resp = views.dna_generating(hx_req)
         assert resp.status_code == 204
         assert resp["HX-Redirect"] == reverse("dna-review")
+
+    def test_dna_generating_hx_refreshes_persisted_progress(self, rf_with_tenant):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        pre_dna = CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_PRE,
+            content={
+                "identita": "Pre-DNA",
+                "_complete_generation": {
+                    "status": "running",
+                    "step_num": 3,
+                    "steps_total": 4,
+                    "step_label": "Riformulazione dei 6 layer",
+                },
+            },
+        )
+        request = rf_with_tenant("get", reverse("dna-generating"))
+        request.META["HTTP_HX_REQUEST"] = "true"
+        request.session = {
+            "pending_complete_min_version": 2,
+            "pending_complete_source_dna_id": pre_dna.id,
+        }
+
+        response = views.dna_generating(request)
+
+        assert response.status_code == 200
+        assert b'id="dna-generation-status"' in response.content
+        assert b'aria-valuenow="75"' in response.content
+        assert b"Step 3 di 4" in response.content
+        assert b"Riformulazione dei 6 layer" in response.content
+        assert b'hx-target="#dna-generation-status"' in response.content
 
     def test_professional_questions_use_context_and_documents(
         self,
@@ -1245,6 +1303,36 @@ class TestDNAQuestions:
         assert merged["tono"] == "Tono generato"
         assert "identita_e_promessa" not in merged
 
+    def test_create_complete_dna_publishes_intermediate_progress(
+        self,
+        monkeypatch,
+    ):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        pre_dna = self._make_pre_dna(company)
+        progress = []
+
+        monkeypatch.setattr(
+            views,
+            "_global_dna_synthesis",
+            lambda company_arg, content, questions: content,
+        )
+        monkeypatch.setattr(views, "_apply_self_critique", lambda *args: None)
+        monkeypatch.setattr(views, "_finalize_complete_dna", lambda *args: None)
+        monkeypatch.setattr(
+            views,
+            "_set_company_generation_progress",
+            lambda dna, step_num, steps_total, label, **extra: progress.append(
+                (step_num, steps_total, label, extra.get("status"))
+            ),
+        )
+
+        views._create_complete_dna(company, pre_dna, user=None)
+
+        assert progress == [
+            (3, 4, "Riformulazione dei 6 layer", "running"),
+            (4, 4, "Validazione e preparazione revisione", "running"),
+        ]
+
     def test_submit_same_answers_does_not_regenerate_complete_dna(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
         pre_dna = self._make_pre_dna(company)
@@ -1331,7 +1419,8 @@ class TestDNAQuestions:
         hx_req = rf_with_tenant("get", reverse("dna-generating"))
         hx_req.META["HTTP_HX_REQUEST"] = "true"
         resp = views.dna_generating(hx_req)
-        assert resp.status_code == 204
+        assert resp.status_code == 200
+        assert b'id="dna-generation-status"' in resp.content
         assert "HX-Redirect" not in resp
 
         CompanyDNA.objects.create(
@@ -1353,7 +1442,12 @@ class TestDNAQuestions:
 
     def test_dna_sections_hide_nested_description_keys(self):
         sections = views._dna_sections({
-            "identita": {"descrizione": "Testo identita pulito. [SRC:scrape]"},
+            "identita": {
+                "descrizione": (
+                    "Testo identita pulito. [SRC:scrape] "
+                    "Ipotesi interna [hypothesis] non visibile [/hypothesis]."
+                ),
+            },
             "modelli_mentali": [
                 {"descrizione": "Qualita [SRC:answer]"},
                 {"descrizione": "Rapidita [SRC:file]"},
@@ -1365,7 +1459,7 @@ class TestDNAQuestions:
         })
 
         values = {section["key"]: section["value"] for section in sections}
-        assert values["identita"] == "Testo identita pulito."
+        assert values["identita"] == "Testo identita pulito. Ipotesi interna non visibile."
         assert values["modelli_mentali"] == "Qualita\n\nRapidita"
         assert values["nucleo_tecnico"] == "Testo nucleo pulito."
         assert values["confini"] == "Testo confini pulito."
@@ -1944,6 +2038,8 @@ class TestDNAReviewViews:
         assert b'id="dna-review-root"' in review_response.content
         assert review_response.content.count(b'id="dna-review-sidebar-actions"') == 1
         assert b'hx-swap-oob="true"' not in review_response.content
+        assert b'rows="16"' in review_response.content
+        assert b'zeus-dna-section-editor' in review_response.content
         assert visualize_response.status_code == 200
         assert b'id="app-shell"' in visualize_response.content
         assert b"DNA aziendale verificato" in visualize_response.content

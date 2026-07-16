@@ -48,7 +48,10 @@
             </div>
             {% endif %}
 
-            <p class="zeus-generation-progress__refresh">Aggiornamento automatico ogni 3 secondi...</p>
+            <p class="zeus-generation-progress__refresh">
+                Aggiornamento automatico attivo ogni {{ refresh_seconds|default:"3" }} secondi
+                {% if steps_total %}· fase {{ current_step_num|default:"?" }} di {{ steps_total }}{% endif %}
+            </p>
         </div>
     {% endif %}
 </div>

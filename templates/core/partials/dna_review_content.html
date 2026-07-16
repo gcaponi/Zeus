@@ -89,7 +89,7 @@
                     </div>
                     <form id="edit-{{ section.key }}" class="hidden mt-4" hx-post="{% url 'dna-section-edit' dna.pk section.key %}" hx-target="#dna-review-root" hx-swap="outerHTML">
                         {% csrf_token %}
-                        <textarea name="text" rows="4" class="zeus-input">{{ section.value }}</textarea>
+                        <textarea name="text" rows="16" class="zeus-input zeus-dna-section-editor">{{ section.value }}</textarea>
                         <button type="submit" class="zeus-btn zeus-btn-primary mt-3">Salva e crea nuova versione</button>
                     </form>
                 {% endif %}

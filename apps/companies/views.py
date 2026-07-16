@@ -75,6 +75,7 @@ GAP_ENGINE_PRODUCT_LIMITS = {
     Plan.SLUG_ENTERPRISE: {"max_rounds": 3, "max_followups": 20},
 }
 SOURCE_MARKER_RE = re.compile(r"\s*\[SRC:[^\]]+\]", re.IGNORECASE)
+HYPOTHESIS_MARKER_RE = re.compile(r"\s*\[/?hypothesis\]", re.IGNORECASE)
 INSTRUCTION_PREFIX_RE = re.compile(
     r"(?im)^\s*(?:[-*]\s*)?(?:aggiungere|da aggiungere|integrare|inserire|"
     r"aggiornare|sostituire|riscrivere|proposta)\s*:\s*"
@@ -274,6 +275,8 @@ def _onboarding_context(request):
     }
     if latest_dna:
         context.update(_onboarding_dna_context(company, latest_dna))
+    if latest_run:
+        context.update(_pipeline_progress_context(latest_run))
     return context
 
 
@@ -493,7 +496,9 @@ def _public_content(content):
 
 
 def _strip_source_markers(text):
-    return _strip_instruction_prefixes(SOURCE_MARKER_RE.sub("", str(text or "")))
+    cleaned = SOURCE_MARKER_RE.sub("", str(text or ""))
+    cleaned = HYPOTHESIS_MARKER_RE.sub("", cleaned)
+    return _strip_instruction_prefixes(cleaned)
 
 
 def _strip_markdown(text):
@@ -1821,6 +1826,15 @@ def _create_complete_dna(company, pre_dna, user):
 
     content = _global_dna_synthesis(company, content, questions)
 
+    _set_company_generation_progress(
+        pre_dna,
+        3,
+        4,
+        "Riformulazione dei 6 layer",
+        status="running",
+        flow="company_complete_dna",
+    )
+
     content["questionario_a1_a20"] = [
         {
             "code": question.code,
@@ -1857,6 +1871,14 @@ def _create_complete_dna(company, pre_dna, user):
     # The self-critique loop refines the 6 cognitive layers only; the extra
     # content keys (questionario, profilo) are preserved unchanged.
     _apply_self_critique(dna, company)
+    _set_company_generation_progress(
+        pre_dna,
+        4,
+        4,
+        "Validazione e preparazione revisione",
+        status="running",
+        flow="company_complete_dna",
+    )
     _finalize_complete_dna(dna, pre_dna, company)
 
     # A1 — editorial leakage check on complete DNA (blocking: logs ERROR)
@@ -2140,6 +2162,48 @@ def _complete_generation_progress_context(source_dna):
     }
 
 
+def _pipeline_progress_context(run):
+    step_num = 1
+    steps_total = 4
+    step_label = run.current_step or "Avvio analisi"
+    if ":" in step_label:
+        prefix, parsed_label = step_label.split(":", 1)
+        if "/" in prefix:
+            raw_step, raw_total = prefix.split("/", 1)
+            try:
+                step_num = int(raw_step.strip())
+                steps_total = int(raw_total.strip())
+                step_label = parsed_label.strip()
+            except ValueError:
+                pass
+    if run.status == PipelineRun.STATUS_COMPLETED:
+        step_num = steps_total
+    phase_labels = [
+        "Scraping del sito aziendale",
+        "Context Map e generazione Pre-DNA",
+        "Self-critique e validazione",
+        "Preparazione delle domande",
+    ]
+    phases = []
+    for index, phase_label in enumerate(phase_labels, start=1):
+        if index < step_num:
+            status = "done"
+        elif index == step_num:
+            status = "active"
+        else:
+            status = "pending"
+        phases.append({"label": phase_label, "status": status})
+    return {
+        "task_status": run.status,
+        "task_error": run.error_msg or "",
+        "pipeline_phases": phases,
+        "steps_total": steps_total,
+        "current_step_num": step_num,
+        "step_label": step_label,
+        "progress_pct": min(int(step_num / steps_total * 100), 100),
+    }
+
+
 def _clear_specialist_feedback_return(request):
     if not hasattr(request, "session"):
         return
@@ -2292,6 +2356,7 @@ def onboarding_source_create(request):
     return render(request, "core/onboarding/_progress.html", {
         "run": run,
         "source": source,
+        **_pipeline_progress_context(run),
     })
 
 
@@ -2316,6 +2381,7 @@ def onboarding_status(request, pk):
         return render(request, "core/onboarding/_progress.html", {
             "run": run,
             "source": run.source,
+            **_pipeline_progress_context(run),
         })
     return JsonResponse({
         "id": run.id,
@@ -2988,7 +3054,11 @@ def dna_generating(request):
             response = HttpResponse(status=204)
             response["HX-Redirect"] = reverse("dna-review")
             return response
-        return HttpResponse(status=204)
+        return render(request, "core/partials/dna_generating_content.html", {
+            **_complete_generation_progress_context(source_dna),
+            "review_url": reverse("dna-review"),
+            "back_url": reverse("onboarding-index"),
+        })
     if complete_dna:
         _clear_pending_complete_generation(request)
         return redirect("dna-review")

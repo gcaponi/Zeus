@@ -558,7 +558,7 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                 "dna-generating",
                 reverse("dna-generating"),
                 "Generazione DNA in corso",
-                '[hx-target="body"]',
+                '[hx-target="#dna-generation-status"]',
                 True,
             ),
             (
@@ -681,6 +681,19 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                             selected_suggestion.get_attribute("aria-pressed"),
                             "false",
                         )
+                        page.evaluate("document.scrollingElement.scrollTop = 0")
+                    if surface_name == "dna-review":
+                        page.get_by_role("button", name="Modifica").first.click()
+                        editor = page.locator(".zeus-dna-section-editor").first
+                        self.assertTrue(editor.is_visible())
+                        editor_metrics = editor.evaluate(
+                            """element => ({
+                                height: element.getBoundingClientRect().height,
+                                resize: getComputedStyle(element).resize,
+                            })"""
+                        )
+                        self.assertGreaterEqual(editor_metrics["height"], 320)
+                        self.assertEqual(editor_metrics["resize"], "vertical")
                         page.evaluate("document.scrollingElement.scrollTop = 0")
                     context_panel = page.locator(".zeus-app-page-context")
                     if context_panel.count() and viewport_name == "tablet":

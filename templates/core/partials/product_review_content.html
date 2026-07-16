@@ -28,7 +28,7 @@
                 </div>
                 <form id="edit-{{ section.key }}" class="hidden mt-4" hx-post="{% url 'product-section-edit' product.pk section.key %}" hx-swap="outerHTML" hx-target="closest section">
                     {% csrf_token %}
-                    <textarea name="text" rows="4" class="zeus-input font-mono text-xs">{{ section.value }}</textarea>
+                    <textarea name="text" rows="16" class="zeus-input zeus-dna-section-editor font-mono text-xs">{{ section.value }}</textarea>
                     <button type="submit" class="zeus-btn zeus-btn-primary mt-3">Salva e crea nuova versione</button>
                 </form>
             {% endif %}
