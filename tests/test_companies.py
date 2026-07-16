@@ -1150,7 +1150,8 @@ class TestDNAQuestions:
         assert b"Round 2" in gap_response.content
         assert generating_response.status_code == 200
         assert b'id="app-shell"' in generating_response.content
-        assert b'hx-target="#dna-generation-status"' in generating_response.content
+        assert b'hx-trigger="load delay:4s"' in generating_response.content
+        assert b'hx-target="this"' in generating_response.content
         assert htmx_response.status_code == 200
         assert b'id="dna-generation-status"' in htmx_response.content
 
@@ -1214,7 +1215,8 @@ class TestDNAQuestions:
         assert b'aria-valuenow="75"' in response.content
         assert b"Step 3 di 4" in response.content
         assert b"Riformulazione dei 6 layer" in response.content
-        assert b'hx-target="#dna-generation-status"' in response.content
+        assert b'hx-trigger="load delay:4s"' in response.content
+        assert b'hx-target="this"' in response.content
 
     def test_professional_questions_use_context_and_documents(
         self,

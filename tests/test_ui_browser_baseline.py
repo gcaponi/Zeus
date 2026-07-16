@@ -1,5 +1,6 @@
 import hashlib
 import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -136,6 +137,101 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
             comparison.passed,
             f"Regressione visuale: {name}; {comparison.summary()}",
         )
+
+    @override_settings(
+        ZEUS_APP_SHELL_ENABLED=True,
+        DNA_GENERATION_POLL_SECONDS=0.1,
+    )
+    def test_dna_generation_poll_reaches_review_without_manual_action(self):
+        user = get_user_model().objects.create_user(
+            username="browser-generation-poll",
+            email="browser-generation-poll@example.com",
+            password="test-password",
+        )
+        company = Company.objects.create(
+            schema_name="ui-baseline",
+            name="UI Baseline",
+        )
+        pre_dna = CompanyDNA.objects.create(
+            company=company,
+            version=1,
+            dna_type=CompanyDNA.TYPE_PRE,
+            content={
+                "identita": "Pre-DNA",
+                "_complete_generation": {
+                    "status": "running",
+                    "step_num": 2,
+                    "steps_total": 4,
+                    "step_label": "Sintesi cognitiva globale",
+                },
+            },
+        )
+        self.client.force_login(user)
+        session = self.client.session
+        session["pending_complete_min_version"] = 2
+        session["pending_complete_source_dna_id"] = pre_dna.pk
+        session.save()
+        session_cookie = self.client.cookies[settings.SESSION_COOKIE_NAME].value
+
+        def update_progress(step_num, step_label):
+            dna = CompanyDNA.objects.get(pk=pre_dna.pk)
+            content = dict(dna.content)
+            progress = dict(content["_complete_generation"])
+            progress.update(step_num=step_num, step_label=step_label)
+            content["_complete_generation"] = progress
+            dna.content = content
+            dna.save(update_fields=["content"])
+
+        def create_complete_dna():
+            CompanyDNA.objects.filter(pk=pre_dna.pk).update(is_current=False)
+            CompanyDNA.objects.create(
+                company=company,
+                version=2,
+                dna_type=CompanyDNA.TYPE_COMPLETE,
+                content={key: f"Contenuto completo {key}." for key in LAYER_KEYS},
+            )
+
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            context = browser.new_context(
+                viewport=VIEWPORTS["desktop"],
+                extra_http_headers={"X-Zeus-Test-Tenant": "ui-baseline"},
+            )
+            context.add_cookies(
+                [
+                    {
+                        "name": settings.SESSION_COOKIE_NAME,
+                        "value": session_cookie,
+                        "url": self.live_server_url,
+                    }
+                ]
+            )
+            page = context.new_page()
+            page.goto(
+                f"{self.live_server_url}{reverse('dna-generating')}",
+                wait_until="domcontentloaded",
+            )
+
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                executor.submit(
+                    update_progress,
+                    3,
+                    "Riformulazione dei 6 layer",
+                ).result()
+                expect(page.get_by_text("Step 3 di 4")).to_be_visible(timeout=2000)
+
+                executor.submit(
+                    update_progress,
+                    4,
+                    "Validazione e preparazione revisione",
+                ).result()
+                expect(page.get_by_text("Step 4 di 4")).to_be_visible(timeout=2000)
+
+                executor.submit(create_complete_dna).result()
+            page.wait_for_url(f"**{reverse('dna-review')}", timeout=2000)
+            self.assertEqual(page.locator("h1").first.inner_text(), "Revisione DNA")
+            context.close()
+            browser.close()
 
     def test_login_and_dashboard_visual_baselines(self):
         user = get_user_model().objects.create_user(
@@ -558,7 +654,7 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                 "dna-generating",
                 reverse("dna-generating"),
                 "Generazione DNA in corso",
-                '[hx-target="#dna-generation-status"]',
+                '#dna-generation-status[hx-target="this"]',
                 True,
             ),
             (

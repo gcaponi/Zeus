@@ -20,7 +20,8 @@ All notable ZEUS changes are documented in this file.
 - Onboarding neural analysis now renders the real `PipelineRun` step, percentage, progress bar,
   and done/active/pending phases instead of cycling a decorative client-side animation.
 - Complete-DNA polling refreshes only the generation panel with persisted step 2/3/4 state and
-  keeps the automatic `HX-Redirect` to review when the new DNA version is ready.
+  keeps the automatic `HX-Redirect` to review when the new DNA version is ready. The swapped root
+  schedules each next poll itself, so replacing the progress panel cannot orphan the timer.
 - Internal `[hypothesis]` and `[/hypothesis]` evidence markers are removed case-insensitively from
   customer-facing DNA text while remaining available in stored content for internal processing.
 - DNA Generale and Specialist section editors now open at a practical review size, remain bounded
@@ -30,7 +31,9 @@ All notable ZEUS changes are documented in this file.
 
 ### Validation
 
-- Exact CI command: 313 tests passed; total coverage 81.06%.
+- Exact CI command: 314 tests passed; total coverage 81.00%.
+- Playwright advances persisted progress through steps 3 and 4, creates the complete DNA, and
+  verifies the browser reaches review automatically without using the fallback link.
 
 ## 2026-07-15 - Foundation onboarding offers grounded answer options
 

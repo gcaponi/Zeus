@@ -3058,6 +3058,7 @@ def dna_generating(request):
     ).first()
     min_complete_version = _pending_complete_min_version(request)
     source_dna = _pending_complete_source_dna(request)
+    poll_seconds = getattr(settings, "DNA_GENERATION_POLL_SECONDS", 4)
     if min_complete_version:
         complete_dna = company.dna_versions.filter(
             dna_type=CompanyDNA.TYPE_COMPLETE,
@@ -3074,6 +3075,7 @@ def dna_generating(request):
             **_complete_generation_progress_context(source_dna),
             "review_url": reverse("dna-review"),
             "back_url": reverse("onboarding-index"),
+            "poll_seconds": poll_seconds,
         })
     if complete_dna:
         _clear_pending_complete_generation(request)
@@ -3087,6 +3089,7 @@ def dna_generating(request):
         **_complete_generation_progress_context(source_dna),
         "review_url": reverse("dna-review"),
         "back_url": reverse("onboarding-index"),
+        "poll_seconds": poll_seconds,
     })
 
 
