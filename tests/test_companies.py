@@ -916,7 +916,17 @@ class TestOnboardingViews:
         assert b'"current_step"' not in resp.content
 
     def test_onboarding_dna_reset_clears_data(self, rf_with_tenant):
-        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        company = Company.objects.create(
+            schema_name="test-tenant",
+            name="Test Tenant",
+            settore_primario=Company.ARCHETIPO_DISTRIBUZIONE,
+            prodotto_fisico=True,
+            cliente_diretto=Company.CLIENTE_B2B_TECNICO,
+            custom_frequenza=Company.CUSTOM_MAI,
+            installatori_in_filiera=True,
+            settore_secondario="Edilizia di pregio",
+            contesto_libero="Contesto operativo da cancellare.",
+        )
         source = Source.objects.create(
             company=company,
             url="https://rossi-metalli.it",
@@ -944,6 +954,14 @@ class TestOnboardingViews:
         assert CompanyFile.objects.filter(company=company).count() == 0
         assert PipelineRun.objects.filter(company=company).count() == 0
         assert Source.objects.filter(company=company).count() == 0
+        company.refresh_from_db()
+        assert company.settore_primario == ""
+        assert company.prodotto_fisico is None
+        assert company.cliente_diretto == ""
+        assert company.custom_frequenza == ""
+        assert company.installatori_in_filiera is None
+        assert company.settore_secondario == ""
+        assert company.contesto_libero == ""
 
 
 @pytest.mark.django_db

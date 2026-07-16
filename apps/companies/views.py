@@ -2470,6 +2470,22 @@ def onboarding_dna_reset(request):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
+    company.settore_primario = ""
+    company.prodotto_fisico = None
+    company.cliente_diretto = ""
+    company.custom_frequenza = ""
+    company.installatori_in_filiera = None
+    company.settore_secondario = ""
+    company.contesto_libero = ""
+    company.save(update_fields=[
+        "settore_primario",
+        "prodotto_fisico",
+        "cliente_diretto",
+        "custom_frequenza",
+        "installatori_in_filiera",
+        "settore_secondario",
+        "contesto_libero",
+    ])
     company.dna_versions.all().delete()
     company.company_questions.all().delete()
     company.company_files.all().delete()

@@ -43,7 +43,7 @@
             <a href="{% url 'dna-review' %}" class="zeus-btn zeus-btn-ghost w-full">
                 ← Torna alla revisione
             </a>
-            <form method="post" action="{% url 'onboarding-dna-reset' %}" onsubmit="return confirm('Sei sicuro? Questo cancellerà DNA, domande, file e source. Dovrai ricominciare da capo.');">
+            <form method="post" action="{% url 'onboarding-dna-reset' %}" onsubmit="return confirm('Sei sicuro? Questo cancellerà profilo operativo, DNA, domande, file e source. Dovrai ricominciare da capo.');">
                 {% csrf_token %}
                 <button type="submit" class="zeus-btn zeus-btn-destructive w-full text-sm">
                     Riparti da capo

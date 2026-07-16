@@ -25,10 +25,12 @@ All notable ZEUS changes are documented in this file.
   customer-facing DNA text while remaining available in stored content for internal processing.
 - DNA Generale and Specialist section editors now open at a practical review size, remain bounded
   to the viewport, and can still be resized vertically.
+- "Riparti da capo" now clears the persisted operational profile as well as DNA, questions,
+  files, pipeline runs, and sources, so the initial form opens empty.
 
 ### Validation
 
-- Exact CI command: 313 tests passed; total coverage 81.03%.
+- Exact CI command: 313 tests passed; total coverage 81.06%.
 
 ## 2026-07-15 - Foundation onboarding offers grounded answer options
 
