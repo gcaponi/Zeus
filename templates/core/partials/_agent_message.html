@@ -1,0 +1,11 @@
+{% if message.role == 'user' %}
+<div class="zeus-app-chat-message zeus-app-chat-message--user">
+    <p class="zeus-app-chat-message-role">Tu</p>
+    <div class="zeus-app-chat-message-body">{{ message.content|linebreaksbr }}</div>
+</div>
+{% else %}
+<div class="zeus-app-chat-message zeus-app-chat-message--assistant">
+    <p class="zeus-app-chat-message-role">Il tuo agente</p>
+    <div class="zeus-app-chat-message-body">{{ message.content|linebreaksbr }}</div>
+</div>
+{% endif %}

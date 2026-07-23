@@ -58,3 +58,4 @@ _archive/
 # Secrets
 *.pem
 *.key
+.dev.vars

@@ -1,0 +1,43 @@
+{% extends "core/app_shell_tenant.html" %}
+
+{% block title %}Testa il tuo agente · ZEUS{% endblock %}
+{% block shell_page_title %}Testa il tuo agente{% endblock %}
+
+{% block tenant_main %}
+<section class="zeus-app-page zeus-app-page--agent">
+    <header class="zeus-app-page-header">
+        <div>
+            <p class="zeus-app-eyebrow">Workspace</p>
+            <h1>Testa il tuo agente</h1>
+            <p>Interroga l'agente che risponde come il tuo tecnico, usando DNA e documenti caricati.</p>
+        </div>
+    </header>
+
+    {% include "core/partials/agent_chat_content.html" %}
+</section>
+{% endblock %}
+
+{% block shell_scripts %}
+{{ block.super }}
+{% include "core/partials/_app_shell_htmx.html" %}
+<script>
+(function () {
+    function scrollChatToBottom() {
+        var log = document.querySelector('[data-chat-log]');
+        if (log) log.scrollTop = log.scrollHeight;
+    }
+
+    window.addEventListener('load', scrollChatToBottom);
+
+    document.body.addEventListener('htmx:afterRequest', function (event) {
+        var form = event.detail.elt;
+        if (!form || !form.matches('[data-chat-composer]')) return;
+        if (!event.detail.successful) return;
+        form.reset();
+        var hint = document.querySelector('[data-chat-hint]');
+        if (hint) hint.remove();
+        scrollChatToBottom();
+    });
+})();
+</script>
+{% endblock %}

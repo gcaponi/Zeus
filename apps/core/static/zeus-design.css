@@ -2687,6 +2687,153 @@ html,
   }
 }
 
+/* ---------- AGENT CHAT ("Testa il tuo agente") ---------- */
+.zeus-app-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.zeus-app-chat-empty h2 {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+}
+
+.zeus-app-chat-empty-text {
+  max-width: 56ch;
+  margin: 0 0 16px;
+  color: var(--shell-muted);
+  font-size: 0.875rem;
+}
+
+.zeus-app-chat-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.zeus-app-chat-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.zeus-app-chat-selector label {
+  color: var(--shell-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.zeus-app-chat-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.zeus-app-chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 320px;
+  max-height: 56vh;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.zeus-app-chat-hint {
+  max-width: 46ch;
+  margin: auto;
+  color: var(--shell-muted);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.zeus-app-chat-message {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 78%;
+}
+
+.zeus-app-chat-message--user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.zeus-app-chat-message--assistant {
+  align-self: flex-start;
+}
+
+.zeus-app-chat-message-role {
+  margin: 0;
+  color: var(--shell-muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.zeus-app-chat-message-body {
+  padding: 10px 14px;
+  border: 1px solid var(--shell-border);
+  border-radius: 14px;
+  background: var(--shell-panel-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  overflow-wrap: break-word;
+}
+
+.zeus-app-chat-message--user .zeus-app-chat-message-body {
+  border-color: color-mix(in srgb, var(--shell-accent) 30%, var(--shell-border));
+  background: var(--shell-accent-soft);
+}
+
+.zeus-app-chat-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--shell-border);
+  background: var(--shell-panel);
+}
+
+.zeus-app-chat-input {
+  width: 100%;
+  resize: vertical;
+}
+
+.zeus-app-chat-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.zeus-app-chat-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--shell-border);
+  border-top-color: var(--shell-accent);
+  border-radius: 50%;
+  animation: zeus-app-chat-spin 0.8s linear infinite;
+}
+
+.htmx-indicator {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.htmx-request .htmx-indicator,
+.htmx-indicator.htmx-request {
+  opacity: 1;
+}
+
+@keyframes zeus-app-chat-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .zeus-app-shell *,
   .zeus-app-shell *::before,

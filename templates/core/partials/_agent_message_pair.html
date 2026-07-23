@@ -1,0 +1,3 @@
+{% for message in chat_messages %}
+    {% include "core/partials/_agent_message.html" with message=message %}
+{% endfor %}

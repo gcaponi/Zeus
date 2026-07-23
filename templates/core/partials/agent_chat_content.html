@@ -1,0 +1,66 @@
+{% if not agent_enabled %}
+<div class="zeus-app-panel zeus-app-panel--padded zeus-app-chat-empty">
+    <p class="zeus-app-eyebrow">Testa il tuo agente</p>
+    <h2>Completa prima il DNA</h2>
+    <p class="zeus-app-chat-empty-text">
+        L'agente risponde usando il DNA Generale approvato e i documenti caricati.
+        Completa e approva il DNA Generale per attivare la chat.
+    </p>
+    <a class="zeus-btn zeus-btn-primary" href="{% url 'onboarding-index' %}">Vai all'onboarding</a>
+</div>
+{% else %}
+<div class="zeus-app-chat" data-agent-chat>
+    <div class="zeus-app-chat-toolbar">
+        <form class="zeus-app-chat-selector" method="get" action="{% url 'agent-chat' %}">
+            <label for="agent-product-select">Specialista</label>
+            <select id="agent-product-select" class="zeus-select" name="product" onchange="this.form.submit()">
+                <option value="">Solo DNA Generale</option>
+                {% for product in products %}
+                    <option value="{{ product.pk }}"{% if selected_product and product.pk == selected_product.pk %} selected{% endif %}>{{ product.name }}</option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+
+    <div class="zeus-app-panel zeus-app-chat-panel">
+        <div id="agent-chat-log" class="zeus-app-chat-log" data-chat-log aria-live="polite">
+            {% for message in chat_messages %}
+                {% include "core/partials/_agent_message.html" with message=message %}
+            {% empty %}
+                <div class="zeus-app-chat-hint" data-chat-hint>
+                    <p>
+                        Fai una domanda al tuo agente{% if selected_product %} su <strong>{{ selected_product.name }}</strong>{% endif %}.
+                        Risponde come il tuo tecnico, basandosi sul DNA{% if selected_product %} Generale e Specialista{% else %} Generale{% endif %} e sui documenti caricati.
+                    </p>
+                </div>
+            {% endfor %}
+        </div>
+
+        <form
+            class="zeus-app-chat-composer"
+            method="post"
+            action="{% url 'agent-send' %}"
+            hx-post="{% url 'agent-send' %}"
+            hx-target="#agent-chat-log"
+            hx-swap="beforeend"
+            hx-indicator="#agent-chat-spinner"
+            data-chat-composer>
+            {% csrf_token %}
+            {% if selected_product %}
+                <input type="hidden" name="product_id" value="{{ selected_product.pk }}">
+            {% endif %}
+            <textarea
+                class="zeus-textarea zeus-app-chat-input"
+                name="message"
+                rows="2"
+                required
+                maxlength="4000"
+                placeholder="Scrivi una domanda per il tuo agente…"></textarea>
+            <div class="zeus-app-chat-actions">
+                <span id="agent-chat-spinner" class="htmx-indicator zeus-app-chat-spinner" role="status" aria-label="L'agente sta rispondendo"></span>
+                <button type="submit" class="zeus-btn zeus-btn-primary">Invia</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}

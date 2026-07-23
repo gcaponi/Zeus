@@ -36,6 +36,8 @@ from apps.companies.llm_client import (
     get_llm_client,
 )
 from apps.companies.models import (
+    AgentConversation,
+    AgentMessage,
     Company,
     CompanyDNA,
     CompanyFile,
@@ -54,6 +56,13 @@ from apps.companies.models import (
     Source,
 )
 from apps.companies.tasks import _generate_dna, run_pipeline, scrape_source
+from apps.companies.agent import (
+    build_messages,
+    build_system_prompt,
+    format_retrieval_block,
+    get_approved_company_dna,
+    retrieve_context,
+)
 from apps.core.models import Plan, WorkspaceSubscription
 from apps.core.views import redirect_to_workspace_or_login
 
@@ -6089,3 +6098,148 @@ def product_dna_feedback_apply(request, pk):
     specialist_dna.save(update_fields=["content"])
 
     return redirect("dna-generating")
+
+
+# ---------------------------------------------------------------------------
+# Agente in-app "Testa il tuo agente"
+# ---------------------------------------------------------------------------
+
+AGENT_MESSAGE_MAX_CHARS = 4000
+
+
+def _agent_selected_product(company, raw_id):
+    """Prodotto attivo del tenant selezionato per la chat, o None (solo DNA Generale)."""
+    if not raw_id:
+        return None
+    try:
+        pk = int(raw_id)
+    except (TypeError, ValueError):
+        return None
+    return Product.objects.filter(
+        pk=pk,
+        company=company,
+        status=Product.STATUS_ATTIVO,
+    ).first()
+
+
+def _agent_conversation_for(company, product):
+    conversations = company.agent_conversations.all()
+    if product is None:
+        conversations = conversations.filter(product__isnull=True)
+    else:
+        conversations = conversations.filter(product=product)
+    return conversations.first()
+
+
+def _agent_chat_context(company, product):
+    conversation = _agent_conversation_for(company, product)
+    return {
+        "company": company,
+        "agent_enabled": get_approved_company_dna(company) is not None,
+        "products": company.products.filter(status=Product.STATUS_ATTIVO),
+        "selected_product": product,
+        "conversation": conversation,
+        "chat_messages": list(conversation.messages.all()) if conversation else [],
+    }
+
+
+@login_required
+def agent_chat(request):
+    """Pagina chat — gate: serve un DNA Generale completo approvato."""
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    product = _agent_selected_product(company, request.GET.get("product"))
+    context = _agent_chat_context(company, product)
+    template_name = (
+        "core/app_shell_agent.html"
+        if settings.ZEUS_APP_SHELL_ENABLED
+        else "core/agent_chat.html"
+    )
+    return render(request, template_name, context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def agent_send(request):
+    """Invio messaggio (HTMX): salva user message, chiama l'LLM in sincrono,
+    salva risposta + LLMCall, ritorna il partial dei 2 nuovi messaggi."""
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    if get_approved_company_dna(company) is None:
+        return JsonResponse(
+            {
+                "error": "dna_not_approved",
+                "detail": "Completa e approva il DNA Generale prima di testare l'agente.",
+            },
+            status=403,
+        )
+
+    data = _request_data(request)
+    text = str(data.get("message") or "").strip()[:AGENT_MESSAGE_MAX_CHARS]
+    if not text:
+        return JsonResponse({"error": "empty_message"}, status=400)
+
+    product = _agent_selected_product(company, data.get("product_id"))
+    conversation = _agent_conversation_for(company, product)
+    if conversation is None:
+        conversation = AgentConversation.objects.create(
+            company=company,
+            product=product,
+            title=text[:120],
+        )
+
+    user_message = AgentMessage.objects.create(
+        conversation=conversation,
+        role=AgentMessage.ROLE_USER,
+        content=text,
+    )
+
+    system_prompt = build_system_prompt(company, product)
+    retrieval_block = format_retrieval_block(
+        retrieve_context(company, text, product=product)
+    )
+    if retrieval_block:
+        system_prompt = f"{system_prompt}\n\n{retrieval_block}"
+    llm_messages = build_messages(conversation, system_prompt)
+
+    try:
+        result = get_llm_client().generate(messages=llm_messages, model=LLM_MODEL)
+    except Exception:
+        logger.exception("Agent chat LLM call failed for company %s", company.pk)
+        return JsonResponse(
+            {
+                "error": "llm_error",
+                "detail": "L'agente non risponde al momento. Riprova tra poco.",
+            },
+            status=502,
+        )
+    llm_call = LLMCall.objects.create(
+        company=company,
+        model_name=LLM_MODEL,
+        prompt_text=json.dumps(llm_messages, ensure_ascii=False),
+        response_text=result.text,
+        tokens_in=result.tokens_in,
+        tokens_out=result.tokens_out,
+        cost_usd=result.cost,
+        latency_ms=result.latency_ms,
+    )
+    assistant_message = AgentMessage.objects.create(
+        conversation=conversation,
+        role=AgentMessage.ROLE_ASSISTANT,
+        content=result.text,
+        llm_call=llm_call,
+    )
+    # Touch updated_at: le conversazioni si ordinano per ultima attivita'.
+    conversation.save(update_fields=["updated_at"])
+
+    if request.headers.get("HX-Request") == "true":
+        return render(
+            request,
+            "core/partials/_agent_message_pair.html",
+            {"chat_messages": [user_message, assistant_message]},
+        )
+    if product is not None:
+        return redirect(f"{reverse('agent-chat')}?product={product.pk}")
+    return redirect("agent-chat")

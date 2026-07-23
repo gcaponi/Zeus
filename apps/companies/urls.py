@@ -108,6 +108,8 @@ urlpatterns = [
         name="product-section-edit",
     ),
     path("sources/", views.source_list_create, name="source-list-create"),
+    path("agent/", views.agent_chat, name="agent-chat"),
+    path("agent/send/", views.agent_send, name="agent-send"),
     path("sources/<int:pk>/", views.source_detail, name="source-detail"),
     path("pipeline/", views.pipeline_run_create, name="pipeline-run-create"),
     path("pipeline/<int:pk>/", views.pipeline_run_detail, name="pipeline-run-detail"),

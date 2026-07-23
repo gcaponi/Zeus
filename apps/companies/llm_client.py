@@ -18,6 +18,10 @@ LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "")
 LLM_MODEL = os.environ.get("LLM_MODEL", "deepseek-chat")
 LLM_MODEL_PRO = os.environ.get("LLM_MODEL_PRO", "deepseek-v4-pro")
 
+# Marker embedded in the agent-chat system prompt ("Testa il tuo agente") so the
+# MockLLMClient can recognise and answer those calls deterministically in tests.
+AGENT_CHAT_MARKER = "AGENT_CHAT"
+
 MODEL_PRICING = {
     "gpt-4o-mini": {"input": 0.15 / 1_000_000, "output": 0.60 / 1_000_000},
     "gpt-4o": {"input": 2.50 / 1_000_000, "output": 10.00 / 1_000_000},
@@ -170,8 +174,9 @@ class LLMClient(ABC):
     @abstractmethod
     def generate(
         self,
-        prompt: str,
+        prompt: str = "",
         *,
+        messages: list[dict] | None = None,
         model: str | None = None,
         temperature: float | None = None,
         system_prompt: str | None = None,
@@ -204,17 +209,25 @@ class OpenAIClient(LLMClient):
 
     def generate(
         self,
-        prompt: str,
+        prompt: str = "",
         *,
+        messages: list[dict] | None = None,
         model: str | None = None,
         temperature: float | None = None,
         system_prompt: str | None = None,
     ) -> LLMResult:
         model = model or LLM_MODEL
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
+        if messages is None:
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
+        else:
+            messages = list(messages)
+            if system_prompt and (
+                not messages or messages[0].get("role") != "system"
+            ):
+                messages.insert(0, {"role": "system", "content": system_prompt})
 
         kwargs: dict = {
             "model": model,
@@ -270,12 +283,33 @@ class OpenAIClient(LLMClient):
 class MockLLMClient(LLMClient):
     def generate(
         self,
-        prompt: str,
+        prompt: str = "",
         *,
+        messages: list[dict] | None = None,
         model: str | None = None,
         temperature: float | None = None,
         system_prompt: str | None = None,
     ) -> LLMResult:
+        haystack = prompt or ""
+        if system_prompt:
+            haystack += "\n" + system_prompt
+        if messages:
+            haystack += "\n" + "\n".join(
+                str(message.get("content", "")) for message in messages
+            )
+
+        if AGENT_CHAT_MARKER in haystack:
+            return LLMResult(
+                text=(
+                    "Risposta di prova dell'agente: ho ricevuto la domanda e "
+                    "rispondo basandomi sul DNA aziendale e sui documenti caricati."
+                ),
+                tokens_in=300,
+                tokens_out=40,
+                cost=0.0001,
+                latency_ms=200,
+            )
+
         if "RISCRIVI_SEZIONE_" in prompt and "RIFORMULA_DNA_CON_RISPOSTE" in prompt:
             section_key = self._extract_section_key(prompt, "RISCRIVI_SEZIONE_")
             if section_key in ("modelli_mentali", "valore"):

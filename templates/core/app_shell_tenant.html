@@ -21,6 +21,7 @@
         <a href="{% url 'tenant-dashboard' %}"{% if request.path == '/dashboard/' %} class="is-active" aria-current="page"{% endif %}>Dashboard</a>
         <a href="{% url 'onboarding-index' %}"{% if '/onboarding/' in request.path or '/company/dna/' in request.path and '/motore-b/' not in request.path and '/consistency/' not in request.path %} class="is-active" aria-current="page"{% endif %}>Onboarding</a>
         <a href="{% url 'product-list-create' %}"{% if '/products/' in request.path %} class="is-active" aria-current="page"{% endif %}>Specialisti</a>
+        <a href="{% url 'agent-chat' %}"{% if '/agent/' in request.path %} class="is-active" aria-current="page"{% endif %}>Testa il tuo agente</a>
 
         <p class="zeus-app-nav-label">Motori</p>
         <a href="{% url 'motore-b-report' %}"{% if '/motore-b/' in request.path %} class="is-active" aria-current="page"{% endif %}>Motore B</a>

@@ -703,6 +703,71 @@ class ProductSectionApproval(models.Model):
         return f"{self.section_key} on ProductDNA {self.dna_id}"
 
 
+class AgentConversation(models.Model):
+    """Conversazione della chat in-app "Testa il tuo agente".
+
+    product=None significa che l'agente risponde solo col DNA Generale;
+    con product valorizzato aggiunge il DNA Specialista e i file del prodotto.
+    """
+
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name="agent_conversations",
+    )
+    product = models.ForeignKey(
+        "Product",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="agent_conversations",
+    )
+    title = models.CharField(max_length=120, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+
+    def __str__(self):
+        scope = self.product.name if self.product else "DNA Generale"
+        return f"{self.company.name} · {scope}"
+
+
+class AgentMessage(models.Model):
+    ROLE_USER = "user"
+    ROLE_ASSISTANT = "assistant"
+    ROLE_SYSTEM = "system"
+
+    ROLE_CHOICES = [
+        (ROLE_USER, "Utente"),
+        (ROLE_ASSISTANT, "Assistente"),
+        (ROLE_SYSTEM, "Sistema"),
+    ]
+
+    conversation = models.ForeignKey(
+        AgentConversation,
+        on_delete=models.CASCADE,
+        related_name="messages",
+    )
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES)
+    content = models.TextField()
+    llm_call = models.ForeignKey(
+        LLMCall,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_messages",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.role} @ {self.created_at:%H:%M}"
+
+
 class ConsistencyIssue(models.Model):
     SCOPE_PERIODIC = "periodic"
     SCOPE_SPECIALIST = "specialist"
