@@ -1,3 +1,4 @@
+{% load zeus_filters %}
 {% if message.role == 'user' %}
 <div class="zeus-app-chat-message zeus-app-chat-message--user">
     <div class="zeus-app-chat-bubble-stack">
@@ -11,7 +12,7 @@
     <span class="zeus-app-chat-avatar zeus-app-chat-avatar--assistant" aria-hidden="true">🤖</span>
     <div class="zeus-app-chat-bubble-stack">
         <p class="zeus-app-chat-message-role">Il tuo agente</p>
-        <div class="zeus-app-chat-message-body">{{ message.content|linebreaksbr }}</div>
+        <div class="zeus-app-chat-message-body">{{ message.content|escape|markdownify }}</div>
     </div>
 </div>
 {% endif %}

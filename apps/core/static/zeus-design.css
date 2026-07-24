@@ -2835,6 +2835,30 @@ html,
   background: var(--shell-accent-soft);
 }
 
+.zeus-app-chat-message-body p {
+  margin: 0 0 8px;
+}
+
+.zeus-app-chat-message-body p:last-child {
+  margin-bottom: 0;
+}
+
+.zeus-app-chat-message-body ul,
+.zeus-app-chat-message-body ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.zeus-app-chat-message-body h2,
+.zeus-app-chat-message-body h3 {
+  margin: 4px 0 6px;
+  font-size: 0.95rem;
+}
+
+.zeus-app-chat-message-body a {
+  color: var(--shell-accent-strong);
+}
+
 .zeus-app-chat-composer {
   display: flex;
   flex-direction: column;
