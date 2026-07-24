@@ -2735,10 +2735,58 @@ html,
   flex-direction: column;
   gap: 14px;
   min-height: 320px;
-  max-height: 56vh;
+  max-height: min(520px, 55vh);
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 20px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--shell-border) transparent;
 }
+
+.zeus-app-chat-log::-webkit-scrollbar {
+  width: 8px;
+}
+
+.zeus-app-chat-log::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: var(--shell-border);
+}
+
+.zeus-app-chat-log::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.zeus-app-chat-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  margin-top: 2px;
+  border: 1px solid var(--shell-border);
+  border-radius: 50%;
+  background: var(--shell-panel-muted);
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.zeus-app-chat-avatar--user {
+  border-color: color-mix(in srgb, var(--shell-accent) 35%, var(--shell-border));
+  background: var(--shell-accent-soft);
+}
+
+.zeus-app-chat-bubble-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.zeus-app-chat-message--user .zeus-app-chat-bubble-stack {
+  align-items: flex-end;
+}
+
 
 .zeus-app-chat-hint {
   max-width: 46ch;
@@ -2750,14 +2798,13 @@ html,
 
 .zeus-app-chat-message {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-width: 78%;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 82%;
 }
 
 .zeus-app-chat-message--user {
   align-self: flex-end;
-  align-items: flex-end;
 }
 
 .zeus-app-chat-message--assistant {
