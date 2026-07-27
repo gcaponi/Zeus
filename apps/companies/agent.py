@@ -2,8 +2,11 @@
 
 L'agente risponde come il tecnico dell'azienda tenant usando come knowledge base:
 - DNA Generale (DNAGenerale completo, corrente, approvato) renderizzato in Markdown
-- DNA Specialista del prodotto selezionato (ProductDNA corrente), se presente
-- Estratti rilevanti dai file caricati (CompanyFile/ProductFile.content_text)
+- DNA Specialistici correnti di TUTTI i prodotti con status "attivo"
+- Estratti rilevanti dai file caricati (CompanyFile + tutti i ProductFile del tenant)
+
+La conversazione NON e' persistita: la storia vive nella Django session
+(chiave SESSION_HISTORY_KEY) ed e' un banco di prova, non un archivio.
 
 Il retrieval usa PostgreSQL full-text search in produzione; su altri backend
 (SQLite, usato nei test) ricade su uno scoring lessicale equivalente.
@@ -16,7 +19,7 @@ from django.db import connection
 
 from apps.companies.dna_renderer import render_sintesi_cognitiva
 from apps.companies.llm_client import AGENT_CHAT_MARKER
-from apps.companies.models import AgentMessage, DNAGenerale, CompanyFile, ProductDNA, ProductFile
+from apps.companies.models import DNAGenerale, CompanyFile, Specialista, ProductDNA, ProductFile
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +27,12 @@ RETRIEVAL_MAX_CHUNKS = 5
 RETRIEVAL_MAX_CHARS = 8000
 RETRIEVAL_CHUNK_CHARS = 3000
 HISTORY_MAX_MESSAGES = 10
+
+ROLE_USER = "user"
+ROLE_ASSISTANT = "assistant"
+
+# Chiave di sessione che contiene la storia chat: lista di dict {role, content}.
+SESSION_HISTORY_KEY = "agent_chat_history"
 
 CHAT_RULES = """## Regole di comportamento
 - Rispondi sempre nella lingua in cui l'utente scrive.
@@ -42,8 +51,8 @@ def get_approved_company_dna(company):
     ).first()
 
 
-def build_system_prompt(company, product=None):
-    """System prompt dell'agente: DNA renderizzati + regole chat.
+def build_system_prompt(company):
+    """System prompt dell'agente: DNA Generale + TUTTI i DNA Specialistici attivi.
 
     Ritorna None se il gate non e' superato (nessun DNA completo approvato).
     """
@@ -56,12 +65,16 @@ def build_system_prompt(company, product=None):
         (
             f"Sei il tecnico virtuale di {company.name}. Rispondi ai clienti come "
             "farebbe il miglior tecnico-commerciale dell'azienda, usando solo la "
-            "conoscenza riportata qui sotto."
+            "conoscenza riportata qui sotto. Hai a disposizione il DNA Generale "
+            "dell'azienda e i DNA Specialistici di tutti i prodotti attivi: se una "
+            "domanda riguarda un prodotto specifico, rispondi usando il DNA "
+            "Specialistico di quel prodotto."
         ),
         render_sintesi_cognitiva(dna.content or {}, f"DNA Generale — {company.name}"),
     ]
 
-    if product is not None:
+    active_products = company.products.filter(status=Specialista.STATUS_ATTIVO)
+    for product in active_products:
         product_dna = product.dna_versions.filter(
             dna_type=ProductDNA.TYPE_COMPLETE,
             is_current=True,
@@ -73,11 +86,6 @@ def build_system_prompt(company, product=None):
                     f"DNA Specialista — {product.name}",
                     product=True,
                 )
-            )
-        else:
-            sections.append(
-                f"Il prodotto «{product.name}» non ha ancora un DNA Specialista "
-                "completo: rispondi basandoti solo sul DNA Generale e sui documenti."
             )
 
     sections.append(CHAT_RULES)
@@ -102,7 +110,7 @@ def _excerpt_around(text, terms, limit=RETRIEVAL_CHUNK_CHARS):
     return prefix + chunk + suffix
 
 
-def _fts_candidates(company, product, query):
+def _fts_candidates(company, query):
     """Ranking via PostgreSQL full-text search (config 'italian')."""
     from django.contrib.postgres.search import (
         SearchHeadline,
@@ -114,9 +122,10 @@ def _fts_candidates(company, product, query):
     vector = SearchVector("content_text", config="italian")
     search_query = SearchQuery(query, config="italian", search_type="websearch")
 
-    querysets = [CompanyFile.objects.filter(company=company)]
-    if product is not None:
-        querysets.append(ProductFile.objects.filter(product=product))
+    querysets = [
+        CompanyFile.objects.filter(company=company),
+        ProductFile.objects.filter(product__company=company),
+    ]
 
     candidates = []
     for queryset in querysets:
@@ -146,11 +155,10 @@ def _fts_candidates(company, product, query):
     return candidates
 
 
-def _fallback_candidates(company, product, terms):
+def _fallback_candidates(company, terms):
     """Scoring lessicale per backend senza FTS (SQLite nei test)."""
     files = list(CompanyFile.objects.filter(company=company))
-    if product is not None:
-        files += list(ProductFile.objects.filter(product=product))
+    files += list(ProductFile.objects.filter(product__company=company))
 
     candidates = []
     for file_obj in files:
@@ -168,20 +176,21 @@ def _fallback_candidates(company, product, terms):
     return candidates
 
 
-def retrieve_context(company, query, product=None):
+def retrieve_context(company, query):
     """Top excerpt dalla KB del tenant, rankati per rilevanza.
 
+    Cerca nei CompanyFile e in TUTTI i ProductFile della company.
     Ritorna una lista di dict {"source": original_name, "text": excerpt},
     max RETRIEVAL_MAX_CHUNKS elementi e RETRIEVAL_MAX_CHARS caratteri totali.
-    I file di altre company e di altri prodotti sono esclusi per costruzione.
+    I file di altre company sono esclusi per costruzione.
     """
     if not _query_terms(query):
         return []
 
     if connection.vendor == "postgresql":
-        candidates = _fts_candidates(company, product, query)
+        candidates = _fts_candidates(company, query)
     else:
-        candidates = _fallback_candidates(company, product, _query_terms(query))
+        candidates = _fallback_candidates(company, _query_terms(query))
 
     candidates.sort(key=lambda item: item["rank"], reverse=True)
 
@@ -210,16 +219,15 @@ def format_retrieval_block(excerpts):
     return "\n\n".join(parts)
 
 
-def build_messages(conversation, system_prompt):
-    """Messages per il client LLM: system + ultimi HISTORY_MAX_MESSAGES."""
-    history = list(
-        conversation.messages.order_by("-created_at")[:HISTORY_MAX_MESSAGES]
-    )
-    history.reverse()
+def build_messages(history, system_prompt):
+    """Messages per il client LLM: system + ultimi HISTORY_MAX_MESSAGES.
+
+    `history` e' la lista di dict {role, content} tenuta in sessione.
+    """
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(
-        {"role": message.role, "content": message.content}
-        for message in history
-        if message.role in (AgentMessage.ROLE_USER, AgentMessage.ROLE_ASSISTANT)
+        {"role": entry["role"], "content": entry["content"]}
+        for entry in history[-HISTORY_MAX_MESSAGES:]
+        if entry.get("role") in (ROLE_USER, ROLE_ASSISTANT)
     )
     return messages

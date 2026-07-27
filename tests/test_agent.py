@@ -1,17 +1,21 @@
-"""Test per la chat in-app "Testa il tuo agente" (apps.companies.agent + views)."""
+"""Test per la chat in-app "Testa il tuo agente" (apps.companies.agent + views).
+
+La conversazione NON e' persistita: la storia vive nella Django session.
+Su DB resta solo LLMCall (audit costi).
+"""
 import json
 from unittest.mock import patch
 
 import pytest
+from django.contrib.sessions.backends.signed_cookies import SessionStore
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.companies import agent as agent_service
+from apps.companies import models as company_models
 from apps.companies import views
 from apps.companies.models import (
-    AgentConversation,
-    AgentMessage,
     Company,
     DNAGenerale,
     CompanyFile,
@@ -37,12 +41,12 @@ def _approved_company(schema="agent-tenant", name="Agent Co"):
     return company
 
 
-def _active_product(company, name="Celle frigo"):
+def _active_product(company, name="Celle frigo", slug="celle-frigo", codice="CF-001"):
     product = Specialista.objects.create(
         company=company,
         name=name,
-        slug="celle-frigo",
-        codice="CF-001",
+        slug=slug,
+        codice=codice,
         status=Specialista.STATUS_ATTIVO,
     )
     ProductDNA.objects.create(
@@ -50,11 +54,50 @@ def _active_product(company, name="Celle frigo"):
         version=1,
         dna_type=ProductDNA.TYPE_COMPLETE,
         content={
-            "sintesi_cognitiva": "Specialista celle frigorifere su misura.",
+            "sintesi_cognitiva": f"Specialista {name} su misura.",
         },
         is_approved=timezone.now(),
     )
     return product
+
+
+def _send(rf_with_tenant, text, session):
+    request = rf_with_tenant(
+        "post",
+        reverse("agent-send"),
+        data={"message": text},
+        session=session,
+    )
+    request.META["HTTP_HX_REQUEST"] = "true"
+    return views.agent_send(request)
+
+
+@pytest.mark.django_db
+class TestNoConversationPersistence:
+    def test_conversation_models_removed(self):
+        assert not hasattr(company_models, "AgentConversation")
+        assert not hasattr(company_models, "AgentMessage")
+
+    def test_send_writes_nothing_but_llm_call(self, rf_with_tenant):
+        company = _approved_company(schema="test-tenant")
+        session = SessionStore()
+        response = _send(rf_with_tenant, "Che materiali lavorate?", session)
+        assert response.status_code == 200
+
+        # Nessuna tabella conversazioni: l'unica scrittura e' l'audit LLMCall.
+        llm_call = LLMCall.objects.get(company=company)
+        logged_prompt = json.loads(llm_call.prompt_text)
+        assert logged_prompt[0]["role"] == "system"
+        assert agent_service.AGENT_CHAT_MARKER in logged_prompt[0]["content"]
+        assert logged_prompt[-1] == {
+            "role": "user",
+            "content": "Che materiali lavorate?",
+        }
+
+        history = session[agent_service.SESSION_HISTORY_KEY]
+        assert [entry["role"] for entry in history] == ["user", "assistant"]
+        assert history[0]["content"] == "Che materiali lavorate?"
+        assert "Risposta di prova dell'agente" in history[1]["content"]
 
 
 @pytest.mark.django_db
@@ -93,23 +136,42 @@ class TestBuildSystemPrompt:
         )
         assert agent_service.build_system_prompt(company) is None
 
-    def test_includes_product_dna_when_selected(self):
+    def test_includes_all_active_products_dna(self):
         company = _approved_company()
-        product = _active_product(company)
-        prompt = agent_service.build_system_prompt(company, product)
+        _active_product(company, name="Celle frigo", slug="celle-frigo", codice="CF-001")
+        _active_product(company, name="Banchi bar", slug="banchi-bar", codice="BB-001")
+        prompt = agent_service.build_system_prompt(company)
         assert "DNA Specialista — Celle frigo" in prompt
-        assert "celle frigorifere su misura" in prompt
+        assert "DNA Specialista — Banchi bar" in prompt
+        assert "Specialista Celle frigo su misura" in prompt
+        assert "Specialista Banchi bar su misura" in prompt
 
-    def test_product_without_dna_falls_back_to_general(self):
+    def test_skips_products_not_active_or_without_dna(self):
         company = _approved_company()
-        product = Specialista.objects.create(
+        draft = Specialista.objects.create(
             company=company,
-            name="Senza DNA",
-            slug="senza-dna",
+            name="Bozza prodotto",
+            slug="bozza-prodotto",
+            codice="BP-001",
+            status=Specialista.STATUS_BOZZA,
+        )
+        ProductDNA.objects.create(
+            product=draft,
+            version=1,
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            content={"sintesi_cognitiva": "DNA di un prodotto in bozza."},
+            is_approved=timezone.now(),
+        )
+        Specialista.objects.create(
+            company=company,
+            name="Attivo senza DNA",
+            slug="attivo-senza-dna",
+            codice="AS-001",
             status=Specialista.STATUS_ATTIVO,
         )
-        prompt = agent_service.build_system_prompt(company, product)
-        assert "non ha ancora un DNA Specialista completo" in prompt
+        prompt = agent_service.build_system_prompt(company)
+        assert "Bozza prodotto" not in prompt
+        assert "Attivo senza DNA" not in prompt
 
 
 @pytest.mark.django_db
@@ -151,52 +213,41 @@ class TestRetrieval:
             original_name="segreto-altri.txt",
             content_text="saldatura segretissima di un altro tenant",
         )
-        excerpts = agent_service.retrieve_context(company, "saldatura")
-        assert all(excerpt["source"] != "segreto-altri.txt" for excerpt in excerpts)
-
-    def test_product_scope_includes_product_and_company_files(self):
-        company = _approved_company()
-        product = _active_product(company)
-        other_product = Specialista.objects.create(
-            company=company,
-            name="Altro prodotto",
-            slug="altro-prodotto",
-            codice="AP-001",
-            status=Specialista.STATUS_ATTIVO,
+        other_product = _active_product(other, name="Prodotto altrui", slug="pa", codice="PA-1")
+        ProductFile.objects.create(
+            product=other_product,
+            original_name="scheda-altrui.txt",
+            content_text="saldatura scheda tecnica di un altro tenant",
         )
+        excerpts = agent_service.retrieve_context(company, "saldatura")
+        sources = {excerpt["source"] for excerpt in excerpts}
+        assert "segreto-altri.txt" not in sources
+        assert "scheda-altrui.txt" not in sources
+
+    def test_includes_files_of_all_company_products(self):
+        company = _approved_company()
+        product_a = _active_product(company, name="Celle frigo", slug="celle-frigo", codice="CF-001")
+        product_b = _active_product(company, name="Banchi bar", slug="banchi-bar", codice="BB-001")
         CompanyFile.objects.create(
             company=company,
             original_name="azienda.txt",
             content_text="verniciatura epossidica aziendale",
         )
         ProductFile.objects.create(
-            product=product,
+            product=product_a,
             original_name="scheda-celle.txt",
             content_text="verniciatura celle frigo scheda tecnica",
         )
         ProductFile.objects.create(
-            product=other_product,
-            original_name="altro-prodotto.txt",
-            content_text="verniciatura prodotto non selezionato",
+            product=product_b,
+            original_name="scheda-banchi.txt",
+            content_text="verniciatura banchi bar scheda tecnica",
         )
-        excerpts = agent_service.retrieve_context(
-            company, "verniciatura", product=product
-        )
+        excerpts = agent_service.retrieve_context(company, "verniciatura")
         sources = {excerpt["source"] for excerpt in excerpts}
         assert "azienda.txt" in sources
         assert "scheda-celle.txt" in sources
-        assert "altro-prodotto.txt" not in sources
-
-    def test_no_product_excludes_product_files(self):
-        company = _approved_company()
-        product = _active_product(company)
-        ProductFile.objects.create(
-            product=product,
-            original_name="scheda-celle.txt",
-            content_text="verniciatura celle frigo scheda tecnica",
-        )
-        excerpts = agent_service.retrieve_context(company, "verniciatura")
-        assert excerpts == []
+        assert "scheda-banchi.txt" in sources
 
     def test_empty_query_returns_nothing(self):
         company = _approved_company()
@@ -210,123 +261,124 @@ class TestRetrieval:
 @pytest.mark.django_db
 class TestBuildMessages:
     def test_history_capped_at_last_10(self):
-        company = _approved_company()
-        conversation = AgentConversation.objects.create(company=company)
-        for index in range(14):
-            AgentMessage.objects.create(
-                conversation=conversation,
-                role=AgentMessage.ROLE_USER,
-                content=f"domanda {index}",
-            )
-        messages = agent_service.build_messages(conversation, "SYSTEM")
+        history = [
+            {"role": "user", "content": f"domanda {index}"} for index in range(14)
+        ]
+        messages = agent_service.build_messages(history, "SYSTEM")
         assert messages[0] == {"role": "system", "content": "SYSTEM"}
-        history = messages[1:]
-        assert len(history) == agent_service.HISTORY_MAX_MESSAGES
-        assert history[0]["content"] == "domanda 4"
-        assert history[-1]["content"] == "domanda 13"
+        capped = messages[1:]
+        assert len(capped) == agent_service.HISTORY_MAX_MESSAGES
+        assert capped[0]["content"] == "domanda 4"
+        assert capped[-1]["content"] == "domanda 13"
 
 
 @pytest.mark.django_db
 class TestAgentViews:
-    def test_send_creates_messages_and_llm_call(self, rf_with_tenant):
+    def test_multi_turn_history_in_session_reaches_prompt(self, rf_with_tenant):
         company = _approved_company(schema="test-tenant")
-        request = rf_with_tenant(
-            "post",
-            reverse("agent-send"),
-            data={"message": "Che materiali lavorate?"},
-        )
-        request.META["HTTP_HX_REQUEST"] = "true"
-        response = views.agent_send(request)
-        assert response.status_code == 200
-
-        conversation = AgentConversation.objects.get(company=company)
-        messages = list(conversation.messages.all())
-        assert len(messages) == 2
-        assert messages[0].role == AgentMessage.ROLE_USER
-        assert messages[0].content == "Che materiali lavorate?"
-        assert messages[1].role == AgentMessage.ROLE_ASSISTANT
-        assert "Risposta di prova dell'agente" in messages[1].content
-
-        llm_call = LLMCall.objects.get(company=company)
-        assert messages[1].llm_call == llm_call
-        logged_prompt = json.loads(llm_call.prompt_text)
-        assert logged_prompt[0]["role"] == "system"
-        assert agent_service.AGENT_CHAT_MARKER in logged_prompt[0]["content"]
-        assert logged_prompt[-1] == {
-            "role": "user",
-            "content": "Che materiali lavorate?",
-        }
-
-    def test_send_blocked_without_approved_dna(self, rf_with_tenant):
-        Company.objects.create(schema_name="test-tenant", name="T")
-        request = rf_with_tenant(
-            "post", reverse("agent-send"), data={"message": "ciao"},
-        )
-        response = views.agent_send(request)
-        assert response.status_code == 403
-        assert AgentMessage.objects.count() == 0
-        assert LLMCall.objects.count() == 0
-
-    def test_send_requires_message(self, rf_with_tenant):
-        _approved_company(schema="test-tenant")
-        request = rf_with_tenant(
-            "post", reverse("agent-send"), data={"message": "   "},
-        )
-        response = views.agent_send(request)
-        assert response.status_code == 400
-        assert AgentMessage.objects.count() == 0
-
-    def test_send_with_product_scopes_conversation(self, rf_with_tenant):
-        company = _approved_company(schema="test-tenant")
-        product = _active_product(company)
-        request = rf_with_tenant(
-            "post",
-            reverse("agent-send"),
-            data={"message": "Dimmi delle celle", "product_id": product.pk},
-        )
-        request.META["HTTP_HX_REQUEST"] = "true"
-        response = views.agent_send(request)
-        assert response.status_code == 200
-        conversation = AgentConversation.objects.get(company=company)
-        assert conversation.product == product
-        llm_call = LLMCall.objects.get(company=company)
-        system_prompt = json.loads(llm_call.prompt_text)[0]["content"]
-        assert "DNA Specialista — Celle frigo" in system_prompt
-
-    def test_tenant_isolation_other_product_not_selectable(self, rf_with_tenant):
-        company = _approved_company(schema="test-tenant")
-        other_company = _approved_company(schema="other-tenant", name="Other")
-        foreign_product = _active_product(other_company, name="Prodotto altrui")
-        request = rf_with_tenant(
-            "post",
-            reverse("agent-send"),
-            data={"message": "ciao", "product_id": foreign_product.pk},
-        )
-        request.META["HTTP_HX_REQUEST"] = "true"
-        response = views.agent_send(request)
-        assert response.status_code == 200
-        conversation = AgentConversation.objects.get(company=company)
-        assert conversation.product is None
-
-    def test_second_message_reuses_conversation_and_sends_history(self, rf_with_tenant):
-        company = _approved_company(schema="test-tenant")
+        session = SessionStore()
         for text in ("prima domanda", "seconda domanda"):
-            request = rf_with_tenant(
-                "post", reverse("agent-send"), data={"message": text},
-            )
-            request.META["HTTP_HX_REQUEST"] = "true"
-            views.agent_send(request)
-        assert AgentConversation.objects.filter(company=company).count() == 1
-        last_call = LLMCall.objects.filter(company=company).first()
+            response = _send(rf_with_tenant, text, session)
+            assert response.status_code == 200
+
+        history = session[agent_service.SESSION_HISTORY_KEY]
+        assert len(history) == 4  # 2 domande + 2 risposte
+        assert history[0]["content"] == "prima domanda"
+        assert history[2]["content"] == "seconda domanda"
+
+        # Il secondo prompt all'LLM contiene tutta la storia precedente.
+        last_call = LLMCall.objects.filter(company=company).latest("id")
         logged_prompt = json.loads(last_call.prompt_text)
         contents = [message["content"] for message in logged_prompt]
         assert "prima domanda" in contents
         assert "seconda domanda" in contents
+        assert any("Risposta di prova dell'agente" in c for c in contents)
 
-    def test_llm_failure_leaves_user_message(self, rf_with_tenant):
+    def test_history_capped_at_10_messages_in_session(self, rf_with_tenant):
         _approved_company(schema="test-tenant")
+        session = SessionStore()
+        for index in range(7):  # 7 turni = 14 messaggi
+            response = _send(rf_with_tenant, f"domanda {index}", session)
+            assert response.status_code == 200
+
+        history = session[agent_service.SESSION_HISTORY_KEY]
+        assert len(history) == agent_service.HISTORY_MAX_MESSAGES
+        assert history[-1]["role"] == "assistant"
+
+        last_call = LLMCall.objects.latest("id")
+        logged_history = json.loads(last_call.prompt_text)[1:]
+        assert len(logged_history) <= agent_service.HISTORY_MAX_MESSAGES
+
+    def test_new_session_starts_empty(self, rf_with_tenant):
+        _approved_company(schema="test-tenant")
+        session = SessionStore()
+        _send(rf_with_tenant, "prima domanda", session)
+        assert session.get(agent_service.SESSION_HISTORY_KEY)
+
+        # Sessione nuova (es. dopo logout): la chat riparte vuota.
+        fresh = SessionStore()
+        request = rf_with_tenant("get", reverse("agent-chat"), session=fresh)
+        with override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls"):
+            response = views.agent_chat(request)
+        assert response.status_code == 200
+        assert "prima domanda" not in response.content.decode()
+
+    def test_agent_clear_empties_history(self, rf_with_tenant):
+        _approved_company(schema="test-tenant")
+        session = SessionStore()
+        _send(rf_with_tenant, "domanda da dimenticare", session)
+        assert session.get(agent_service.SESSION_HISTORY_KEY)
+
         request = rf_with_tenant(
-            "post", reverse("agent-send"), data={"message": "ciao"},
+            "post", reverse("agent-clear"), session=session,
+        )
+        request.META["HTTP_HX_REQUEST"] = "true"
+        response = views.agent_clear(request)
+        assert response.status_code == 200
+        assert agent_service.SESSION_HISTORY_KEY not in session
+        assert "domanda da dimenticare" not in response.content.decode()
+
+    def test_agent_clear_requires_post(self, rf_with_tenant):
+        _approved_company(schema="test-tenant")
+        request = rf_with_tenant("get", reverse("agent-clear"))
+        response = views.agent_clear(request)
+        assert response.status_code == 405
+
+    def test_send_blocked_without_approved_dna(self, rf_with_tenant):
+        Company.objects.create(schema_name="test-tenant", name="T")
+        session = SessionStore()
+        response = _send(rf_with_tenant, "ciao", session)
+        assert response.status_code == 403
+        assert LLMCall.objects.count() == 0
+        assert agent_service.SESSION_HISTORY_KEY not in session
+
+    def test_send_requires_message(self, rf_with_tenant):
+        _approved_company(schema="test-tenant")
+        session = SessionStore()
+        response = _send(rf_with_tenant, "   ", session)
+        assert response.status_code == 400
+        assert agent_service.SESSION_HISTORY_KEY not in session
+
+    def test_system_prompt_sent_includes_all_active_products(self, rf_with_tenant):
+        company = _approved_company(schema="test-tenant")
+        _active_product(company, name="Celle frigo", slug="celle-frigo", codice="CF-001")
+        _active_product(company, name="Banchi bar", slug="banchi-bar", codice="BB-001")
+        session = SessionStore()
+        response = _send(rf_with_tenant, "Dimmi dei prodotti", session)
+        assert response.status_code == 200
+        llm_call = LLMCall.objects.get(company=company)
+        system_prompt = json.loads(llm_call.prompt_text)[0]["content"]
+        assert "DNA Specialista — Celle frigo" in system_prompt
+        assert "DNA Specialista — Banchi bar" in system_prompt
+
+    def test_llm_failure_returns_502(self, rf_with_tenant):
+        _approved_company(schema="test-tenant")
+        session = SessionStore()
+        request = rf_with_tenant(
+            "post",
+            reverse("agent-send"),
+            data={"message": "ciao"},
+            session=session,
         )
         request.META["HTTP_HX_REQUEST"] = "true"
         with patch(
@@ -335,6 +387,7 @@ class TestAgentViews:
         ):
             response = views.agent_send(request)
         assert response.status_code == 502
+        assert LLMCall.objects.count() == 0
 
     @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
     def test_chat_page_gate_empty_state(self, rf_with_tenant):
@@ -346,38 +399,17 @@ class TestAgentViews:
         assert "Completa prima il DNA" in content
 
     @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
-    def test_chat_page_renders_with_approved_dna(self, rf_with_tenant):
-        company = _approved_company(schema="test-tenant")
-        _active_product(company)
-        conversation = AgentConversation.objects.create(company=company)
-        AgentMessage.objects.create(
-            conversation=conversation,
-            role=AgentMessage.ROLE_USER,
-            content="vecchia domanda",
-        )
-        request = rf_with_tenant("get", reverse("agent-chat"))
+    def test_chat_page_renders_history_and_clear_button(self, rf_with_tenant):
+        _approved_company(schema="test-tenant")
+        session = SessionStore()
+        _send(rf_with_tenant, "vecchia domanda", session)
+
+        request = rf_with_tenant("get", reverse("agent-chat"), session=session)
         response = views.agent_chat(request)
         assert response.status_code == 200
         content = response.content.decode()
         assert "agent-chat-log" in content
         assert "vecchia domanda" in content
-        assert "Celle frigo" in content
-
-    @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
-    def test_chat_page_product_filter(self, rf_with_tenant):
-        company = _approved_company(schema="test-tenant")
-        product = _active_product(company)
-        conversation = AgentConversation.objects.create(
-            company=company, product=product,
-        )
-        AgentMessage.objects.create(
-            conversation=conversation,
-            role=AgentMessage.ROLE_USER,
-            content="domanda sul prodotto",
-        )
-        request = rf_with_tenant("get", reverse("agent-chat"))
-        request.GET = {"product": str(product.pk)}
-        response = views.agent_chat(request)
-        assert response.status_code == 200
-        content = response.content.decode()
-        assert "domanda sul prodotto" in content
+        assert "Nuova chat" in content
+        # Il selettore "Specialista" non esiste piu'.
+        assert "agent-product-select" not in content

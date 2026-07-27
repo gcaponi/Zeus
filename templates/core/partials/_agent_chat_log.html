@@ -1,0 +1,11 @@
+{% for message in chat_messages %}
+    {% include "core/partials/_agent_message.html" with message=message %}
+{% empty %}
+    <div class="zeus-app-chat-hint" data-chat-hint>
+        <p>
+            Fai una domanda al tuo agente.
+            Risponde come il tuo tecnico, basandosi sul DNA Generale, sui DNA Specialistici
+            di tutti i prodotti attivi e sui documenti caricati.
+        </p>
+    </div>
+{% endfor %}

@@ -47,8 +47,6 @@ from apps.companies.llm_schemas import (
     StarterQuestionSetSchema,
 )
 from apps.companies.models import (
-    AgentConversation,
-    AgentMessage,
     Company,
     DNAGenerale,
     CompanyFile,
@@ -68,6 +66,10 @@ from apps.companies.models import (
 )
 from apps.companies.tasks import _generate_dna, run_pipeline, scrape_source
 from apps.companies.agent import (
+    HISTORY_MAX_MESSAGES,
+    ROLE_ASSISTANT,
+    ROLE_USER,
+    SESSION_HISTORY_KEY,
     build_messages,
     build_system_prompt,
     format_retrieval_block,
@@ -6052,39 +6054,11 @@ def product_dna_feedback_apply(request, pk):
 AGENT_MESSAGE_MAX_CHARS = 4000
 
 
-def _agent_selected_product(company, raw_id):
-    """Prodotto attivo del tenant selezionato per la chat, o None (solo DNA Generale)."""
-    if not raw_id:
-        return None
-    try:
-        pk = int(raw_id)
-    except (TypeError, ValueError):
-        return None
-    return Specialista.objects.filter(
-        pk=pk,
-        company=company,
-        status=Specialista.STATUS_ATTIVO,
-    ).first()
-
-
-def _agent_conversation_for(company, product):
-    conversations = company.agent_conversations.all()
-    if product is None:
-        conversations = conversations.filter(product__isnull=True)
-    else:
-        conversations = conversations.filter(product=product)
-    return conversations.first()
-
-
-def _agent_chat_context(company, product):
-    conversation = _agent_conversation_for(company, product)
+def _agent_chat_context(request, company):
     return {
         "company": company,
         "agent_enabled": get_approved_company_dna(company) is not None,
-        "products": company.products.filter(status=Specialista.STATUS_ATTIVO),
-        "selected_product": product,
-        "conversation": conversation,
-        "chat_messages": list(conversation.messages.all()) if conversation else [],
+        "chat_messages": request.session.get(SESSION_HISTORY_KEY, []),
     }
 
 
@@ -6094,8 +6068,7 @@ def agent_chat(request):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    product = _agent_selected_product(company, request.GET.get("product"))
-    context = _agent_chat_context(company, product)
+    context = _agent_chat_context(request, company)
     template_name = (
         "core/app_shell_agent.html"
         if settings.ZEUS_APP_SHELL_ENABLED
@@ -6107,8 +6080,9 @@ def agent_chat(request):
 @login_required
 @require_http_methods(["POST"])
 def agent_send(request):
-    """Invio messaggio (HTMX): salva user message, chiama l'LLM in sincrono,
-    salva risposta + LLMCall, ritorna il partial dei 2 nuovi messaggi."""
+    """Invio messaggio (HTMX): storia in sessione (mai su DB), chiama l'LLM
+    in sincrono, registra LLMCall (audit costi), ritorna il partial dei
+    2 nuovi messaggi."""
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
@@ -6126,28 +6100,16 @@ def agent_send(request):
     if not text:
         return JsonResponse({"error": "empty_message"}, status=400)
 
-    product = _agent_selected_product(company, data.get("product_id"))
-    conversation = _agent_conversation_for(company, product)
-    if conversation is None:
-        conversation = AgentConversation.objects.create(
-            company=company,
-            product=product,
-            title=text[:120],
-        )
+    history = list(request.session.get(SESSION_HISTORY_KEY, []))
+    user_message = {"role": ROLE_USER, "content": text}
+    history.append(user_message)
+    request.session[SESSION_HISTORY_KEY] = history[-HISTORY_MAX_MESSAGES:]
 
-    user_message = AgentMessage.objects.create(
-        conversation=conversation,
-        role=AgentMessage.ROLE_USER,
-        content=text,
-    )
-
-    system_prompt = build_system_prompt(company, product)
-    retrieval_block = format_retrieval_block(
-        retrieve_context(company, text, product=product)
-    )
+    system_prompt = build_system_prompt(company)
+    retrieval_block = format_retrieval_block(retrieve_context(company, text))
     if retrieval_block:
         system_prompt = f"{system_prompt}\n\n{retrieval_block}"
-    llm_messages = build_messages(conversation, system_prompt)
+    llm_messages = build_messages(history, system_prompt)
 
     try:
         result = get_llm_client().generate(messages=llm_messages, model=LLM_MODEL)
@@ -6160,7 +6122,7 @@ def agent_send(request):
             },
             status=502,
         )
-    llm_call = LLMCall.objects.create(
+    LLMCall.objects.create(
         company=company,
         model_name=LLM_MODEL,
         prompt_text=json.dumps(llm_messages, ensure_ascii=False),
@@ -6170,14 +6132,9 @@ def agent_send(request):
         cost_usd=result.cost,
         latency_ms=result.latency_ms,
     )
-    assistant_message = AgentMessage.objects.create(
-        conversation=conversation,
-        role=AgentMessage.ROLE_ASSISTANT,
-        content=result.text,
-        llm_call=llm_call,
-    )
-    # Touch updated_at: le conversazioni si ordinano per ultima attivita'.
-    conversation.save(update_fields=["updated_at"])
+    assistant_message = {"role": ROLE_ASSISTANT, "content": result.text}
+    history.append(assistant_message)
+    request.session[SESSION_HISTORY_KEY] = history[-HISTORY_MAX_MESSAGES:]
 
     if request.headers.get("HX-Request") == "true":
         return render(
@@ -6185,6 +6142,21 @@ def agent_send(request):
             "core/partials/_agent_message_pair.html",
             {"chat_messages": [user_message, assistant_message]},
         )
-    if product is not None:
-        return redirect(f"{reverse('agent-chat')}?product={product.pk}")
+    return redirect("agent-chat")
+
+
+@login_required
+@require_http_methods(["POST"])
+def agent_clear(request):
+    """Pulsante "Nuova chat": svuota la storia di sessione e ritorna il log vuoto."""
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    request.session.pop(SESSION_HISTORY_KEY, None)
+    if request.headers.get("HX-Request") == "true":
+        return render(
+            request,
+            "core/partials/_agent_chat_log.html",
+            {"chat_messages": []},
+        )
     return redirect("agent-chat")

@@ -11,29 +11,20 @@
 {% else %}
 <div class="zeus-app-chat" data-agent-chat>
     <div class="zeus-app-chat-toolbar">
-        <form class="zeus-app-chat-selector" method="get" action="{% url 'agent-chat' %}">
-            <label for="agent-product-select">Specialista</label>
-            <select id="agent-product-select" class="zeus-select" name="product" onchange="this.form.submit()">
-                <option value="">Solo DNA Generale</option>
-                {% for product in products %}
-                    <option value="{{ product.pk }}"{% if selected_product and product.pk == selected_product.pk %} selected{% endif %}>{{ product.name }}</option>
-                {% endfor %}
-            </select>
+        <form
+            method="post"
+            action="{% url 'agent-clear' %}"
+            hx-post="{% url 'agent-clear' %}"
+            hx-target="#agent-chat-log"
+            hx-swap="innerHTML">
+            {% csrf_token %}
+            <button type="submit" class="zeus-btn zeus-btn-ghost">Nuova chat</button>
         </form>
     </div>
 
     <div class="zeus-app-panel zeus-app-chat-panel">
         <div id="agent-chat-log" class="zeus-app-chat-log" data-chat-log aria-live="polite">
-            {% for message in chat_messages %}
-                {% include "core/partials/_agent_message.html" with message=message %}
-            {% empty %}
-                <div class="zeus-app-chat-hint" data-chat-hint>
-                    <p>
-                        Fai una domanda al tuo agente{% if selected_product %} su <strong>{{ selected_product.name }}</strong>{% endif %}.
-                        Risponde come il tuo tecnico, basandosi sul DNA{% if selected_product %} Generale e Specialista{% else %} Generale{% endif %} e sui documenti caricati.
-                    </p>
-                </div>
-            {% endfor %}
+            {% include "core/partials/_agent_chat_log.html" %}
         </div>
 
         <form
@@ -46,9 +37,6 @@
             hx-indicator="#agent-chat-spinner"
             data-chat-composer>
             {% csrf_token %}
-            {% if selected_product %}
-                <input type="hidden" name="product_id" value="{{ selected_product.pk }}">
-            {% endif %}
             <textarea
                 class="zeus-textarea zeus-app-chat-input"
                 name="message"

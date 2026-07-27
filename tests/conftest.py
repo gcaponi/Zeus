@@ -10,12 +10,13 @@ def rf_with_tenant(django_user_model):
     request. Shared across test modules so views can be exercised without
     the full HTTP client + tenant routing stack.
     """
+    from django.contrib.sessions.backends.signed_cookies import SessionStore
     from django.test.client import RequestFactory
 
     rf = RequestFactory()
     user = django_user_model.objects.create_user(username="u", email="test@x.it", password="pw")
 
-    def _make(method, path, data=None, form=False):
+    def _make(method, path, data=None, form=False, session=None):
         if method == "post":
             if form:
                 req = rf.post(path, data or {})
@@ -30,6 +31,9 @@ def rf_with_tenant(django_user_model):
 
         req.tenant = FakeTenant()
         req.user = user
+        # Signed-cookies session: nessuna scrittura su DB. Passa la stessa
+        # istanza a piu' chiamate per simulare il multi-turno.
+        req.session = session if session is not None else SessionStore()
         return req
 
     return _make
