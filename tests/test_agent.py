@@ -173,6 +173,43 @@ class TestBuildSystemPrompt:
         assert "Bozza prodotto" not in prompt
         assert "Attivo senza DNA" not in prompt
 
+    def test_includes_operational_profile(self):
+        company = _approved_company()
+        company.settore_primario = "distribuzione_commercio"
+        company.cliente_diretto = "b2b_tecnico"
+        company.settore_secondario = "Edilizia, marmi"
+        company.contesto_libero = "Paghi la qualita', ricevi esperienza."
+        company.save()
+        company_models.Source.objects.create(
+            company=company,
+            url="https://amastone.it",
+            status="scraped",
+            scraped_data={"markdown": "catalogo online"},
+        )
+        prompt = agent_service.build_system_prompt(company)
+        assert "Scheda operativa" in prompt
+        assert "https://amastone.it" in prompt
+        assert "Edilizia, marmi" in prompt
+        assert "Paghi la qualita'" in prompt
+
+    def test_includes_pre_dna_analysis(self):
+        company = _approved_company()
+        DNAGenerale.objects.create(
+            company=company,
+            version=2,
+            dna_type=DNAGenerale.TYPE_PRE,
+            is_current=False,
+            content={"sintesi_cognitiva": "E-commerce di utensili per marmisti."},
+        )
+        prompt = agent_service.build_system_prompt(company)
+        assert "Analisi iniziale del sito (pre-DNA)" in prompt
+        assert "E-commerce di utensili per marmisti." in prompt
+
+    def test_rules_include_grounded_inference(self):
+        company = _approved_company()
+        prompt = agent_service.build_system_prompt(company)
+        assert "RAGIONA su quello che sai prima di negare" in prompt
+
 
 @pytest.mark.django_db
 class TestRetrieval:
@@ -256,6 +293,33 @@ class TestRetrieval:
         )
         assert agent_service.retrieve_context(company, "a e o") == []
         assert agent_service.retrieve_context(company, "") == []
+
+    def test_includes_scraped_sources(self):
+        company = _approved_company()
+        company_models.Source.objects.create(
+            company=company,
+            url="https://amastone.it",
+            status="scraped",
+            scraped_data={
+                "markdown": "Amastone shop online: carrello, spedizione in 48 ore, "
+                "acquista dischi diamantati e utensili per marmisti."
+            },
+        )
+        excerpts = agent_service.retrieve_context(company, "dove acquistare spedizione")
+        assert excerpts
+        assert any(e["source"] == "https://amastone.it" for e in excerpts)
+
+    def test_scraped_sources_isolated_between_companies(self):
+        company = _approved_company()
+        other = _approved_company(schema="other-tenant", name="Other Co")
+        company_models.Source.objects.create(
+            company=other,
+            url="https://altro.it",
+            status="scraped",
+            scraped_data={"markdown": "carrello acquisti spedizione"},
+        )
+        excerpts = agent_service.retrieve_context(company, "spedizione acquisti")
+        assert all(e["source"] != "https://altro.it" for e in excerpts)
 
 
 @pytest.mark.django_db

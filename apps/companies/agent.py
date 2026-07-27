@@ -37,9 +37,48 @@ SESSION_HISTORY_KEY = "agent_chat_history"
 CHAT_RULES = """## Regole di comportamento
 - Rispondi sempre nella lingua in cui l'utente scrive.
 - Resta dentro i confini del DNA: non promettere tempistiche, prezzi o lavorazioni che il DNA non prevede.
-- Se un'informazione non e' nel DNA ne' nei documenti forniti, dillo chiaramente ("questa informazione non e' nella mia knowledge base") e proponi di mettere l'utente in contatto con un tecnico umano.
-- Quando usi informazioni tratte dai documenti, cita la fonte (nome del file).
+- RAGIONA su quello che sai prima di negare: se dalla scheda operativa, dal DNA o dai documenti puoi dedurre la risposta con un'inferenza diretta (esempio: l'azienda distribuisce prodotti e ha un sito e-commerce → "puoi acquistare sul nostro sito"), dai la risposta spiegando da quale elemento la deduci. Non rispondere "non e' nella mia knowledge base" quando le informazioni disponibili permettono una risposta utile.
+- Se anche ragionando l'informazione manca davvero, dillo chiaramente e proponi di mettere l'utente in contatto con un tecnico umano.
+- Quando usi informazioni tratte dai documenti, cita la fonte (nome del file o del sito).
 - Tono: professionale, diretto, concreto. Niente frasi di circostanza."""
+
+
+def _operational_profile_block(company):
+    """Scheda operativa del tenant: fatti strutturati raccolti in onboarding.
+
+    Sono dati dichiarati dal cliente (settore, canali, sito) che il DNA
+    narrativo puo' non ripetere esplicitamente — ma che l'agente deve
+    conoscere per ragionare (es. "vendiamo online sul nostro sito").
+    """
+    facts = []
+    site = company.sources.filter(status="scraped").values_list("url", flat=True).first()
+    if not site:
+        site = company.sources.values_list("url", flat=True).first()
+    if site:
+        facts.append(f"- Sito web aziendale: {site}")
+    if company.settore_primario:
+        facts.append(f"- Attivita': {company.get_settore_primario_display()}")
+    if company.prodotto_fisico is not None:
+        facts.append(
+            "- Componente fisica del prodotto/servizio: "
+            + ("si'" if company.prodotto_fisico else "no")
+        )
+    if company.cliente_diretto:
+        facts.append(f"- Cliente diretto: {company.get_cliente_diretto_display()}")
+    if company.custom_frequenza:
+        facts.append(f"- Lavori su specifica/personalizzati: {company.get_custom_frequenza_display()}")
+    if company.installatori_in_filiera is not None:
+        facts.append(
+            "- Installatori/posatori in filiera: "
+            + ("si'" if company.installatori_in_filiera else "no")
+        )
+    if company.settore_secondario:
+        facts.append(f"- Settore secondario/nicchia: {company.settore_secondario}")
+    if company.contesto_libero:
+        facts.append(f"- Nota del fondatore: {company.contesto_libero}")
+    if not facts:
+        return ""
+    return "## Scheda operativa (fatti dichiarati dal cliente)\n" + "\n".join(facts)
 
 
 def get_approved_company_dna(company):
@@ -65,13 +104,27 @@ def build_system_prompt(company):
         (
             f"Sei il tecnico virtuale di {company.name}. Rispondi ai clienti come "
             "farebbe il miglior tecnico-commerciale dell'azienda, usando solo la "
-            "conoscenza riportata qui sotto. Hai a disposizione il DNA Generale "
-            "dell'azienda e i DNA Specialistici di tutti i prodotti attivi: se una "
-            "domanda riguarda un prodotto specifico, rispondi usando il DNA "
-            "Specialistico di quel prodotto."
+            "conoscenza riportata qui sotto. Hai a disposizione la scheda operativa "
+            "dell'azienda, il DNA Generale e i DNA Specialistici di tutti i prodotti "
+            "attivi: se una domanda riguarda un prodotto specifico, rispondi usando "
+            "il DNA Specialistico di quel prodotto."
         ),
-        render_sintesi_cognitiva(dna.content or {}, f"DNA Generale — {company.name}"),
     ]
+    profile_block = _operational_profile_block(company)
+    if profile_block:
+        sections.append(profile_block)
+    sections.append(render_sintesi_cognitiva(dna.content or {}, f"DNA Generale — {company.name}"))
+
+    pre_dna = company.dna_versions.filter(
+        dna_type=DNAGenerale.TYPE_PRE,
+    ).order_by("-version").first()
+    if pre_dna is not None:
+        sections.append(
+            render_sintesi_cognitiva(
+                pre_dna.content or {},
+                f"Analisi iniziale del sito (pre-DNA) — {company.name}",
+            )
+        )
 
     active_products = company.products.filter(status=Specialista.STATUS_ATTIVO)
     for product in active_products:
@@ -118,20 +171,22 @@ def _fts_candidates(company, query):
         SearchRank,
         SearchVector,
     )
+    from django.db.models import TextField
+    from django.db.models.functions import Cast
 
-    vector = SearchVector("content_text", config="italian")
     search_query = SearchQuery(query, config="italian", search_type="websearch")
 
-    querysets = [
+    file_vector = SearchVector("content_text", config="italian")
+    file_querysets = [
         CompanyFile.objects.filter(company=company),
         ProductFile.objects.filter(product__company=company),
     ]
 
     candidates = []
-    for queryset in querysets:
+    for queryset in file_querysets:
         rows = (
             queryset.annotate(
-                rank=SearchRank(vector, search_query),
+                rank=SearchRank(file_vector, search_query),
                 headline=SearchHeadline(
                     "content_text",
                     search_query,
@@ -152,7 +207,43 @@ def _fts_candidates(company, query):
                     or (row.content_text or "")[:RETRIEVAL_CHUNK_CHARS],
                 }
             )
+
+    # Sorgenti web scrapate (contenuto del sito, es. catalogo e-commerce)
+    scraped_text = Cast("scraped_data", output_field=TextField())
+    source_vector = SearchVector(scraped_text, config="italian")
+    source_rows = (
+        company.sources.filter(status="scraped", scraped_data__isnull=False)
+        .annotate(
+            rank=SearchRank(source_vector, search_query),
+            headline=SearchHeadline(
+                scraped_text,
+                search_query,
+                config="italian",
+                max_words=80,
+                min_words=40,
+            ),
+        )
+        .filter(rank__gt=0.01)
+        .order_by("-rank")[:RETRIEVAL_MAX_CHUNKS]
+    )
+    for row in source_rows:
+        candidates.append(
+            {
+                "rank": row.rank,
+                "source": row.url,
+                "text": (row.headline or "").strip()
+                or str(row.scraped_data or "")[:RETRIEVAL_CHUNK_CHARS],
+            }
+        )
     return candidates
+
+
+def _source_markdown(source):
+    """Testo markdown estratto dallo scraping, se disponibile."""
+    data = source.scraped_data or {}
+    if isinstance(data, dict):
+        return str(data.get("markdown") or "")
+    return str(data)
 
 
 def _fallback_candidates(company, terms):
@@ -173,13 +264,26 @@ def _fallback_candidates(company, terms):
                     "text": _excerpt_around(text, terms),
                 }
             )
+    for source in company.sources.filter(status="scraped"):
+        text = _source_markdown(source)
+        lower = text.lower()
+        score = sum(lower.count(term) for term in terms)
+        if score:
+            candidates.append(
+                {
+                    "rank": float(score),
+                    "source": source.url,
+                    "text": _excerpt_around(text, terms),
+                }
+            )
     return candidates
 
 
 def retrieve_context(company, query):
     """Top excerpt dalla KB del tenant, rankati per rilevanza.
 
-    Cerca nei CompanyFile e in TUTTI i ProductFile della company.
+    Cerca nei CompanyFile, in TUTTI i ProductFile della company e nelle
+    sorgenti web scrapate (contenuto del sito).
     Ritorna una lista di dict {"source": original_name, "text": excerpt},
     max RETRIEVAL_MAX_CHUNKS elementi e RETRIEVAL_MAX_CHARS caratteri totali.
     I file di altre company sono esclusi per costruzione.
