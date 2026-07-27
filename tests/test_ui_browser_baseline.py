@@ -1,5 +1,6 @@
 import hashlib
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
@@ -7,6 +8,7 @@ from pathlib import Path
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
+from django.db.utils import OperationalError
 from django.test import override_settings
 from django.urls import reverse
 from playwright.sync_api import expect, sync_playwright
@@ -143,6 +145,23 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
         DNA_GENERATION_POLL_SECONDS=0.1,
     )
     def test_dna_generation_poll_reaches_review_without_manual_action(self):
+        def write_with_retry(fn, attempts=30, delay=0.1):
+            """Retry di scrittura per lock SQLite shared-cache.
+
+            Con live server + polling (0.1s) il thread server tiene lock di
+            lettura sulla tabella: lo shared-cache di SQLite ignora il
+            busy_timeout, quindi la scrittura dal main thread puo' fallire
+            con "database table is locked". Retry con backoff: il lock e'
+            transitorio per costruzione.
+            """
+            for attempt in range(attempts):
+                try:
+                    return fn()
+                except OperationalError:
+                    if attempt == attempts - 1:
+                        raise
+                    time.sleep(delay)
+
         user = get_user_model().objects.create_user(
             username="browser-generation-poll",
             email="browser-generation-poll@example.com",
@@ -174,22 +193,28 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
         session_cookie = self.client.cookies[settings.SESSION_COOKIE_NAME].value
 
         def update_progress(step_num, step_label):
-            dna = DNAGenerale.objects.get(pk=pre_dna.pk)
-            content = dict(dna.content)
-            progress = dict(content["_complete_generation"])
-            progress.update(step_num=step_num, step_label=step_label)
-            content["_complete_generation"] = progress
-            dna.content = content
-            dna.save(update_fields=["content"])
+            def _write():
+                dna = DNAGenerale.objects.get(pk=pre_dna.pk)
+                content = dict(dna.content)
+                progress = dict(content["_complete_generation"])
+                progress.update(step_num=step_num, step_label=step_label)
+                content["_complete_generation"] = progress
+                dna.content = content
+                dna.save(update_fields=["content"])
+
+            write_with_retry(_write)
 
         def create_complete_dna():
-            DNAGenerale.objects.filter(pk=pre_dna.pk).update(is_current=False)
-            DNAGenerale.objects.create(
-                company=company,
-                version=2,
-                dna_type=DNAGenerale.TYPE_COMPLETE,
-                content={key: f"Contenuto completo {key}." for key in LAYER_KEYS},
-            )
+            def _write():
+                DNAGenerale.objects.filter(pk=pre_dna.pk).update(is_current=False)
+                DNAGenerale.objects.create(
+                    company=company,
+                    version=2,
+                    dna_type=DNAGenerale.TYPE_COMPLETE,
+                    content={key: f"Contenuto completo {key}." for key in LAYER_KEYS},
+                )
+
+            write_with_retry(_write)
 
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)

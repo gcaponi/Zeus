@@ -8,6 +8,10 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": ":memory:",
+        # busy_timeout (secondi): i writer concorrenti (live server + Celery
+        # eager nei test browser) attendono invece di fallire subito con
+        # "database table is locked" — fix flaky test_dna_generation_poll_*.
+        "OPTIONS": {"timeout": 30},
     }
 }
 
