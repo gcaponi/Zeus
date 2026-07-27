@@ -31,9 +31,20 @@ from apps.companies.llm_client import (
     LLM_MODEL,
     LLM_MODEL_PRO,
     ZEUS_SYSTEM_PROMPT,
+    _generate_structured_tracked,
     _generate_with_retry,
     _parse_llm_json,
     get_llm_client,
+)
+from apps.companies.llm_schemas import (
+    CrossSpecialistAnalysisSchema,
+    FeedbackProposalsSchema,
+    GapEvaluationSchema,
+    NarrativeDNASchema,
+    ProductDNASchema,
+    QuestionSetSchema,
+    SelfCritiqueSchema,
+    StarterQuestionSetSchema,
 )
 from apps.companies.models import (
     AgentConversation,
@@ -757,38 +768,6 @@ CONTESTO ORIGINALE (SITO + NOTE + DOCUMENTI):
 """.strip()
 
 
-def _parse_question_generation(text, plan_slug=None):
-    payload = _parse_llm_json(text, context="question-generation")
-    questions = payload.get("questions") if isinstance(payload, dict) else payload
-    if not isinstance(questions, list) or len(questions) != 10:
-        raise ValueError("LLM must return exactly 10 questions")
-    if plan_slug == Plan.SLUG_STARTER:
-        _validate_foundation_suggested_answers(questions)
-    return questions
-
-
-def _validate_foundation_suggested_answers(questions):
-    for index, raw in enumerate(questions):
-        if not isinstance(raw, dict):
-            raise ValueError(f"Foundation question #{index + 1} must be an object")
-        code = raw.get("code", f"#{index + 1}")
-        suggested = raw.get("suggested_answers")
-        if not isinstance(suggested, list) or len(suggested) != 3:
-            raise ValueError(
-                f"Foundation question {code} must provide exactly 3 non-empty answers"
-            )
-        if any(not isinstance(item, str) or not item.strip() for item in suggested):
-            raise ValueError(
-                f"Foundation question {code} must provide exactly 3 non-empty answers"
-            )
-        cleaned = [item.strip() for item in suggested]
-        if len({item.casefold() for item in cleaned}) != 3:
-            raise ValueError(
-                f"Foundation question {code} suggested answers must be distinct"
-            )
-        raw["suggested_answers"] = cleaned
-
-
 def _question_pool(raw_question, index):
     pool = str(raw_question.get("pool", "")).strip()
     valid_pools = {CompanyQuestion.POOL_TEMPLATE, CompanyQuestion.POOL_KB_ANCHORED}
@@ -881,35 +860,17 @@ DOMANDE E RISPOSTE CLIENTE:
 """.strip()
 
 
-def _parse_gap_evaluation(text):
-    payload = _parse_llm_json(text, context="gap-engine")
-    if not isinstance(payload, dict):
-        raise ValueError("Gap engine response must be a JSON object")
-    evaluations = payload.get("evaluations") or []
-    follow_ups = payload.get("follow_ups") or []
-    if not isinstance(evaluations, list) or not isinstance(follow_ups, list):
-        raise ValueError("Gap engine evaluations and follow_ups must be arrays")
-    for evaluation in evaluations:
-        if evaluation.get("status") not in {"sufficiente", "insufficiente", "contradicts"}:
-            raise ValueError(f"Invalid gap evaluation status: {evaluation.get('status')}")
-    return {
-        "overall_sufficient": bool(payload.get("overall_sufficient")),
-        "evaluations": evaluations,
-        "follow_ups": follow_ups,
-    }
-
-
 def _evaluate_answer_sufficiency(company, pre_dna, questions, plan_slug):
     """Run the Gap Engine over all answered questions."""
     prompt = _gap_engine_prompt(company, pre_dna, questions, plan_slug)
     client = get_llm_client()
-    result, evaluation = _generate_with_retry(
+    result, evaluation = _generate_structured_tracked(
         client,
         prompt,
+        response_model=GapEvaluationSchema,
         model=LLM_MODEL,
         system_prompt=ZEUS_SYSTEM_PROMPT,
         temperatures=(0.4, 0.3, 0.2),
-        parse=_parse_gap_evaluation,
         context="gap-engine",
     )
     LLMCall.objects.create(
@@ -922,7 +883,7 @@ def _evaluate_answer_sufficiency(company, pre_dna, questions, plan_slug):
         cost_usd=result.cost,
         latency_ms=result.latency_ms,
     )
-    return evaluation
+    return evaluation.model_dump()
 
 
 def _create_gap_followups(company, dna, followups_data, current_round, plan_slug):
@@ -1185,13 +1146,13 @@ def _evaluate_product_answer_sufficiency(product, pre_dna, questions, plan_slug)
     """Run the Gap Engine over all answered specialist questions."""
     prompt = _gap_engine_product_prompt(product, pre_dna, questions, plan_slug)
     client = get_llm_client()
-    result, evaluation = _generate_with_retry(
+    result, evaluation = _generate_structured_tracked(
         client,
         prompt,
+        response_model=GapEvaluationSchema,
         model=LLM_MODEL,
         system_prompt=ZEUS_SYSTEM_PROMPT,
         temperatures=(0.4, 0.3, 0.2),
-        parse=_parse_gap_evaluation,
         context="product-gap-engine",
     )
     LLMCall.objects.create(
@@ -1204,7 +1165,7 @@ def _evaluate_product_answer_sufficiency(product, pre_dna, questions, plan_slug)
         cost_usd=result.cost,
         latency_ms=result.latency_ms,
     )
-    return evaluation
+    return evaluation.model_dump()
 
 
 def _create_product_gap_followups(product, dna, followups_data, current_round, plan_slug):
@@ -1409,13 +1370,6 @@ def _trigger_complete_dna(request, company, pre_dna):
     )
 
 
-def _parse_json_object(text):
-    payload = _parse_llm_json(text, context="dna-json-object")
-    if not isinstance(payload, dict):
-        raise ValueError("LLM JSON response must be an object")
-    return payload
-
-
 def _answers_by_section(questions, section_keys, fallback_section):
     answers = {key: [] for key in section_keys}
     for question in questions:
@@ -1579,18 +1533,21 @@ def _generate_company_questions(company, dna):
     prompt = _question_generation_prompt(company, dna, plan_slug)
     client = get_llm_client()
 
-    def _parse(text):
-        return _parse_question_generation(text, plan_slug=plan_slug)
-
-    result, questions_data = _generate_with_retry(
+    schema = (
+        StarterQuestionSetSchema
+        if plan_slug == Plan.SLUG_STARTER
+        else QuestionSetSchema
+    )
+    result, question_set = _generate_structured_tracked(
         client,
         prompt,
+        response_model=schema,
         model=LLM_MODEL,
         system_prompt=ZEUS_SYSTEM_PROMPT,
         temperatures=(0.5, 0.3, 0.2),
-        parse=_parse,
         context="company-questions",
     )
+    questions_data = [question.model_dump() for question in question_set.questions]
     LLMCall.objects.create(
         company=company,
         model_name=LLM_MODEL,
@@ -1751,13 +1708,13 @@ Rispondi con SOLO il JSON, senza markdown, senza preambolo.""".strip()
 
     client = get_llm_client()
     try:
-        result, rewritten = _generate_with_retry(
+        result, synthesis = _generate_structured_tracked(
             client,
             prompt,
+            response_model=NarrativeDNASchema,
             model=LLM_MODEL_PRO,
             system_prompt=ZEUS_SYSTEM_PROMPT,
             temperatures=(0.4, 0.3, 0.2),
-            parse=_parse_json_object,
             context="global-synthesis",
         )
         LLMCall.objects.create(
@@ -1770,7 +1727,7 @@ Rispondi con SOLO il JSON, senza markdown, senza preambolo.""".strip()
             cost_usd=result.cost,
             latency_ms=result.latency_ms,
         )
-        return _safe_merge_synthesis(prev_content, rewritten)
+        return _safe_merge_synthesis(prev_content, synthesis.model_dump())
     except Exception:
         logger.exception(
             "Global DNA synthesis failed for %s; keeping pre-DNA",
@@ -3519,13 +3476,13 @@ Rispondi SOLO JSON valido, senza markdown.
 
     client = get_llm_client()
     try:
-        result, raw = _generate_with_retry(
+        result, cross_analysis = _generate_structured_tracked(
             client,
             prompt,
+            response_model=CrossSpecialistAnalysisSchema,
             model=LLM_MODEL_PRO,
             system_prompt=ZEUS_SYSTEM_PROMPT,
             temperatures=(0.35, 0.25, 0.15),
-            parse=_parse_json_object,
             context="cross-specialist-analysis",
         )
         LLMCall.objects.create(
@@ -3538,7 +3495,9 @@ Rispondi SOLO JSON valido, senza markdown.
             cost_usd=result.cost,
             latency_ms=result.latency_ms,
         )
-        analysis = _normalize_cross_specialist_analysis(raw, company_dna, records)
+        analysis = _normalize_cross_specialist_analysis(
+            cross_analysis.model_dump(), company_dna, records,
+        )
         if analysis["consolidation_proposals"] or analysis["conflicts"] or analysis["shared_patterns"]:
             return analysis
     except Exception:
@@ -3636,13 +3595,13 @@ Rispondi SOLO JSON valido, senza markdown.
 
     client = get_llm_client()
     try:
-        result, rewritten = _generate_with_retry(
+        result, consolidation = _generate_structured_tracked(
             client,
             prompt,
+            response_model=NarrativeDNASchema,
             model=LLM_MODEL_PRO,
             system_prompt=ZEUS_SYSTEM_PROMPT,
             temperatures=(0.35, 0.25, 0.15),
-            parse=_parse_json_object,
             context="cross-specialist-consolidation",
         )
         LLMCall.objects.create(
@@ -3655,7 +3614,7 @@ Rispondi SOLO JSON valido, senza markdown.
             cost_usd=result.cost,
             latency_ms=result.latency_ms,
         )
-        merged = _safe_merge_synthesis(current_content, rewritten)
+        merged = _safe_merge_synthesis(current_content, consolidation.model_dump())
     except Exception:
         logger.exception(
             "Cross-specialist consolidation failed for company %s; applying cleaned fallback",
@@ -4221,14 +4180,6 @@ CONTESTO SETTORIALE E CONOSCENZA TACITA:
 """.strip()
 
 
-def _parse_product_question_generation(text):
-    payload = _parse_llm_json(text, context="product-question-generation")
-    questions = payload.get("questions") if isinstance(payload, dict) else payload
-    if not isinstance(questions, list) or len(questions) != 10:
-        raise ValueError("LLM must return exactly 10 questions")
-    return questions
-
-
 def _generate_product_questions(product, dna):
     existing = list(dna.questions.all())
     if existing:
@@ -4238,15 +4189,16 @@ def _generate_product_questions(product, dna):
     profile = QUESTION_GENERATION_PROFILES[plan_slug]
     prompt = _product_question_generation_prompt(product, dna, plan_slug)
     client = get_llm_client()
-    result, product_questions = _generate_with_retry(
+    result, question_set = _generate_structured_tracked(
         client,
         prompt,
+        response_model=QuestionSetSchema,
         model=LLM_MODEL,
         system_prompt=ZEUS_SYSTEM_PROMPT,
         temperatures=(0.5, 0.3, 0.2),
-        parse=_parse_product_question_generation,
         context="specialista-questions",
     )
+    product_questions = [question.model_dump() for question in question_set.questions]
     LLMCall.objects.create(
         company=product.company,
         model_name=LLM_MODEL,
@@ -4356,13 +4308,13 @@ Rispondi con SOLO il JSON, senza markdown, senza preambolo.""".strip()
 
     client = get_llm_client()
     try:
-        result, rewritten = _generate_with_retry(
+        result, synthesis = _generate_structured_tracked(
             client,
             prompt,
+            response_model=ProductDNASchema,
             model=LLM_MODEL_PRO,
             system_prompt=ZEUS_SYSTEM_PROMPT,
             temperatures=(0.4, 0.3, 0.2),
-            parse=_parse_json_object,
             context="global-product-synthesis",
         )
         LLMCall.objects.create(
@@ -4377,7 +4329,7 @@ Rispondi con SOLO il JSON, senza markdown, senza preambolo.""".strip()
         )
         return _safe_merge_synthesis(
             prev_content,
-            rewritten,
+            synthesis.model_dump(),
             layer_keys=PRODUCT_LAYER_KEYS,
             aliases={},
         )
@@ -4457,25 +4409,17 @@ Rispondi SOLO JSON, senza markdown.
 
     client = get_llm_client()
 
-    def _parse_critique(text):
-        data = _json.loads(text)
-        raw = data.get("proposals", [])
-        valid_keys = set(PRODUCT_LAYER_KEYS)
-        return [
-            p for p in raw
-            if p.get("section_key") in valid_keys and p.get("proposed_text", "").strip()
-        ]
-
     try:
-        result, proposals = _generate_with_retry(
+        result, critique = _generate_structured_tracked(
             client,
             prompt,
+            response_model=SelfCritiqueSchema,
             model=LLM_MODEL,
             system_prompt=ZEUS_SYSTEM_PROMPT,
             temperatures=(0.4, 0.3, 0.2),
-            parse=_parse_critique,
             context="product-self-critique",
         )
+        proposals = [proposal.model_dump() for proposal in critique.proposals]
     except Exception:
         logger.exception("Self-critique failed for product DNA %s", dna.id)
         return
@@ -5662,9 +5606,10 @@ Rispondi SOLO JSON, senza markdown.
 """.strip()
 
     client = get_llm_client()
-    result, content = _generate_with_retry(
+    result, feedback = _generate_structured_tracked(
         client,
         prompt,
+        response_model=FeedbackProposalsSchema,
         model=LLM_MODEL,
         system_prompt=ZEUS_SYSTEM_PROMPT,
         temperatures=(0.4, 0.3, 0.2),
@@ -5682,7 +5627,7 @@ Rispondi SOLO JSON, senza markdown.
         latency_ms=result.latency_ms,
     )
 
-    return content.get("proposals", [])
+    return [proposal.model_dump() for proposal in feedback.proposals]
 
 
 def _feedback_session_key(product, specialist_dna, company_dna):
@@ -5839,13 +5784,13 @@ Rispondi SOLO con JSON valido. Nessun markdown, nessuna spiegazione.
 
     client = get_llm_client()
     try:
-        result, rewritten = _generate_with_retry(
+        result, regeneration = _generate_structured_tracked(
             client,
             prompt,
+            response_model=NarrativeDNASchema,
             model=LLM_MODEL_PRO,
             system_prompt=ZEUS_SYSTEM_PROMPT,
             temperatures=(0.35, 0.25, 0.15),
-            parse=_parse_json_object,
             context="specialist-feedback-regeneration",
         )
         LLMCall.objects.create(
@@ -5858,7 +5803,7 @@ Rispondi SOLO con JSON valido. Nessun markdown, nessuna spiegazione.
             cost_usd=result.cost,
             latency_ms=result.latency_ms,
         )
-        merged = _safe_merge_synthesis(current_content, rewritten)
+        merged = _safe_merge_synthesis(current_content, regeneration.model_dump())
     except Exception:
         logger.exception(
             "Specialist feedback regeneration failed for product %s; applying cleaned fallback",

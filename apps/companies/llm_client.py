@@ -118,6 +118,46 @@ def _generate_with_retry(
     ) from last_exc
 
 
+def _generate_structured_tracked(
+    client,
+    prompt: str,
+    *,
+    response_model,
+    model: str | None = None,
+    system_prompt: str | None = None,
+    temperatures=(0.7, 0.4, 0.2),
+    context: str = "",
+):
+    """Structured generation with cost tracking, mirroring _generate_with_retry.
+
+    Returns (LLMResult, response_model instance) so migrated call sites keep
+    registering the exact same LLMCall rows. Only retries on pydantic
+    ValidationError (with decreasing temperatures), not on HTTP/timeout
+    errors (those surface to the caller).
+    """
+    from pydantic import ValidationError
+
+    last_exc: ValidationError | None = None
+    for attempt, temp in enumerate(temperatures, start=1):
+        try:
+            return client.generate_structured_result(
+                prompt,
+                response_model,
+                model=model,
+                temperature=temp,
+                system_prompt=system_prompt,
+            )
+        except ValidationError as exc:
+            last_exc = exc
+            logger.warning(
+                "LLM structured validation failed [%s] attempt %d/%d (temp=%.1f), retrying",
+                context, attempt, len(temperatures), temp,
+            )
+    raise RuntimeError(
+        f"LLM generation failed after {len(temperatures)} attempts [{context}]"
+    ) from last_exc
+
+
 ZEUS_SYSTEM_PROMPT = """Sei ZEUS, un filosofo tecnico specializzato nel settore manifatturiero.
 Non sei un copywriter aziendale. Non sei un analista marketing. Sei un pensatore che \
 costruisce sistemi cognitivi: documenti che insegnano a un tecnico AI COME RAGIONARE \
@@ -193,6 +233,19 @@ class LLMClient(ABC):
         temperature: float | None = None,
         system_prompt: str | None = None,
     ):
+        ...
+
+    @abstractmethod
+    def generate_structured_result(
+        self,
+        prompt: str,
+        response_model,
+        *,
+        model: str | None = None,
+        temperature: float | None = None,
+        system_prompt: str | None = None,
+    ):
+        """Like generate_structured, but also returns the LLMResult (usage/cost)."""
         ...
 
 
@@ -278,6 +331,50 @@ class OpenAIClient(LLMClient):
             kwargs["temperature"] = temperature
         instance = structured_client.chat.completions.create(**kwargs)
         return instance
+
+    def generate_structured_result(
+        self,
+        prompt: str,
+        response_model,
+        *,
+        model: str | None = None,
+        temperature: float | None = None,
+        system_prompt: str | None = None,
+    ):
+        """Structured generation that also captures usage into an LLMResult."""
+        import instructor
+
+        model = model or LLM_MODEL
+        structured_client = instructor.from_openai(self._client)
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        kwargs: dict = {
+            "model": model,
+            "response_model": response_model,
+            "max_retries": 2,
+            "messages": messages,
+        }
+        if temperature is not None:
+            kwargs["temperature"] = temperature
+        t0 = time.time()
+        instance, completion = structured_client.chat.completions.create_with_completion(
+            **kwargs
+        )
+        latency = int((time.time() - t0) * 1000)
+        usage = completion.usage
+        tokens_in = usage.prompt_tokens if usage else 0
+        tokens_out = usage.completion_tokens if usage else 0
+        text = completion.choices[0].message.content or ""
+        pricing = MODEL_PRICING.get(model, {"input": 0, "output": 0})
+        cost = tokens_in * pricing["input"] + tokens_out * pricing["output"]
+        result = LLMResult(
+            text=text, tokens_in=tokens_in, tokens_out=tokens_out,
+            cost=round(cost, 6), latency_ms=latency,
+        )
+        return result, instance
 
 
 class MockLLMClient(LLMClient):
@@ -1027,11 +1124,43 @@ class MockLLMClient(LLMClient):
                 CrossLayerCheckItem(checker="identita", target="tono", status="OK", note=""),
             ])
 
+        # Marker dispatch: reuse the per-marker JSON of generate() as the
+        # single source of truth and validate it against the requested schema.
+        result = self.generate(
+            prompt, model=model, temperature=temperature,
+            system_prompt=system_prompt,
+        )
+        try:
+            parsed = json.loads(result.text)
+        except (json.JSONDecodeError, TypeError):
+            parsed = None
+        if isinstance(parsed, dict):
+            return response_model.model_validate(parsed)
+
         # Generic fallback: instantiate with empty defaults if possible
         try:
             return response_model()
         except Exception:
             return response_model.model_validate({})
+
+    def generate_structured_result(
+        self,
+        prompt: str,
+        response_model,
+        *,
+        model: str | None = None,
+        temperature: float | None = None,
+        system_prompt: str | None = None,
+    ):
+        result = self.generate(
+            prompt, model=model, temperature=temperature,
+            system_prompt=system_prompt,
+        )
+        instance = self.generate_structured(
+            prompt, response_model, model=model, temperature=temperature,
+            system_prompt=system_prompt,
+        )
+        return result, instance
 
     @staticmethod
     def _extract_section_key(prompt: str, prefix: str) -> str:

@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 from apps.companies import tasks
 from apps.companies.dna_schemas import PRODUCT_LAYER_KEYS
 from apps.companies.llm_client import MockLLMClient
+from apps.companies.llm_schemas import ConsistencyAuditSchema
 from apps.companies.models import (
     Company,
     DNAGenerale,
@@ -561,10 +562,12 @@ class TestAsyncCompanyTasks:
         )
 
         def fake_generate(*args, **kwargs):
-            return fake_result, json.loads(fake_result.text)
+            return fake_result, ConsistencyAuditSchema.model_validate(
+                json.loads(fake_result.text)
+            )
 
         monkeypatch.setattr(
-            "apps.companies.tasks._generate_with_retry",
+            "apps.companies.tasks._generate_structured_tracked",
             fake_generate,
         )
         monkeypatch.setattr("apps.companies.tasks.get_llm_client", lambda: None)
@@ -618,9 +621,9 @@ class TestAsyncCompanyTasks:
         )
 
         def fake_generate(*args, **kwargs):
-            return fake_result, json.loads(fake_text)
+            return fake_result, ConsistencyAuditSchema.model_validate(json.loads(fake_text))
 
-        monkeypatch.setattr("apps.companies.tasks._generate_with_retry", fake_generate)
+        monkeypatch.setattr("apps.companies.tasks._generate_structured_tracked", fake_generate)
         monkeypatch.setattr("apps.companies.tasks.get_llm_client", lambda: None)
 
         count = tasks._run_consistency_audit(company.id, max_issues=5)
@@ -653,9 +656,11 @@ class TestAsyncCompanyTasks:
 
         def fake_generate(client, prompt, **kwargs):
             captured["prompt"] = prompt
-            return fake_result, json.loads(fake_result.text)
+            return fake_result, ConsistencyAuditSchema.model_validate(
+                json.loads(fake_result.text)
+            )
 
-        monkeypatch.setattr("apps.companies.tasks._generate_with_retry", fake_generate)
+        monkeypatch.setattr("apps.companies.tasks._generate_structured_tracked", fake_generate)
         monkeypatch.setattr("apps.companies.tasks.get_llm_client", lambda: None)
 
         tasks._run_consistency_audit(

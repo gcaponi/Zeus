@@ -191,16 +191,35 @@ class TestGenerateDnaNotesSeparation:
         captured_prompt = {}
 
         class FakeClient:
-            def generate(self, prompt, *, model=None, **kw):
+            def generate_structured_result(
+                self, prompt, response_model, *, model=None, **kw
+            ):
                 captured_prompt["prompt"] = prompt
                 from apps.companies.llm_client import LLMResult
-                return LLMResult(
+                result = LLMResult(
                     text='{"identita": {"postura": "x", "convinzioni": []}}',
                     tokens_in=100,
                     tokens_out=50,
                     cost=0.0001,
                     latency_ms=100,
                 )
+                instance = response_model.model_validate({
+                    "identita": {"postura": "x", "convinzioni": []},
+                    "modelli_mentali": {"pilastri": [], "sequenza_di_lettura": "s"},
+                    "nucleo_tecnico": {
+                        "approccio_distintivo": "a",
+                        "trade_off_scelti": "t",
+                        "famiglie_prodotto": [],
+                    },
+                    "confini": {"anti_pattern": [], "richieste_rifiutate": "r"},
+                    "tono": {"registro": "r", "esempi": []},
+                    "logica_decisionale": {
+                        "filosofia_custom": "f",
+                        "escalation": "e",
+                    },
+                    "sintesi_cognitiva": "sintesi",
+                })
+                return result, instance
 
         monkeypatch.setattr(tasks, "get_llm_client", lambda: FakeClient())
 

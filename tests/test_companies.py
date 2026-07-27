@@ -1651,7 +1651,11 @@ class TestDNAQuestions:
             cost=0,
             latency_ms=1,
         )
-        client = SimpleNamespace(generate=lambda prompt, **kw: result)
+
+        def fake_structured_result(prompt, response_model, **kw):
+            return result, response_model.model_validate(json.loads(result.text))
+
+        client = SimpleNamespace(generate_structured_result=fake_structured_result)
 
         with patch("apps.companies.views.get_llm_client", return_value=client):
             questions = views._generate_company_questions(company, pre_dna)
@@ -1909,6 +1913,13 @@ class TestDNAQuestions:
         assert b"zeus-suggested-answer" not in resp.content
 
     def test_parse_question_generation_validates_foundation_suggested_answers(self):
+        from pydantic import ValidationError
+
+        from apps.companies.llm_schemas import (
+            QuestionSetSchema,
+            StarterQuestionSetSchema,
+        )
+
         base_template = {
             "code": "A1",
             "pool": "template",
@@ -1927,59 +1938,39 @@ class TestDNAQuestions:
                 ]
             }
 
-        valid = views._parse_question_generation(
-            json.dumps(make_payload(["one", "two", "three"])),
-            plan_slug=Plan.SLUG_STARTER,
+        valid = StarterQuestionSetSchema.model_validate(
+            make_payload(["one", "two", "three"])
         )
-        assert valid[0]["suggested_answers"] == ["one", "two", "three"]
+        assert valid.questions[0].suggested_answers == ["one", "two", "three"]
 
-        with pytest.raises(ValueError):
-            views._parse_question_generation(
-                json.dumps(make_payload(["only one", "two"])),
-                plan_slug=Plan.SLUG_STARTER,
+        with pytest.raises(ValidationError):
+            StarterQuestionSetSchema.model_validate(make_payload(["only one", "two"]))
+
+        with pytest.raises(ValidationError):
+            StarterQuestionSetSchema.model_validate(
+                make_payload(["same", " Same ", "other"])
             )
 
-        with pytest.raises(ValueError):
-            views._parse_question_generation(
-                json.dumps(make_payload(["same", " Same ", "other"])),
-                plan_slug=Plan.SLUG_STARTER,
-            )
+        with pytest.raises(ValidationError):
+            StarterQuestionSetSchema.model_validate(make_payload(["ok", "", "fine"]))
 
-        with pytest.raises(ValueError):
-            views._parse_question_generation(
-                json.dumps(make_payload(["ok", "", "fine"])),
-                plan_slug=Plan.SLUG_STARTER,
-            )
-
-        with pytest.raises(ValueError):
-            views._parse_question_generation(
-                json.dumps(make_payload(["ok", 2, "fine"])),
-                plan_slug=Plan.SLUG_STARTER,
-            )
+        with pytest.raises(ValidationError):
+            StarterQuestionSetSchema.model_validate(make_payload(["ok", 2, "fine"]))
 
         payload_no_key = {
             "questions": [{**base_template, "code": f"A{i + 1}"} for i in range(10)]
         }
-        with pytest.raises(ValueError):
-            views._parse_question_generation(
-                json.dumps(payload_no_key),
-                plan_slug=Plan.SLUG_STARTER,
-            )
+        with pytest.raises(ValidationError):
+            StarterQuestionSetSchema.model_validate(payload_no_key)
 
         payload_non_object = {
             "questions": ["invalid", *make_payload(["one", "two", "three"])["questions"][1:]]
         }
-        with pytest.raises(ValueError):
-            views._parse_question_generation(
-                json.dumps(payload_non_object),
-                plan_slug=Plan.SLUG_STARTER,
-            )
+        with pytest.raises(ValidationError):
+            StarterQuestionSetSchema.model_validate(payload_non_object)
 
-        non_foundation = views._parse_question_generation(
-            json.dumps(payload_no_key),
-            plan_slug=Plan.SLUG_PROFESSIONAL,
-        )
-        assert "suggested_answers" not in non_foundation[0]
+        non_foundation = QuestionSetSchema.model_validate(payload_no_key)
+        assert non_foundation.questions[0].suggested_answers is None
 
     def test_foundation_parse_exhaustion_persists_failed_async_state(
         self, rf_with_tenant, monkeypatch
@@ -2008,7 +1999,13 @@ class TestDNAQuestions:
             cost=0,
             latency_ms=1,
         )
-        client = SimpleNamespace(generate=lambda prompt, **kw: result)
+
+        def fake_structured_result(prompt, response_model, **kw):
+            # Validation fails (missing starter suggested_answers) on every
+            # attempt, so the tracked helper exhausts its retries.
+            return result, response_model.model_validate(json.loads(result.text))
+
+        client = SimpleNamespace(generate_structured_result=fake_structured_result)
         monkeypatch.setattr(views, "get_llm_client", lambda: client)
 
         resp = views.dna_questions(rf_with_tenant("get", reverse("dna-questions")))
@@ -2531,7 +2528,11 @@ class TestProductViews:
             cost=0,
             latency_ms=1,
         )
-        client = SimpleNamespace(generate=lambda prompt, **kw: result)
+
+        def fake_structured_result(prompt, response_model, **kw):
+            return result, response_model.model_validate(json.loads(result.text))
+
+        client = SimpleNamespace(generate_structured_result=fake_structured_result)
 
         with patch("apps.companies.views.get_llm_client", return_value=client):
             questions = views._generate_product_questions(product, dna)
@@ -3170,6 +3171,8 @@ class TestCrossSpecialistThreshold:
         setattr(req, "_messages", FallbackStorage(req))
 
         # Mock the LLM so we verify the gate passes without a real API call.
+        from apps.companies.llm_schemas import CrossSpecialistAnalysisSchema
+
         fake = SimpleNamespace(
             text='{"summary": "ok", "shared_patterns": [], "conflicts": [], "consolidation_proposals": []}',
             tokens_in=10,
@@ -3178,8 +3181,11 @@ class TestCrossSpecialistThreshold:
             latency_ms=1,
         )
         monkeypatch.setattr(
-            "apps.companies.views._generate_with_retry",
-            lambda *a, **kw: (fake, json.loads(fake.text)),
+            "apps.companies.views._generate_structured_tracked",
+            lambda *a, **kw: (
+                fake,
+                CrossSpecialistAnalysisSchema.model_validate(json.loads(fake.text)),
+            ),
         )
         monkeypatch.setattr("apps.companies.views.get_llm_client", lambda: None)
 

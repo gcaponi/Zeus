@@ -14,8 +14,14 @@ from apps.companies.llm_client import (
     LLM_MODEL,
     LLM_MODEL_PRO,
     ZEUS_SYSTEM_PROMPT,
-    _generate_with_retry,
+    _generate_structured_tracked,
     get_llm_client,
+)
+from apps.companies.llm_schemas import (
+    ConceptMapSchema,
+    ConsistencyAuditSchema,
+    PreDNAGeneraleSchema,
+    ProductDNASchema,
 )
 from apps.companies.models import (
     DNAGenerale,
@@ -277,14 +283,16 @@ def _run_consistency_audit(
     raw = {"summary": "Audit non eseguito.", "issues": []}
     try:
         client = get_llm_client()
-        result, raw = _generate_with_retry(
+        result, audit = _generate_structured_tracked(
             client,
             prompt,
+            response_model=ConsistencyAuditSchema,
             model=LLM_MODEL_PRO,
             system_prompt=ZEUS_SYSTEM_PROMPT,
             temperatures=(0.25, 0.15, 0.05),
             context="consistency-audit",
         )
+        raw = audit.model_dump()
         LLMCall.objects.create(
             company=company,
             model_name=LLM_MODEL_PRO,
@@ -430,14 +438,16 @@ def _generate_dna(source: Source, company):
     )
 
     client = get_llm_client()
-    result, content = _generate_with_retry(
+    result, pre_dna = _generate_structured_tracked(
         client,
         prompt,
+        response_model=PreDNAGeneraleSchema,
         model=LLM_MODEL_PRO,
         system_prompt=ZEUS_SYSTEM_PROMPT,
         temperatures=(0.5, 0.3, 0.2),
         context="pre-dna",
     )
+    content = pre_dna.model_dump()
 
     llm_call = LLMCall.objects.create(
         company=company,
@@ -545,21 +555,14 @@ Rispondi SOLO JSON valido, senza markdown.
 
     client = get_llm_client()
 
-    def _parse_concept_map(text):
-        data = json.loads(text)
-        for key in ("entities", "relations", "parameters", "gaps"):
-            if not isinstance(data.get(key), list):
-                data[key] = []
-        return data
-
     try:
-        result, concept_map = _generate_with_retry(
+        result, concept_map = _generate_structured_tracked(
             client,
             prompt,
+            response_model=ConceptMapSchema,
             model=LLM_MODEL,
             system_prompt=ZEUS_SYSTEM_PROMPT,
             temperatures=(0.4, 0.3, 0.2),
-            parse=_parse_concept_map,
             context="product-concept-map",
         )
         LLMCall.objects.create(
@@ -572,7 +575,7 @@ Rispondi SOLO JSON valido, senza markdown.
             cost_usd=result.cost,
             latency_ms=result.latency_ms,
         )
-        return concept_map
+        return concept_map.model_dump(by_alias=True)
     except Exception:
         logger.exception("Concept map extraction failed for product %s", product.pk)
         return None
@@ -646,14 +649,16 @@ applicazione, vincoli, configurazione. Rispondi SOLO JSON.
 """.strip()
 
     client = get_llm_client()
-    result, content = _generate_with_retry(
+    result, seed = _generate_structured_tracked(
         client,
         prompt,
+        response_model=ProductDNASchema,
         model=LLM_MODEL,
         system_prompt=ZEUS_SYSTEM_PROMPT,
         temperatures=(0.5, 0.3, 0.2),
         context=f"product-seed-{angle}",
     )
+    content = seed.model_dump()
     LLMCall.objects.create(
         company=company,
         model_name=LLM_MODEL,
@@ -708,14 +713,16 @@ applicazione, vincoli, configurazione. Rispondi SOLO JSON.
 """.strip()
 
     client = get_llm_client()
-    result, content = _generate_with_retry(
+    result, merged = _generate_structured_tracked(
         client,
         prompt,
+        response_model=ProductDNASchema,
         model=LLM_MODEL,
         system_prompt=ZEUS_SYSTEM_PROMPT,
         temperatures=(0.4, 0.3, 0.2),
         context="product-merge",
     )
+    content = merged.model_dump()
     llm_call = LLMCall.objects.create(
         company=company,
         model_name=LLM_MODEL,
@@ -965,10 +972,12 @@ applicazione, vincoli, configurazione. Rispondi SOLO JSON.
 """.strip()
 
     client = get_llm_client()
-    result, content = _generate_with_retry(
-        client, prompt, model=LLM_MODEL, system_prompt=ZEUS_SYSTEM_PROMPT,
+    result, singlepass = _generate_structured_tracked(
+        client, prompt, response_model=ProductDNASchema, model=LLM_MODEL,
+        system_prompt=ZEUS_SYSTEM_PROMPT,
         temperatures=(0.5, 0.3, 0.2), context="product-pre-dna-fallback",
     )
+    content = singlepass.model_dump()
     llm_call = LLMCall.objects.create(
         company=company, model_name=LLM_MODEL, prompt_text=prompt,
         response_text=result.text, tokens_in=result.tokens_in,
