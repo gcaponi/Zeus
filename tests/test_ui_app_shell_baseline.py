@@ -31,7 +31,7 @@ from apps.core.views import (
         ("tenant-dashboard", "/dashboard/"),
         ("app-shell-preview", "/__shell_preview/"),
         ("onboarding-index", "/onboarding/"),
-        ("product-list-create", "/products/"),
+        ("specialista-list-create", "/products/"),
         ("motore-b-report", "/company/dna/motore-b/"),
         ("consistency-report", "/company/dna/consistency/"),
     ],
@@ -139,7 +139,7 @@ def test_dashboard_uses_app_shell_when_flag_enabled():
     assert b"zeus-app-shell--tenant" in response.content
     assert b"UI Baseline" in response.content
     assert reverse("onboarding-index").encode() in response.content
-    assert reverse("product-list-create").encode() in response.content
+    assert reverse("specialista-list-create").encode() in response.content
     assert b'id="zeus-method"' in response.content
     assert response.content.count(b'class="zeus-method-step ') == 4
     assert b"Fondamenta" in response.content
@@ -174,7 +174,7 @@ def test_tenant_shell_exposes_navigation_command_palette():
     for url_name in (
         "tenant-dashboard",
         "onboarding-index",
-        "product-list-create",
+        "specialista-list-create",
         "motore-b-report",
         "consistency-report",
     ):

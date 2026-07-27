@@ -8,7 +8,7 @@ note category when no client note was provided, is a mismatch — a signal that
 the LLM may have fabricated its grounding.
 
 Pure Python, no LLM. Works on DNAGeneraleSchema instances or plain dicts
-(as stored in CompanyDNA.content).
+(as stored in DNAGenerale.content).
 """
 from __future__ import annotations
 

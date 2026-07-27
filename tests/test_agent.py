@@ -13,10 +13,10 @@ from apps.companies.models import (
     AgentConversation,
     AgentMessage,
     Company,
-    CompanyDNA,
+    DNAGenerale,
     CompanyFile,
     LLMCall,
-    Product,
+    Specialista,
     ProductDNA,
     ProductFile,
 )
@@ -24,10 +24,10 @@ from apps.companies.models import (
 
 def _approved_company(schema="agent-tenant", name="Agent Co"):
     company = Company.objects.create(schema_name=schema, name=name)
-    CompanyDNA.objects.create(
+    DNAGenerale.objects.create(
         company=company,
         version=1,
-        dna_type=CompanyDNA.TYPE_COMPLETE,
+        dna_type=DNAGenerale.TYPE_COMPLETE,
         content={
             "sintesi_cognitiva": "Azienda di lavorazione metalli di precisione.",
             "identita": "Precisione e affidabilita.",
@@ -38,12 +38,12 @@ def _approved_company(schema="agent-tenant", name="Agent Co"):
 
 
 def _active_product(company, name="Celle frigo"):
-    product = Product.objects.create(
+    product = Specialista.objects.create(
         company=company,
         name=name,
         slug="celle-frigo",
         codice="CF-001",
-        status=Product.STATUS_ATTIVO,
+        status=Specialista.STATUS_ATTIVO,
     )
     ProductDNA.objects.create(
         product=product,
@@ -74,20 +74,20 @@ class TestBuildSystemPrompt:
         assert agent_service.build_system_prompt(company) is None
 
         # DNA completo ma non approvato: il gate non si apre.
-        CompanyDNA.objects.create(
+        DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             content={"sintesi_cognitiva": "bozza"},
         )
         assert agent_service.build_system_prompt(company) is None
 
         # Pre-DNA approvato non basta: serve il tipo "complete".
-        CompanyDNA.objects.filter(company=company).update(is_current=False)
-        CompanyDNA.objects.create(
+        DNAGenerale.objects.filter(company=company).update(is_current=False)
+        DNAGenerale.objects.create(
             company=company,
             version=2,
-            dna_type=CompanyDNA.TYPE_PRE,
+            dna_type=DNAGenerale.TYPE_PRE,
             content={"sintesi_cognitiva": "pre"},
             is_approved=timezone.now(),
         )
@@ -102,11 +102,11 @@ class TestBuildSystemPrompt:
 
     def test_product_without_dna_falls_back_to_general(self):
         company = _approved_company()
-        product = Product.objects.create(
+        product = Specialista.objects.create(
             company=company,
             name="Senza DNA",
             slug="senza-dna",
-            status=Product.STATUS_ATTIVO,
+            status=Specialista.STATUS_ATTIVO,
         )
         prompt = agent_service.build_system_prompt(company, product)
         assert "non ha ancora un DNA Specialista completo" in prompt
@@ -157,12 +157,12 @@ class TestRetrieval:
     def test_product_scope_includes_product_and_company_files(self):
         company = _approved_company()
         product = _active_product(company)
-        other_product = Product.objects.create(
+        other_product = Specialista.objects.create(
             company=company,
             name="Altro prodotto",
             slug="altro-prodotto",
             codice="AP-001",
-            status=Product.STATUS_ATTIVO,
+            status=Specialista.STATUS_ATTIVO,
         )
         CompanyFile.objects.create(
             company=company,

@@ -686,7 +686,7 @@
         </a>
         <div class="zeus-nav-links">
             <a href="{% url 'onboarding-index' %}"{% if '/onboarding' in request.path %} class="is-active" aria-current="page"{% endif %}>Onboarding</a>
-            <a href="{% url 'product-list-create' %}"{% if '/specialisti' in request.path or '/products' in request.path %} class="is-active" aria-current="page"{% endif %}>Specialisti</a>
+            <a href="{% url 'specialista-list-create' %}"{% if '/specialisti' in request.path or '/products' in request.path %} class="is-active" aria-current="page"{% endif %}>Specialisti</a>
             <a href="{% url 'motore-b-report' %}"{% if '/motore-b' in request.path %} class="is-active" aria-current="page"{% endif %}>Motore B</a>
             <a href="{% url 'consistency-report' %}"{% if '/motore-c' in request.path or '/consistency' in request.path %} class="is-active" aria-current="page"{% endif %}>Motore C</a>
         </div>
@@ -702,7 +702,7 @@
         </button>
         <div id="zeus-mobile-menu" class="zeus-mobile-menu">
             <a href="{% url 'onboarding-index' %}"{% if '/onboarding' in request.path %} class="is-active" aria-current="page"{% endif %}>Onboarding</a>
-            <a href="{% url 'product-list-create' %}"{% if '/specialisti' in request.path or '/products' in request.path %} class="is-active" aria-current="page"{% endif %}>Specialisti</a>
+            <a href="{% url 'specialista-list-create' %}"{% if '/specialisti' in request.path or '/products' in request.path %} class="is-active" aria-current="page"{% endif %}>Specialisti</a>
             <a href="{% url 'motore-b-report' %}"{% if '/motore-b' in request.path %} class="is-active" aria-current="page"{% endif %}>Motore B</a>
             <a href="{% url 'consistency-report' %}"{% if '/motore-c' in request.path or '/consistency' in request.path %} class="is-active" aria-current="page"{% endif %}>Motore C</a>
             <button type="button" onclick="document.getElementById('theme-toggle').click()" class="text-left">Tema chiaro/scuro</button>

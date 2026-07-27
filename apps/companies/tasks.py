@@ -18,11 +18,11 @@ from apps.companies.llm_client import (
     get_llm_client,
 )
 from apps.companies.models import (
-    CompanyDNA,
+    DNAGenerale,
     ConsistencyIssue,
     LLMCall,
     PipelineRun,
-    Product,
+    Specialista,
     ProductDNA,
     Source,
 )
@@ -55,8 +55,8 @@ def _set_progress(run_id, step_num, steps_total, label):
 
 def _set_product_generation_progress(product_id, step_num, steps_total, label):
     """Persist Specialist generation progress for the polling UI."""
-    Product.objects.filter(pk=product_id).update(
-        status=Product.STATUS_IN_COSTRUZIONE,
+    Specialista.objects.filter(pk=product_id).update(
+        status=Specialista.STATUS_IN_COSTRUZIONE,
         generation_step=f"{step_num}/{steps_total}: {label}",
         updated_at=timezone.now(),
     )
@@ -111,7 +111,7 @@ def _consistency_specialist_records(company, product=None):
     if product is not None:
         products = company.products.filter(pk=product.pk).order_by("name")
     else:
-        products = company.products.filter(status=Product.STATUS_ATTIVO).order_by("name")
+        products = company.products.filter(status=Specialista.STATUS_ATTIVO).order_by("name")
     records = []
     for specialist in products:
         dna = specialist.dna_versions.filter(
@@ -218,7 +218,7 @@ def _run_consistency_audit(
         return 0
 
     company_dna = company.dna_versions.filter(
-        dna_type=CompanyDNA.TYPE_COMPLETE,
+        dna_type=DNAGenerale.TYPE_COMPLETE,
         is_current=True,
     ).first()
     if not company_dna:
@@ -230,7 +230,7 @@ def _run_consistency_audit(
     if product_id is not None:
         try:
             product = company.products.get(pk=product_id)
-        except Product.DoesNotExist:
+        except Specialista.DoesNotExist:
             logger.error("run_consistency_audit: product %s not found", product_id)
             return 0
         product_dna = product.dna_versions.filter(
@@ -460,10 +460,10 @@ def _generate_dna(source: Source, company):
     last_version = company.dna_versions.order_by("-version").first()
     next_version = (last_version.version + 1) if last_version else 1
     company.dna_versions.filter(is_current=True).update(is_current=False)
-    dna = CompanyDNA.objects.create(
+    dna = DNAGenerale.objects.create(
         company=company,
         version=next_version,
-        dna_type=CompanyDNA.TYPE_PRE,
+        dna_type=DNAGenerale.TYPE_PRE,
         content=content,
     )
     # Cognitive enrichment + audit hash (PIANO 1.5 integration).
@@ -474,7 +474,7 @@ def _generate_dna(source: Source, company):
     return dna, llm_call
 
 
-def _extract_concept_map(product: Product, company):
+def _extract_concept_map(product: Specialista, company):
     """Stage 1 — Extract structured concept map from product documents before DNA generation.
 
     This is the 'explicit planning phase': instead of asking the LLM to go from raw
@@ -486,7 +486,7 @@ def _extract_concept_map(product: Product, company):
         documents.append(f"# {product_file.original_name}\n{product_file.content_text}")
 
     company_dna = company.dna_versions.filter(
-        dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True
+        dna_type=DNAGenerale.TYPE_COMPLETE, is_current=True
     ).first()
     company_context = ""
     if company_dna:
@@ -604,7 +604,7 @@ def _generate_seed_variant(concept_map, company, product, angle):
     """Generate one pre-DNA variant from a specific reading angle."""
     instruction = _SEED_ANGLES[angle]
     company_dna = company.dna_versions.filter(
-        dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True
+        dna_type=DNAGenerale.TYPE_COMPLETE, is_current=True
     ).first()
     company_context = json.dumps(company_dna.content, ensure_ascii=False, indent=2) if company_dna else ""
 
@@ -670,7 +670,7 @@ applicazione, vincoli, configurazione. Rispondi SOLO JSON.
 def _merge_seed_variants(variants, concept_map, company, product):
     """Merge multiple seed variants into a unified pre-DNA."""
     company_dna = company.dna_versions.filter(
-        dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True
+        dna_type=DNAGenerale.TYPE_COMPLETE, is_current=True
     ).first()
     company_context = json.dumps(company_dna.content, ensure_ascii=False, indent=2) if company_dna else ""
 
@@ -821,7 +821,7 @@ def _refine_sections_parallel(merged_content, concept_map, product, company, ten
     return refined
 
 
-def _generate_product_dna(product: Product, company, tenant_schema=None):
+def _generate_product_dna(product: Specialista, company, tenant_schema=None):
     """Generate ProductDNA: concept map → 3 seed variants (parallel) → merge."""
     _set_product_generation_progress(product.pk, 1, 5, "Concept Map")
     concept_map = _extract_concept_map(product, company)
@@ -873,7 +873,7 @@ def _generate_product_dna(product: Product, company, tenant_schema=None):
     missing = [k for k in PLK if not content.get(k)]
     if missing:
         logger.warning(
-            "Product pre-DNA incompleto per %s, sezioni mancanti: %s",
+            "Specialista pre-DNA incompleto per %s, sezioni mancanti: %s",
             company.schema_name,
             missing,
         )
@@ -884,7 +884,7 @@ def _generate_product_dna(product: Product, company, tenant_schema=None):
         leaks = validate_no_editorial_leakage(content)
         if leaks:
             logger.error(
-                "Product pre-DNA EDITORIAL LEAKAGE for %s (%s): %d fragments. First: %s",
+                "Specialista pre-DNA EDITORIAL LEAKAGE for %s (%s): %d fragments. First: %s",
                 company.schema_name, product.name, len(leaks), leaks[0][:200],
             )
     except Exception:
@@ -907,10 +907,10 @@ def _generate_product_dna(product: Product, company, tenant_schema=None):
     return dna, llm_call
 
 
-def _generate_product_dna_singlepass(product: Product, company, concept_map=None):
+def _generate_product_dna_singlepass(product: Specialista, company, concept_map=None):
     """Fallback: single-pass DNA generation without multi-seed (used when all seeds fail)."""
     company_dna = company.dna_versions.filter(
-        dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True
+        dna_type=DNAGenerale.TYPE_COMPLETE, is_current=True
     ).first()
     company_context = json.dumps(company_dna.content, ensure_ascii=False, indent=2) if company_dna else ""
 
@@ -983,7 +983,7 @@ applicazione, vincoli, configurazione. Rispondi SOLO JSON.
         leaks = validate_no_editorial_leakage(content)
         if leaks:
             logger.error(
-                "Product singlepass EDITORIAL LEAKAGE for %s (%s): %d fragments. First: %s",
+                "Specialista singlepass EDITORIAL LEAKAGE for %s (%s): %d fragments. First: %s",
                 company.schema_name, product.name, len(leaks), leaks[0][:200],
             )
     except Exception:
@@ -1093,8 +1093,8 @@ def generate_company_questions_task(company_id, pre_dna_id, tenant_schema=None):
 
         try:
             company = Company.objects.get(pk=company_id)
-            pre_dna = CompanyDNA.objects.get(pk=pre_dna_id)
-        except (Company.DoesNotExist, CompanyDNA.DoesNotExist):
+            pre_dna = DNAGenerale.objects.get(pk=pre_dna_id)
+        except (Company.DoesNotExist, DNAGenerale.DoesNotExist):
             logger.error("generate_company_questions: company or pre_dna not found")
             return
 
@@ -1166,8 +1166,8 @@ def process_company_gap_round_task(
 
         try:
             company = Company.objects.get(pk=company_id)
-            pre_dna = CompanyDNA.objects.get(pk=pre_dna_id)
-        except (Company.DoesNotExist, CompanyDNA.DoesNotExist):
+            pre_dna = DNAGenerale.objects.get(pk=pre_dna_id)
+        except (Company.DoesNotExist, DNAGenerale.DoesNotExist):
             logger.error("process_company_gap_round: company or pre_dna not found")
             return
 
@@ -1176,7 +1176,7 @@ def process_company_gap_round_task(
 
         def _dispatch_complete():
             latest_complete = company.dna_versions.filter(
-                dna_type=CompanyDNA.TYPE_COMPLETE,
+                dna_type=DNAGenerale.TYPE_COMPLETE,
             ).order_by("-version").first()
             expected_version = latest_complete.version + 1 if latest_complete else 1
             _set_company_async_processing(
@@ -1282,8 +1282,8 @@ def generate_complete_dna(company_id, pre_dna_id, user_id, tenant_schema=None):
 
         try:
             company = Company.objects.get(pk=company_id)
-            pre_dna = CompanyDNA.objects.get(pk=pre_dna_id)
-        except (Company.DoesNotExist, CompanyDNA.DoesNotExist):
+            pre_dna = DNAGenerale.objects.get(pk=pre_dna_id)
+        except (Company.DoesNotExist, DNAGenerale.DoesNotExist):
             logger.error("generate_complete_dna: company or pre_dna not found")
             return
 
@@ -1331,13 +1331,13 @@ def generate_complete_dna(company_id, pre_dna_id, user_id, tenant_schema=None):
 def generate_complete_product_dna(product_id, pre_dna_id, user_id, tenant_schema=None):
     def _run():
         from django.contrib.auth import get_user_model
-        from apps.companies.models import Product
+        from apps.companies.models import Specialista
         from apps.companies.views import _create_complete_product_dna, _set_product_gap_processing
 
         try:
-            product = Product.objects.get(pk=product_id)
+            product = Specialista.objects.get(pk=product_id)
             pre_dna = ProductDNA.objects.get(pk=pre_dna_id)
-        except (Product.DoesNotExist, ProductDNA.DoesNotExist):
+        except (Specialista.DoesNotExist, ProductDNA.DoesNotExist):
             logger.error(
                 "generate_complete_product_dna: product or pre_dna not found"
             )
@@ -1386,13 +1386,13 @@ def generate_complete_product_dna(product_id, pre_dna_id, user_id, tenant_schema
 @shared_task
 def generate_product_questions_task(product_id, pre_dna_id, tenant_schema=None):
     def _run():
-        from apps.companies.models import Product, ProductDNA
+        from apps.companies.models import Specialista, ProductDNA
         from apps.companies.views import _generate_product_questions
 
         try:
-            product = Product.objects.get(pk=product_id)
+            product = Specialista.objects.get(pk=product_id)
             pre_dna = ProductDNA.objects.get(pk=pre_dna_id)
-        except (Product.DoesNotExist, ProductDNA.DoesNotExist):
+        except (Specialista.DoesNotExist, ProductDNA.DoesNotExist):
             logger.error("generate_product_questions: product or pre_dna not found")
             return
 
@@ -1401,12 +1401,12 @@ def generate_product_questions_task(product_id, pre_dna_id, tenant_schema=None):
             _generate_product_questions(product, pre_dna)
             product.generation_step = "5/5: Domande pronte"
             product.save(update_fields=["generation_step", "updated_at"])
-            logger.info("Product questions generated for product %s", product.pk)
+            logger.info("Specialista questions generated for product %s", product.pk)
         except Exception:
             product.generation_step = "5/5: Domande non completate"
             product.save(update_fields=["generation_step", "updated_at"])
             logger.exception(
-                "Product question generation failed for product %s", product.pk
+                "Specialista question generation failed for product %s", product.pk
             )
 
     if tenant_schema and hasattr(connection, "tenant"):
@@ -1435,9 +1435,9 @@ def process_product_gap_round_task(
         )
 
         try:
-            product = Product.objects.get(pk=product_id)
+            product = Specialista.objects.get(pk=product_id)
             pre_dna = ProductDNA.objects.get(pk=pre_dna_id)
-        except (Product.DoesNotExist, ProductDNA.DoesNotExist):
+        except (Specialista.DoesNotExist, ProductDNA.DoesNotExist):
             logger.error("process_product_gap_round: product or pre_dna not found")
             return
 
@@ -1501,13 +1501,13 @@ def process_product_gap_round_task(
                 step_label="Follow-up pronti",
             )
             logger.info(
-                "Product gap follow-ups created for product %s round %s",
+                "Specialista gap follow-ups created for product %s round %s",
                 product.pk,
                 current_round,
             )
         except Exception as exc:
             logger.exception(
-                "Product gap processing failed for product %s round %s; dispatching complete DNA",
+                "Specialista gap processing failed for product %s round %s; dispatching complete DNA",
                 product.pk,
                 current_round,
             )
@@ -1539,13 +1539,13 @@ def process_product_gap_round_task(
 def apply_specialist_feedback_task(company_id, company_dna_id, tenant_schema=None):
     """Regenerate Company DNA from approved specialist feedback (async to avoid 504)."""
     def _run():
-        from apps.companies.models import Company, CompanyDNA, Product, ProductDNA
+        from apps.companies.models import Company, DNAGenerale, Specialista, ProductDNA
         from apps.companies.audit import compute_audit_hash
 
         try:
             company = Company.objects.get(pk=company_id)
-            company_dna = CompanyDNA.objects.get(pk=company_dna_id)
-        except (Company.DoesNotExist, CompanyDNA.DoesNotExist):
+            company_dna = DNAGenerale.objects.get(pk=company_dna_id)
+        except (Company.DoesNotExist, DNAGenerale.DoesNotExist):
             logger.error("apply_specialist_feedback_task: company or dna not found")
             return
 
@@ -1559,9 +1559,9 @@ def apply_specialist_feedback_task(company_id, company_dna_id, tenant_schema=Non
             return
 
         try:
-            product = Product.objects.get(pk=product_id)
+            product = Specialista.objects.get(pk=product_id)
             specialist_dna = ProductDNA.objects.get(pk=specialist_dna_id)
-        except (Product.DoesNotExist, ProductDNA.DoesNotExist):
+        except (Specialista.DoesNotExist, ProductDNA.DoesNotExist):
             logger.error("apply_specialist_feedback_task: product or specialist_dna not found")
             return
 
@@ -1593,10 +1593,10 @@ def apply_specialist_feedback_task(company_id, company_dna_id, tenant_schema=Non
         next_version = (last_version.version + 1) if last_version else 1
         company.dna_versions.filter(is_current=True).update(is_current=False)
 
-        new_dna = CompanyDNA.objects.create(
+        new_dna = DNAGenerale.objects.create(
             company=company,
             version=next_version,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             content=new_content,
             is_current=True,
             previous_hash=company_dna.audit_hash or "",
@@ -1631,8 +1631,8 @@ def generate_product_dna_task(product_id, tenant_schema=None):
     """Generate pre-DNA (concept map → seeds → merge → refinement) + dispatch questions."""
     def _run():
         try:
-            product = Product.objects.get(pk=product_id)
-        except Product.DoesNotExist:
+            product = Specialista.objects.get(pk=product_id)
+        except Specialista.DoesNotExist:
             logger.error("generate_product_dna_task: product %d not found", product_id)
             return
 
@@ -1667,10 +1667,10 @@ def generate_specialist_feedback_task(product_id, specialist_dna_id, company_dna
     """
     def _run():
         try:
-            product = Product.objects.get(pk=product_id)
+            product = Specialista.objects.get(pk=product_id)
             specialist_dna = ProductDNA.objects.get(pk=specialist_dna_id)
-            company_dna = CompanyDNA.objects.get(pk=company_dna_id)
-        except (Product.DoesNotExist, ProductDNA.DoesNotExist, CompanyDNA.DoesNotExist):
+            company_dna = DNAGenerale.objects.get(pk=company_dna_id)
+        except (Specialista.DoesNotExist, ProductDNA.DoesNotExist, DNAGenerale.DoesNotExist):
             logger.error(
                 "generate_specialist_feedback_task: missing product/specialist/company DNA "
                 "(product=%s specialist=%s company=%s)",

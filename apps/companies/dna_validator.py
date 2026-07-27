@@ -6,7 +6,7 @@ Math Layer from the Narrative Layer: the LLM produces text, this module
 judges it.
 
 Input may be a DNAGeneraleSchema instance (from generate_structured) or a
-plain dict (as stored in CompanyDNA.content). A malformed dict is caught and
+plain dict (as stored in DNAGenerale.content). A malformed dict is caught and
 reported as a CRITICAL safe-mode result instead of raising.
 
 Guard severities
@@ -316,7 +316,7 @@ def normalize_dna_punctuation(content: dict) -> dict:
 
     Applies standardised punctuation rules (see ZEUS_STYLE_GUIDE_UX.md §A2)
     to every string value in the content dict — recursive, handles both
-    Company and Specialist (Product) layer structures.  Skips technical
+    Company and Specialist (Specialista) layer structures.  Skips technical
     data inside parentheses (e.g. ``(in mm: 14, 40, 99)``).
 
     This is a deterministic, zero-LLM post-processing step.

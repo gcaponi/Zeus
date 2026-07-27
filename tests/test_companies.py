@@ -16,14 +16,14 @@ from django.utils.html import escape
 from apps.companies import tasks, views
 from apps.companies.models import (
     Company,
-    CompanyDNA,
+    DNAGenerale,
     CompanyFile,
     CompanyQuestion,
     ConsistencyIssue,
     DNAFeedback,
     LLMCall,
     PipelineRun,
-    Product,
+    Specialista,
     ProductDNA,
     ProductFile,
     ProductPublication,
@@ -92,7 +92,7 @@ class TestCompanyDNAModel:
     def test_dna_creation(self, django_user_model):
         user = django_user_model.objects.create_user(username="t", email="test@x.it", password="pw")
         company = Company.objects.create(schema_name="testco", name="TestCo")
-        dna = CompanyDNA.objects.create(
+        dna = DNAGenerale.objects.create(
             company=company,
             version=1,
             content={"mission": "test"},
@@ -105,22 +105,22 @@ class TestCompanyDNAModel:
     def test_unique_current_constraint(self, django_user_model):
         user = django_user_model.objects.create_user(username="t", email="test@x.it", password="pw")
         company = Company.objects.create(schema_name="testco", name="TestCo")
-        CompanyDNA.objects.create(
+        DNAGenerale.objects.create(
             company=company,
             version=1,
             content={"v": 1},
             is_current=False,
             created_by=user,
         )
-        dna2 = CompanyDNA.objects.create(company=company, version=2, content={"v": 2}, created_by=user)
+        dna2 = DNAGenerale.objects.create(company=company, version=2, content={"v": 2}, created_by=user)
         assert dna2.is_current is True
         # only 1 current per company
-        assert CompanyDNA.objects.filter(company=company, is_current=True).count() == 1
+        assert DNAGenerale.objects.filter(company=company, is_current=True).count() == 1
         # append-only pattern: mark old as False, create new
-        CompanyDNA.objects.filter(company=company, is_current=True).update(is_current=False)
-        dna3 = CompanyDNA.objects.create(company=company, version=3, content={"v": 3}, created_by=user)
+        DNAGenerale.objects.filter(company=company, is_current=True).update(is_current=False)
+        dna3 = DNAGenerale.objects.create(company=company, version=3, content={"v": 3}, created_by=user)
         assert dna3.is_current is True
-        assert CompanyDNA.objects.filter(company=company, is_current=True).count() == 1
+        assert DNAGenerale.objects.filter(company=company, is_current=True).count() == 1
 
     def test_dna_ordering(self, django_user_model):
         user = django_user_model.objects.create_user(username="t", email="test@x.it", password="pw")
@@ -128,7 +128,7 @@ class TestCompanyDNAModel:
         for v in range(1, 4):
             # mark previous as not current before inserting new
             company.dna_versions.filter(is_current=True).update(is_current=False)
-            CompanyDNA.objects.create(company=company, version=v, content={"v": v}, created_by=user)
+            DNAGenerale.objects.create(company=company, version=v, content={"v": v}, created_by=user)
         versions = list(company.dna_versions.all())
         assert versions[0].version == 3
         assert versions[-1].version == 1
@@ -545,27 +545,27 @@ class TestPipelineTask:
 class TestDNAFeedback:
     def test_recalculate_no_feedback(self):
         company = Company.objects.create(schema_name="fb-1", name="FB1")
-        dna = CompanyDNA.objects.create(company=company, version=1, content={})
-        assert CompanyDNA.recalculate_confidence(dna.id) is None
+        dna = DNAGenerale.objects.create(company=company, version=1, content={})
+        assert DNAGenerale.recalculate_confidence(dna.id) is None
 
     def test_recalculate_single_feedback(self):
         company = Company.objects.create(schema_name="fb-2", name="FB2")
-        dna = CompanyDNA.objects.create(company=company, version=1, content={})
+        dna = DNAGenerale.objects.create(company=company, version=1, content={})
         DNAFeedback.objects.create(dna=dna, rating=4)
-        assert CompanyDNA.recalculate_confidence(dna.id) == 4.0
+        assert DNAGenerale.recalculate_confidence(dna.id) == 4.0
 
     def test_recalculate_multiple_feedback_recency_weighted(self):
         company = Company.objects.create(schema_name="fb-3", name="FB3")
-        dna = CompanyDNA.objects.create(company=company, version=1, content={})
+        dna = DNAGenerale.objects.create(company=company, version=1, content={})
         DNAFeedback.objects.create(dna=dna, rating=1)
         DNAFeedback.objects.create(dna=dna, rating=5)
-        score = CompanyDNA.recalculate_confidence(dna.id)
+        score = DNAGenerale.recalculate_confidence(dna.id)
         # With equal timestamps ordering is undefined; score must be between 1 and 5
         assert 1 < score < 5
 
     def test_feedback_api_invalid_rating(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="FB API")
-        dna = CompanyDNA.objects.create(company=company, version=1, content={})
+        dna = DNAGenerale.objects.create(company=company, version=1, content={})
         req = rf_with_tenant("post", f"/api/company/dna/{dna.id}/feedback/", {"rating": 6})
         from apps.companies.views import dna_feedback
         resp = dna_feedback(req, pk=dna.id)
@@ -574,7 +574,7 @@ class TestDNAFeedback:
 
     def test_feedback_api_success(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="FB OK")
-        dna = CompanyDNA.objects.create(company=company, version=1, content={})
+        dna = DNAGenerale.objects.create(company=company, version=1, content={})
         req = rf_with_tenant("post", f"/api/company/dna/{dna.id}/feedback/", {
             "rating": 5, "comment": "Perfetto",
         })
@@ -596,10 +596,10 @@ class TestDNAFeedback:
 
     def test_score_persisted_on_dna(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="FB Save")
-        dna = CompanyDNA.objects.create(company=company, version=1, content={})
+        dna = DNAGenerale.objects.create(company=company, version=1, content={})
         DNAFeedback.objects.create(dna=dna, rating=2)
         DNAFeedback.objects.create(dna=dna, rating=4)
-        dna.confidence_score = CompanyDNA.recalculate_confidence(dna.id)
+        dna.confidence_score = DNAGenerale.recalculate_confidence(dna.id)
         dna.save(update_fields=["confidence_score"])
         dna.refresh_from_db()
         assert dna.confidence_score is not None
@@ -684,7 +684,7 @@ class TestOnboardingViews:
             original_name="profilo.pdf",
             content_text="Documento esistente.",
         )
-        CompanyDNA.objects.create(company=company, version=1, content={"identita": "test"})
+        DNAGenerale.objects.create(company=company, version=1, content={"identita": "test"})
 
         req = rf_with_tenant("get", "/onboarding/?revise=1")
         resp = views.onboarding_index(req)
@@ -704,7 +704,7 @@ class TestOnboardingViews:
             original_name="note-azienda.txt",
             content_text="Nota stabile.",
         )
-        CompanyDNA.objects.create(company=company, version=1, content={"identita": "test"})
+        DNAGenerale.objects.create(company=company, version=1, content={"identita": "test"})
 
         req = rf_with_tenant("post", "/onboarding/source/", {
             "url": "https://cais.uno",
@@ -735,7 +735,7 @@ class TestOnboardingViews:
         assert b"DNA Aziendale generato" in resp.content
         assert Company.objects.get(schema_name="test-tenant").sources.count() == 1
         assert PipelineRun.objects.filter(company__schema_name="test-tenant").count() == 1
-        assert CompanyDNA.objects.filter(company__schema_name="test-tenant").count() == 1
+        assert DNAGenerale.objects.filter(company__schema_name="test-tenant").count() == 1
 
     def test_onboarding_source_create_accepts_bare_domain(self, rf_with_tenant):
         from apps.companies.llm_client import MockLLMClient
@@ -901,7 +901,7 @@ class TestOnboardingViews:
             source=source,
             status=PipelineRun.STATUS_COMPLETED,
         )
-        CompanyDNA.objects.create(
+        DNAGenerale.objects.create(
             company=company,
             version=1,
             content={"chi_siamo": "Rossi Metalli"},
@@ -933,7 +933,7 @@ class TestOnboardingViews:
             status=Source.STATUS_SCRAPED,
         )
         PipelineRun.objects.create(company=company, source=source, status=PipelineRun.STATUS_COMPLETED)
-        dna = CompanyDNA.objects.create(company=company, version=1, content={"chi_siamo": "test"})
+        dna = DNAGenerale.objects.create(company=company, version=1, content={"chi_siamo": "test"})
         CompanyQuestion.objects.create(
             company=company,
             dna=dna,
@@ -949,7 +949,7 @@ class TestOnboardingViews:
 
         assert resp.status_code == 302
         assert resp["Location"] == reverse("onboarding-index")
-        assert CompanyDNA.objects.filter(company=company).count() == 0
+        assert DNAGenerale.objects.filter(company=company).count() == 0
         assert CompanyQuestion.objects.filter(company=company).count() == 0
         assert CompanyFile.objects.filter(company=company).count() == 0
         assert PipelineRun.objects.filter(company=company).count() == 0
@@ -967,10 +967,10 @@ class TestOnboardingViews:
 @pytest.mark.django_db
 class TestDNAQuestions:
     def _make_pre_dna(self, company):
-        return CompanyDNA.objects.create(
+        return DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_PRE,
+            dna_type=DNAGenerale.TYPE_PRE,
             content={
                 "identita": {"postura": "Azienda manifatturiera B2B.", "convinzioni": ["qualita"]},
                 "modelli_mentali": {
@@ -1172,10 +1172,10 @@ class TestDNAQuestions:
 
         # DNA completo disponibile: il polling rilascia il redirect verso la
         # review. Questo e il contratto che la migrazione shell non deve rompere.
-        CompanyDNA.objects.create(
+        DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             content={"chi_siamo": "Completo"},
         )
 
@@ -1187,10 +1187,10 @@ class TestDNAQuestions:
 
     def test_dna_generating_hx_refreshes_persisted_progress(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        pre_dna = CompanyDNA.objects.create(
+        pre_dna = DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_PRE,
+            dna_type=DNAGenerale.TYPE_PRE,
             content={
                 "identita": "Pre-DNA",
                 "_complete_generation": {
@@ -1292,7 +1292,7 @@ class TestDNAQuestions:
         processing_resp = views.dna_processing(processing_req, "gap", 1)
         assert processing_resp.status_code == 302
         assert processing_resp["Location"] == reverse("dna-generating")
-        complete_dna = CompanyDNA.objects.get(company=company, dna_type=CompanyDNA.TYPE_COMPLETE)
+        complete_dna = DNAGenerale.objects.get(company=company, dna_type=DNAGenerale.TYPE_COMPLETE)
         assert complete_dna.version == 2
         assert complete_dna.is_current is True
         assert complete_dna.is_export_ready() is False
@@ -1363,10 +1363,10 @@ class TestDNAQuestions:
             question.answered_at = timezone.now()
             question.save(update_fields=["answer", "answered_at"])
         company.dna_versions.filter(is_current=True).update(is_current=False)
-        CompanyDNA.objects.create(
+        DNAGenerale.objects.create(
             company=company,
             version=2,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             content={"identita": "Completo"},
         )
         data = {f"answer_{question.id}": question.answer for question in questions}
@@ -1376,9 +1376,9 @@ class TestDNAQuestions:
 
         assert resp.status_code == 302
         assert resp["Location"] == reverse("dna-review")
-        assert CompanyDNA.objects.filter(
+        assert DNAGenerale.objects.filter(
             company=company,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
         ).count() == 1
 
     def test_changed_answers_regenerate_and_wait_for_new_complete_version(self, rf_with_tenant):
@@ -1391,10 +1391,10 @@ class TestDNAQuestions:
             question.answered_at = timezone.now()
             question.save(update_fields=["answer", "answered_at"])
         company.dna_versions.filter(is_current=True).update(is_current=False)
-        CompanyDNA.objects.create(
+        DNAGenerale.objects.create(
             company=company,
             version=2,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             content={"identita": "Completo vecchio"},
         )
         data = {f"answer_{question.id}": question.answer for question in questions}
@@ -1406,9 +1406,9 @@ class TestDNAQuestions:
 
         assert resp.status_code == 302
         assert resp["Location"] == reverse("dna-processing", args=["gap", 1])
-        assert CompanyDNA.objects.filter(
+        assert DNAGenerale.objects.filter(
             company=company,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
         ).count() == 2
 
         processing_req = rf_with_tenant(
@@ -1443,10 +1443,10 @@ class TestDNAQuestions:
         assert b'id="dna-generation-status"' in resp.content
         assert "HX-Redirect" not in resp
 
-        CompanyDNA.objects.create(
+        DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             content={"chi_siamo": "Completo"},
         )
 
@@ -1582,10 +1582,10 @@ class TestDNAQuestions:
 
     def test_render_dna_pdf_uses_continuous_final_document_without_layer_titles(self):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        dna = CompanyDNA.objects.create(
+        dna = DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             content={"identita": "Identita narrativa"},
         )
         final_document = "Sintesi finale.\n\nIdentita narrativa.\n\nMetodo operativo."
@@ -1602,10 +1602,10 @@ class TestDNAQuestions:
 
     def test_submit_answers_requires_all_answers(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        pre_dna = CompanyDNA.objects.create(
+        pre_dna = DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_PRE,
+            dna_type=DNAGenerale.TYPE_PRE,
             content={"identita": "Test"},
         )
         views.dna_questions(rf_with_tenant("get", reverse("dna-questions")))
@@ -1617,9 +1617,9 @@ class TestDNAQuestions:
         resp = views.dna_questions(req)
 
         assert resp.status_code == 400
-        assert CompanyDNA.objects.filter(
+        assert DNAGenerale.objects.filter(
             company=company,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
         ).count() == 0
 
     def test_duplicate_llm_question_codes_are_normalized(self):
@@ -1810,7 +1810,7 @@ class TestDNAQuestions:
         )
         assert processing_resp.status_code == 302
         assert processing_resp["Location"] == reverse("dna-generating")
-        assert CompanyDNA.objects.filter(company=company, dna_type=CompanyDNA.TYPE_COMPLETE).exists()
+        assert DNAGenerale.objects.filter(company=company, dna_type=DNAGenerale.TYPE_COMPLETE).exists()
 
     def test_gap_round_view_saves_answers_and_triggers_next_evaluation(
         self, rf_with_tenant, monkeypatch
@@ -2039,10 +2039,10 @@ class TestDNAReviewViews:
     @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
     def test_review_and_visualize_pages_use_app_shell(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        CompanyDNA.objects.create(
+        DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             content={"identita": "DNA aziendale verificato."},
         )
 
@@ -2066,10 +2066,10 @@ class TestDNAReviewViews:
 
     def test_section_approve_htmx_updates_review_fragment(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        dna = CompanyDNA.objects.create(
+        dna = DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             content={"identita": "Test"},
         )
         req = rf_with_tenant(
@@ -2090,10 +2090,10 @@ class TestDNAReviewViews:
 
     def test_section_edit_htmx_updates_review_fragment(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        dna = CompanyDNA.objects.create(
+        dna = DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             content={"identita": "Test"},
         )
         req = rf_with_tenant(
@@ -2109,7 +2109,7 @@ class TestDNAReviewViews:
         assert resp.status_code == 200
         assert b'id="dna-review-root"' in resp.content
         assert "HX-Redirect" not in resp
-        new_dna = CompanyDNA.objects.get(company=company, is_current=True)
+        new_dna = DNAGenerale.objects.get(company=company, is_current=True)
         assert new_dna.version == 2
         assert new_dna.content["identita"] == "Test aggiornato"
 
@@ -2117,10 +2117,10 @@ class TestDNAReviewViews:
         from apps.companies.dna_schemas import LAYER_KEYS
 
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        dna = CompanyDNA.objects.create(
+        dna = DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             content={key: f"Testo narrativo per {key}" for key in LAYER_KEYS},
             _enrichment={
                 "validation": {
@@ -2161,16 +2161,16 @@ class TestDNAReviewViews:
 class TestProductModel:
     def test_product_creation(self):
         company = Company.objects.create(schema_name="testco", name="TestCo")
-        product = Product.objects.create(company=company, name="Vasca BVCI", slug="vasca-bvci")
+        product = Specialista.objects.create(company=company, name="Vasca BVCI", slug="vasca-bvci")
         assert product.name == "Vasca BVCI"
         assert str(product) == "Vasca BVCI"
         assert product.company == company
 
     def test_unique_slug_per_company(self):
         company = Company.objects.create(schema_name="testco", name="TestCo")
-        Product.objects.create(company=company, name="Vasca A", slug="vasca-a")
+        Specialista.objects.create(company=company, name="Vasca A", slug="vasca-a")
         with pytest.raises(Exception):
-            Product.objects.create(company=company, name="Vasca A dup", slug="vasca-a")
+            Specialista.objects.create(company=company, name="Vasca A dup", slug="vasca-a")
 
 
 @pytest.mark.django_db
@@ -2178,7 +2178,7 @@ class TestProductDNAModel:
     def test_product_dna_creation(self, django_user_model):
         user = django_user_model.objects.create_user(username="t", email="test@x.it", password="pw")
         company = Company.objects.create(schema_name="testco", name="TestCo")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         dna = ProductDNA.objects.create(
             product=product,
             version=1,
@@ -2191,28 +2191,28 @@ class TestProductDNAModel:
 
     def test_product_has_status_tipologia_codice(self):
         company = Company.objects.create(schema_name="testco", name="TestCo")
-        product = Product.objects.create(
+        product = Specialista.objects.create(
             company=company,
             name="Canale Ispezionabile",
             slug="canale-ispezionabile",
             tipologia="canale",
             codice="CI-001",
         )
-        assert product.status == Product.STATUS_BOZZA
+        assert product.status == Specialista.STATUS_BOZZA
         assert product.get_status_display() == "Bozza"
         assert product.tipologia == "canale"
         assert product.codice == "CI-001"
 
     def test_product_codice_unique_per_company(self):
         company = Company.objects.create(schema_name="testco", name="TestCo")
-        Product.objects.create(company=company, name="A", slug="a", codice="CI-001")
+        Specialista.objects.create(company=company, name="A", slug="a", codice="CI-001")
         with pytest.raises(Exception):
-            Product.objects.create(company=company, name="B", slug="b", codice="CI-001")
+            Specialista.objects.create(company=company, name="B", slug="b", codice="CI-001")
 
     def test_product_dna_missing_sections_six_layers(self, django_user_model):
         user = django_user_model.objects.create_user(username="t", email="test@x.it", password="pw")
         company = Company.objects.create(schema_name="testco", name="TestCo")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         dna = ProductDNA.objects.create(
             product=product,
             version=1,
@@ -2229,7 +2229,7 @@ class TestProductDNAModel:
 
     def test_product_question_has_pool_and_round(self):
         company = Company.objects.create(schema_name="testco", name="TestCo")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         dna = ProductDNA.objects.create(
             product=product,
             version=1,
@@ -2287,17 +2287,17 @@ class TestProductViews:
 
         response = views.product_list_create(request)
 
-        product = Product.objects.get(name="Vasca BVCI")
+        product = Specialista.objects.get(name="Vasca BVCI")
         assert response.status_code == 200
         assert b'id="app-shell"' in response.content
-        assert reverse("product-detail", args=[product.pk]).encode() in response.content
-        assert reverse("product-delete", args=[product.pk]).encode() in response.content
+        assert reverse("specialista-detail", args=[product.pk]).encode() in response.content
+        assert reverse("specialista-delete", args=[product.pk]).encode() in response.content
 
     def test_product_create(self, rf_with_tenant):
         request = rf_with_tenant("post", "/products/", data={"name": "Vasca BVCI"}, form=True)
         response = views.product_list_create(request)
         assert response.status_code == 200
-        assert Product.objects.filter(name="Vasca BVCI").exists()
+        assert Specialista.objects.filter(name="Vasca BVCI").exists()
 
     def test_product_create_with_subscription_uses_current_count(self, rf_with_tenant, monkeypatch):
         monkeypatch.setattr(Client, "auto_create_schema", False)
@@ -2308,13 +2308,13 @@ class TestProductViews:
         response = views.product_list_create(request)
 
         assert response.status_code == 200
-        assert Product.objects.filter(name="Vasca BVCI").exists()
+        assert Specialista.objects.filter(name="Vasca BVCI").exists()
         tenant.subscription.refresh_from_db()
         assert tenant.subscription.product_dnas_used == 1
 
     def test_product_detail(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         request = rf_with_tenant("get", f"/products/{product.pk}/")
         response = views.product_detail(request, product.pk)
         assert response.status_code == 200
@@ -2322,16 +2322,16 @@ class TestProductViews:
     @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
     def test_product_detail_and_feedback_use_app_shell(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
 
         detail_response = views.product_detail(
-            rf_with_tenant("get", reverse("product-detail", args=[product.pk])),
+            rf_with_tenant("get", reverse("specialista-detail", args=[product.pk])),
             product.pk,
         )
         error_response = views.product_file_upload(
             rf_with_tenant(
                 "post",
-                reverse("product-file-upload", args=[product.pk]),
+                reverse("specialista-file-upload", args=[product.pk]),
                 form=True,
             ),
             product.pk,
@@ -2359,15 +2359,15 @@ class TestProductViews:
                 ],
             },
         )
-        CompanyDNA.objects.create(
+        DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             is_current=True,
             content={"nucleo_tecnico": "DNA Generale"},
         )
         feedback_response = views.product_dna_feedback(
-            rf_with_tenant("get", reverse("product-dna-feedback", args=[product.pk])),
+            rf_with_tenant("get", reverse("specialista-dna-feedback", args=[product.pk])),
             product.pk,
         )
 
@@ -2378,7 +2378,7 @@ class TestProductViews:
 
     def test_product_detail_shows_uploaded_files(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         ProductFile.objects.create(
             product=product,
             original_name="scheda.txt",
@@ -2394,10 +2394,10 @@ class TestProductViews:
 
     def test_product_file_upload_browser_redirects_to_detail(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         request = rf_with_tenant(
             "post",
-            reverse("product-file-upload", args=[product.pk]),
+            reverse("specialista-file-upload", args=[product.pk]),
             {"notes": "Nota prodotto"},
             form=True,
         )
@@ -2405,7 +2405,7 @@ class TestProductViews:
         response = views.product_file_upload(request, product.pk)
 
         assert response.status_code == 302
-        assert response["Location"] == reverse("product-detail", args=[product.pk])
+        assert response["Location"] == reverse("specialista-detail", args=[product.pk])
         assert product.product_files.filter(original_name="note-prodotto.txt").exists()
 
     def test_product_file_quota_does_not_block_upload(self, rf_with_tenant, monkeypatch):
@@ -2413,7 +2413,7 @@ class TestProductViews:
         tenant = Client.objects.create(schema_name="test-tenant", name="Test Tenant")
         WorkspaceSubscription.objects.create(client=tenant, plan=Plan.get_default())
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         ProductFile.objects.create(
             product=product,
             original_name="big-doc.pdf",
@@ -2422,7 +2422,7 @@ class TestProductViews:
         )
         request = rf_with_tenant(
             "post",
-            reverse("product-file-upload", args=[product.pk]),
+            reverse("specialista-file-upload", args=[product.pk]),
             {"notes": "Nuova nota oltre quota."},
             form=True,
         )
@@ -2434,10 +2434,10 @@ class TestProductViews:
 
     def test_product_image_upload_stores_placeholder_text(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         request = rf_with_tenant(
             "post",
-            reverse("product-file-upload", args=[product.pk]),
+            reverse("specialista-file-upload", args=[product.pk]),
             {
                 "file": SimpleUploadedFile(
                     "brochure.png",
@@ -2456,7 +2456,7 @@ class TestProductViews:
 
     def test_product_dna_generate_browser_redirects_to_detail(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         ProductFile.objects.create(
             product=product,
             original_name="scheda.txt",
@@ -2470,7 +2470,7 @@ class TestProductViews:
         )
         request = rf_with_tenant(
             "post",
-            reverse("product-dna-generate", args=[product.pk]),
+            reverse("specialista-dna-generate", args=[product.pk]),
             form=True,
         )
         with patch("apps.companies.tasks.generate_product_dna_task.delay"):
@@ -2479,19 +2479,19 @@ class TestProductViews:
         assert response.status_code == 302
         # Behavior: async generation redirects to detail with ?generating=1
         # so the page can poll the task status.
-        assert response["Location"] == reverse("product-detail", args=[product.pk]) + "?generating=1"
+        assert response["Location"] == reverse("specialista-detail", args=[product.pk]) + "?generating=1"
 
     def test_product_dna_generate_is_idempotent_while_running(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(
+        product = Specialista.objects.create(
             company=company,
             name="Vasca",
             slug="vasca",
-            status=Product.STATUS_IN_COSTRUZIONE,
+            status=Specialista.STATUS_IN_COSTRUZIONE,
         )
         request = rf_with_tenant(
             "post",
-            reverse("product-dna-generate", args=[product.pk]),
+            reverse("specialista-dna-generate", args=[product.pk]),
             form=True,
         )
 
@@ -2499,12 +2499,12 @@ class TestProductViews:
             response = views.product_dna_generate(request, product.pk)
 
         assert response.status_code == 302
-        assert response["Location"] == reverse("product-detail", args=[product.pk]) + "?generating=1"
+        assert response["Location"] == reverse("specialista-detail", args=[product.pk]) + "?generating=1"
         delay.assert_not_called()
 
     def test_duplicate_product_question_codes_are_normalized(self):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         dna = ProductDNA.objects.create(
             product=product,
             version=1,
@@ -2541,14 +2541,14 @@ class TestProductViews:
 
     def test_product_questions_loading_does_not_dispatch_duplicate_task(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         ProductDNA.objects.create(
             product=product,
             version=1,
             dna_type=ProductDNA.TYPE_PRE,
             content={"identita_tecnica": "Pre DNA in preparazione"},
         )
-        request = rf_with_tenant("get", reverse("product-questions", args=[product.pk]))
+        request = rf_with_tenant("get", reverse("specialista-questions", args=[product.pk]))
 
         with patch("apps.companies.tasks.generate_product_questions_task.delay") as delay:
             response = views.product_questions(request, product.pk)
@@ -2560,7 +2560,7 @@ class TestProductViews:
     @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
     def test_product_loading_pages_use_app_shell_and_keep_body_polling(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         ProductFile.objects.create(
             product=product,
             original_name="scheda.txt",
@@ -2577,25 +2577,25 @@ class TestProductViews:
             views.product_detail(
                 rf_with_tenant(
                     "get",
-                    f"{reverse('product-detail', args=[product.pk])}?generating=1",
+                    f"{reverse('specialista-detail', args=[product.pk])}?generating=1",
                 ),
                 product.pk,
             ),
             views.product_questions(
-                rf_with_tenant("get", reverse("product-questions", args=[product.pk])),
+                rf_with_tenant("get", reverse("specialista-questions", args=[product.pk])),
                 product.pk,
             ),
             views.product_gap_processing(
                 rf_with_tenant(
                     "get",
-                    reverse("product-gap-processing", args=[product.pk, 1]),
+                    reverse("specialista-gap-processing", args=[product.pk, 1]),
                 ),
                 product.pk,
                 1,
             ),
         ]
 
-        complete_product = Product.objects.create(
+        complete_product = Specialista.objects.create(
             company=company,
             name="Pompa",
             slug="pompa",
@@ -2611,10 +2611,10 @@ class TestProductViews:
                 "_feedback_proposals": None,
             },
         )
-        CompanyDNA.objects.create(
+        DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             is_current=True,
             content={"nucleo_tecnico": "DNA Generale"},
         )
@@ -2622,7 +2622,7 @@ class TestProductViews:
             views.product_dna_feedback(
                 rf_with_tenant(
                     "get",
-                    reverse("product-dna-feedback", args=[complete_product.pk]),
+                    reverse("specialista-dna-feedback", args=[complete_product.pk]),
                 ),
                 complete_product.pk,
             )
@@ -2639,7 +2639,7 @@ class TestProductViews:
     @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
     def test_product_question_forms_use_app_shell(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         pre_dna = ProductDNA.objects.create(
             product=product,
             version=1,
@@ -2656,7 +2656,7 @@ class TestProductViews:
         )
 
         questions_response = views.product_questions(
-            rf_with_tenant("get", reverse("product-questions", args=[product.pk])),
+            rf_with_tenant("get", reverse("specialista-questions", args=[product.pk])),
             product.pk,
         )
 
@@ -2675,7 +2675,7 @@ class TestProductViews:
             question_round=2,
         )
         gap_response = views.product_gap_questions(
-            rf_with_tenant("get", reverse("product-gap-questions", args=[product.pk, 2])),
+            rf_with_tenant("get", reverse("specialista-gap-questions", args=[product.pk, 2])),
             product.pk,
             2,
         )
@@ -2687,7 +2687,7 @@ class TestProductViews:
 
     def test_product_gap_processing_shows_persisted_progress(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         ProductDNA.objects.create(
             product=product,
             version=1,
@@ -2705,7 +2705,7 @@ class TestProductViews:
             },
         )
         request = rf_with_tenant(
-            "get", reverse("product-gap-processing", args=[product.pk, 1])
+            "get", reverse("specialista-gap-processing", args=[product.pk, 1])
         )
 
         response = views.product_gap_processing(request, product.pk, 1)
@@ -2716,7 +2716,7 @@ class TestProductViews:
 
     def test_product_dna_feedback_loading_shows_persisted_progress(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         ProductDNA.objects.create(
             product=product,
             version=1,
@@ -2733,14 +2733,14 @@ class TestProductViews:
                 },
             },
         )
-        CompanyDNA.objects.create(
+        DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             is_current=True,
             content={"nucleo_tecnico": "DNA Generale"},
         )
-        request = rf_with_tenant("get", reverse("product-dna-feedback", args=[product.pk]))
+        request = rf_with_tenant("get", reverse("specialista-dna-feedback", args=[product.pk]))
 
         response = views.product_dna_feedback(request, product.pk)
 
@@ -2750,7 +2750,7 @@ class TestProductViews:
 
     def test_product_dna_feedback_hx_redirects_when_proposals_ready(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         ProductDNA.objects.create(
             product=product,
             version=1,
@@ -2768,24 +2768,24 @@ class TestProductViews:
                 ],
             },
         )
-        CompanyDNA.objects.create(
+        DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             is_current=True,
             content={"nucleo_tecnico": "DNA Generale"},
         )
-        request = rf_with_tenant("get", reverse("product-dna-feedback", args=[product.pk]))
+        request = rf_with_tenant("get", reverse("specialista-dna-feedback", args=[product.pk]))
         request.META["HTTP_HX_REQUEST"] = "true"
 
         response = views.product_dna_feedback(request, product.pk)
 
         assert response.status_code == 204
-        assert response["HX-Redirect"] == reverse("product-dna-feedback", args=[product.pk])
+        assert response["HX-Redirect"] == reverse("specialista-dna-feedback", args=[product.pk])
 
     def test_product_dna_feedback_get_does_not_start_generation(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         ProductDNA.objects.create(
             product=product,
             version=1,
@@ -2793,14 +2793,14 @@ class TestProductViews:
             is_approved=timezone.now(),
             content={"identita_tecnica": "DNA completo"},
         )
-        CompanyDNA.objects.create(
+        DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             is_current=True,
             content={"nucleo_tecnico": "DNA Generale"},
         )
-        request = rf_with_tenant("get", reverse("product-dna-feedback", args=[product.pk]))
+        request = rf_with_tenant("get", reverse("specialista-dna-feedback", args=[product.pk]))
 
         with patch("apps.companies.tasks.generate_specialist_feedback_task.delay") as delay:
             response = views.product_dna_feedback(request, product.pk)
@@ -2811,7 +2811,7 @@ class TestProductViews:
 
     def test_product_dna_feedback_post_starts_generation(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         specialist_dna = ProductDNA.objects.create(
             product=product,
             version=1,
@@ -2819,14 +2819,14 @@ class TestProductViews:
             is_approved=timezone.now(),
             content={"identita_tecnica": "DNA completo"},
         )
-        company_dna = CompanyDNA.objects.create(
+        company_dna = DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             is_current=True,
             content={"nucleo_tecnico": "DNA Generale"},
         )
-        request = rf_with_tenant("post", reverse("product-dna-feedback", args=[product.pk]))
+        request = rf_with_tenant("post", reverse("specialista-dna-feedback", args=[product.pk]))
 
         with patch("apps.companies.tasks.generate_specialist_feedback_task.delay") as delay:
             response = views.product_dna_feedback(request, product.pk)
@@ -2844,7 +2844,7 @@ class TestProductViews:
 
     def test_product_dna_feedback_get_shows_completed_process(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         specialist_dna = ProductDNA.objects.create(
             product=product,
             version=1,
@@ -2852,10 +2852,10 @@ class TestProductViews:
             is_approved=timezone.now(),
             content={"identita_tecnica": "DNA completo"},
         )
-        CompanyDNA.objects.create(
+        DNAGenerale.objects.create(
             company=company,
             version=2,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             is_current=True,
             content={
                 "nucleo_tecnico": "DNA Generale aggiornato",
@@ -2865,7 +2865,7 @@ class TestProductViews:
                 },
             },
         )
-        request = rf_with_tenant("get", reverse("product-dna-feedback", args=[product.pk]))
+        request = rf_with_tenant("get", reverse("specialista-dna-feedback", args=[product.pk]))
 
         with patch("apps.companies.tasks.generate_specialist_feedback_task.delay") as delay:
             response = views.product_dna_feedback(request, product.pk)
@@ -2876,7 +2876,7 @@ class TestProductViews:
 
     def test_product_dna_visualize_links_to_feedback_when_approved(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         ProductDNA.objects.create(
             product=product,
             version=1,
@@ -2884,7 +2884,7 @@ class TestProductViews:
             is_approved=timezone.now(),
             content={"identita_tecnica": "DNA completo"},
         )
-        request = rf_with_tenant("get", reverse("product-dna-visualize", args=[product.pk]))
+        request = rf_with_tenant("get", reverse("specialista-dna-visualize", args=[product.pk]))
 
         response = views.product_dna_visualize(request, product.pk)
 
@@ -2894,26 +2894,26 @@ class TestProductViews:
     @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
     def test_product_review_uses_app_shell_with_htmx_actions(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         ProductDNA.objects.create(
             product=product,
             version=1,
             dna_type=ProductDNA.TYPE_COMPLETE,
             content={"identita_tecnica": "DNA completo"},
         )
-        request = rf_with_tenant("get", reverse("product-review", args=[product.pk]))
+        request = rf_with_tenant("get", reverse("specialista-review", args=[product.pk]))
 
         response = views.product_review(request, product.pk)
 
         assert response.status_code == 200
         assert b'zeus-app-shell--tenant' in response.content
-        assert reverse("product-section-approve", args=[product.pk, "identita_tecnica"]).encode() in response.content
-        assert reverse("product-section-edit", args=[product.pk, "identita_tecnica"]).encode() in response.content
+        assert reverse("specialista-section-approve", args=[product.pk, "identita_tecnica"]).encode() in response.content
+        assert reverse("specialista-section-edit", args=[product.pk, "identita_tecnica"]).encode() in response.content
 
     @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
     def test_product_dna_visualize_uses_app_shell_when_flag_enabled(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         ProductDNA.objects.create(
             product=product,
             version=1,
@@ -2921,7 +2921,7 @@ class TestProductViews:
             is_approved=timezone.now(),
             content={"identita_tecnica": "DNA completo"},
         )
-        request = rf_with_tenant("get", reverse("product-dna-visualize", args=[product.pk]))
+        request = rf_with_tenant("get", reverse("specialista-dna-visualize", args=[product.pk]))
 
         response = views.product_dna_visualize(request, product.pk)
 
@@ -2933,7 +2933,7 @@ class TestProductViews:
     def test_complete_product_dna_rewrites_sections_instead_of_appending_answers(self):
         user = User.objects.create_user(username="p", email="p@x.it", password="pw")
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         pre_dna = ProductDNA.objects.create(
             product=product,
             version=1,
@@ -2957,11 +2957,11 @@ class TestProductViews:
         assert "identita" in complete_dna.content
         # Behavior: completing the DNA transitions the product to in_validazione
         # (ready for review), not in_costruzione anymore.
-        assert product.status == Product.STATUS_IN_VALIDAZIONE
+        assert product.status == Specialista.STATUS_IN_VALIDAZIONE
 
     def test_product_section_approve_htmx_redirects_to_review(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         dna = ProductDNA.objects.create(
             product=product,
             version=1,
@@ -2977,7 +2977,7 @@ class TestProductViews:
         )
         req = rf_with_tenant(
             "post",
-            reverse("product-section-approve", args=[product.pk, "identita_tecnica"]),
+            reverse("specialista-section-approve", args=[product.pk, "identita_tecnica"]),
             {},
             form=True,
         )
@@ -2986,7 +2986,7 @@ class TestProductViews:
         resp = views.product_section_approve(req, product.pk, "identita_tecnica")
 
         assert resp.status_code == 204
-        assert resp["HX-Redirect"] == reverse("product-review", args=[product.pk])
+        assert resp["HX-Redirect"] == reverse("specialista-review", args=[product.pk])
         assert ProductSectionApproval.objects.filter(
             dna=dna,
             section_key="identita_tecnica",
@@ -3010,8 +3010,8 @@ class TestProductViews:
         from apps.companies.dna_schemas import PRODUCT_LAYER_KEYS
 
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(
-            company=company, name="Vasca", slug="vasca", status=Product.STATUS_IN_COSTRUZIONE
+        product = Specialista.objects.create(
+            company=company, name="Vasca", slug="vasca", status=Specialista.STATUS_IN_COSTRUZIONE
         )
         dna = ProductDNA.objects.create(
             product=product,
@@ -3028,7 +3028,7 @@ class TestProductViews:
         last_key = PRODUCT_LAYER_KEYS[-1]
         req = rf_with_tenant(
             "post",
-            reverse("product-section-approve", args=[product.pk, last_key]),
+            reverse("specialista-section-approve", args=[product.pk, last_key]),
             form=True,
         )
         req.META["HTTP_HX_REQUEST"] = "true"
@@ -3037,7 +3037,7 @@ class TestProductViews:
 
         product.refresh_from_db()
         dna.refresh_from_db()
-        assert product.status == Product.STATUS_IN_VALIDAZIONE
+        assert product.status == Specialista.STATUS_IN_VALIDAZIONE
         assert dna.is_fully_approved()
 
     def test_approving_non_last_section_keeps_product_in_costruzione(self, rf_with_tenant):
@@ -3045,8 +3045,8 @@ class TestProductViews:
         from apps.companies.dna_schemas import PRODUCT_LAYER_KEYS
 
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(
-            company=company, name="Vasca", slug="vasca", status=Product.STATUS_IN_COSTRUZIONE
+        product = Specialista.objects.create(
+            company=company, name="Vasca", slug="vasca", status=Specialista.STATUS_IN_COSTRUZIONE
         )
         dna = ProductDNA.objects.create(
             product=product,
@@ -3056,7 +3056,7 @@ class TestProductViews:
         )
         req = rf_with_tenant(
             "post",
-            reverse("product-section-approve", args=[product.pk, PRODUCT_LAYER_KEYS[0]]),
+            reverse("specialista-section-approve", args=[product.pk, PRODUCT_LAYER_KEYS[0]]),
             form=True,
         )
         req.META["HTTP_HX_REQUEST"] = "true"
@@ -3064,11 +3064,11 @@ class TestProductViews:
         views.product_section_approve(req, product.pk, PRODUCT_LAYER_KEYS[0])
 
         product.refresh_from_db()
-        assert product.status == Product.STATUS_IN_COSTRUZIONE
+        assert product.status == Specialista.STATUS_IN_COSTRUZIONE
 
     def test_product_section_edit_htmx_redirects_to_review(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        product = Product.objects.create(company=company, name="Vasca", slug="vasca")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
         ProductDNA.objects.create(
             product=product,
             version=1,
@@ -3077,7 +3077,7 @@ class TestProductViews:
         )
         req = rf_with_tenant(
             "post",
-            reverse("product-section-edit", args=[product.pk, "identita_tecnica"]),
+            reverse("specialista-section-edit", args=[product.pk, "identita_tecnica"]),
             {"text": "Test aggiornato"},
             form=True,
         )
@@ -3086,7 +3086,7 @@ class TestProductViews:
         resp = views.product_section_edit(req, product.pk, "identita_tecnica")
 
         assert resp.status_code == 204
-        assert resp["HX-Redirect"] == reverse("product-review", args=[product.pk])
+        assert resp["HX-Redirect"] == reverse("specialista-review", args=[product.pk])
         new_dna = ProductDNA.objects.get(product=product, is_current=True)
         assert new_dna.version == 2
         assert new_dna.content["identita_tecnica"] == "Test aggiornato"
@@ -3097,12 +3097,12 @@ class TestCrossSpecialistThreshold:
 
     @staticmethod
     def _make_active_specialist(company, name, slug, codice):
-        product = Product.objects.create(
+        product = Specialista.objects.create(
             company=company,
             name=name,
             slug=slug,
             codice=codice,
-            status=Product.STATUS_ATTIVO,
+            status=Specialista.STATUS_ATTIVO,
         )
         ProductDNA.objects.create(
             product=product,
@@ -3121,10 +3121,10 @@ class TestCrossSpecialistThreshold:
 
     def _make_company_with_generale(self):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        CompanyDNA.objects.create(
+        DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             content={"identita": "DNA generale base"},
             is_current=True,
         )
@@ -3194,17 +3194,17 @@ class TestCrossSpecialistThreshold:
 class TestConsistencyMotor:
     def _make_company_with_dna(self):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
-        CompanyDNA.objects.create(
+        DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             content={"identita": "DNA generale", "confini": "Confini generali"},
             is_current=True,
         )
         return company
 
     def _make_product(self, company, name, slug, codice, status):
-        product = Product.objects.create(
+        product = Specialista.objects.create(
             company=company,
             name=name,
             slug=slug,
@@ -3240,8 +3240,8 @@ class TestConsistencyMotor:
     @override_settings(ZEUS_APP_SHELL_ENABLED=True, ROOT_URLCONF="config.urls")
     def test_engine_reports_use_app_shell_and_keep_hx_fragment(self, rf_with_tenant):
         company = self._make_company_with_dna()
-        self._make_product(company, "Vasca A", "vasca-a", "A", Product.STATUS_ATTIVO)
-        self._make_product(company, "Vasca B", "vasca-b", "B", Product.STATUS_ATTIVO)
+        self._make_product(company, "Vasca A", "vasca-a", "A", Specialista.STATUS_ATTIVO)
+        self._make_product(company, "Vasca B", "vasca-b", "B", Specialista.STATUS_ATTIVO)
 
         motore_b_response = views.motore_b_report(
             rf_with_tenant("get", reverse("motore-b-report"))
@@ -3270,10 +3270,10 @@ class TestConsistencyMotor:
         self, rf_with_tenant, monkeypatch,
     ):
         company = self._make_company_with_dna()
-        company_dna = company.dna_versions.get(dna_type=CompanyDNA.TYPE_COMPLETE)
-        self._make_product(company, "A", "a", "A", Product.STATUS_ATTIVO)
-        self._make_product(company, "B", "b", "B", Product.STATUS_ATTIVO)
-        product = self._make_product(company, "C", "c", "C", Product.STATUS_IN_VALIDAZIONE)
+        company_dna = company.dna_versions.get(dna_type=DNAGenerale.TYPE_COMPLETE)
+        self._make_product(company, "A", "a", "A", Specialista.STATUS_ATTIVO)
+        self._make_product(company, "B", "b", "B", Specialista.STATUS_ATTIVO)
+        product = self._make_product(company, "C", "c", "C", Specialista.STATUS_IN_VALIDAZIONE)
         called = {}
 
         def fake_delay(company_id, **kwargs):
@@ -3283,7 +3283,7 @@ class TestConsistencyMotor:
         monkeypatch.setattr(tasks.run_consistency_audit, "delay", fake_delay)
         req = rf_with_tenant(
             "post",
-            reverse("product-promote", args=[product.pk]),
+            reverse("specialista-promote", args=[product.pk]),
             form=True,
         )
 
@@ -3292,7 +3292,7 @@ class TestConsistencyMotor:
         product.refresh_from_db()
         company_dna.refresh_from_db()
         assert resp.status_code == 302
-        assert product.status == Product.STATUS_ATTIVO
+        assert product.status == Specialista.STATUS_ATTIVO
         assert company_dna.content["_consistency_audit_pending"]["scope"] == ConsistencyIssue.SCOPE_PERIODIC
         assert called == {
             "company_id": company.pk,
@@ -3303,7 +3303,7 @@ class TestConsistencyMotor:
 
     def test_consistency_audit_run_marks_pending_and_dispatches(self, rf_with_tenant, monkeypatch):
         company = self._make_company_with_dna()
-        company_dna = company.dna_versions.get(dna_type=CompanyDNA.TYPE_COMPLETE)
+        company_dna = company.dna_versions.get(dna_type=DNAGenerale.TYPE_COMPLETE)
         called = {}
 
         def fake_delay(company_id, **kwargs):
@@ -3331,8 +3331,8 @@ class TestConsistencyMotor:
 
     def test_product_consistency_check_marks_specialist_pending(self, rf_with_tenant, monkeypatch):
         company = self._make_company_with_dna()
-        company_dna = company.dna_versions.get(dna_type=CompanyDNA.TYPE_COMPLETE)
-        product = self._make_product(company, "A", "a", "A", Product.STATUS_ATTIVO)
+        company_dna = company.dna_versions.get(dna_type=DNAGenerale.TYPE_COMPLETE)
+        product = self._make_product(company, "A", "a", "A", Specialista.STATUS_ATTIVO)
         called = {}
 
         def fake_delay(company_id, **kwargs):
@@ -3342,7 +3342,7 @@ class TestConsistencyMotor:
         monkeypatch.setattr(tasks.run_consistency_audit, "delay", fake_delay)
         req = rf_with_tenant(
             "post",
-            reverse("product-consistency-check", args=[product.pk]),
+            reverse("specialista-consistency-check", args=[product.pk]),
             form=True,
         )
 
@@ -3365,8 +3365,8 @@ class TestConsistencyMotor:
         self, rf_with_tenant, monkeypatch,
     ):
         company = self._make_company_with_dna()
-        company_dna = company.dna_versions.get(dna_type=CompanyDNA.TYPE_COMPLETE)
-        product = self._make_product(company, "A", "a", "A", Product.STATUS_IN_COSTRUZIONE)
+        company_dna = company.dna_versions.get(dna_type=DNAGenerale.TYPE_COMPLETE)
+        product = self._make_product(company, "A", "a", "A", Specialista.STATUS_IN_COSTRUZIONE)
         called = {}
 
         def fake_delay(company_id, **kwargs):
@@ -3376,7 +3376,7 @@ class TestConsistencyMotor:
         monkeypatch.setattr(tasks.run_consistency_audit, "delay", fake_delay)
         req = rf_with_tenant(
             "post",
-            reverse("product-consistency-check", args=[product.pk]),
+            reverse("specialista-consistency-check", args=[product.pk]),
             form=True,
         )
 
@@ -3391,8 +3391,8 @@ class TestConsistencyMotor:
         self, rf_with_tenant, monkeypatch,
     ):
         company = self._make_company_with_dna()
-        company_dna = company.dna_versions.get(dna_type=CompanyDNA.TYPE_COMPLETE)
-        product = self._make_product(company, "A", "a", "A", Product.STATUS_ATTIVO)
+        company_dna = company.dna_versions.get(dna_type=DNAGenerale.TYPE_COMPLETE)
+        product = self._make_product(company, "A", "a", "A", Specialista.STATUS_ATTIVO)
         called = {}
 
         def fake_delay(company_id, **kwargs):
@@ -3402,7 +3402,7 @@ class TestConsistencyMotor:
         monkeypatch.setattr(tasks.run_consistency_audit, "delay", fake_delay)
         req = rf_with_tenant(
             "post",
-            reverse("product-file-upload", args=[product.pk]),
+            reverse("specialista-file-upload", args=[product.pk]),
             {"notes": "Nuovo documento tecnico"},
             form=True,
         )
@@ -3412,7 +3412,7 @@ class TestConsistencyMotor:
         product.refresh_from_db()
         company_dna.refresh_from_db()
         assert resp.status_code == 302
-        assert product.status == Product.STATUS_UPDATING
+        assert product.status == Specialista.STATUS_UPDATING
         assert product.product_files.filter(original_name="note-prodotto.txt").exists()
         assert company_dna.content["_consistency_audit_pending"]["scope"] == "specialist"
         assert called == {
@@ -3434,8 +3434,8 @@ class TestConsistencyMotor:
         )
         WorkspaceSubscription.objects.create(client=tenant, plan=plan)
         company = self._make_company_with_dna()
-        self._make_product(company, "A", "a", "A", Product.STATUS_ATTIVO)
-        product = self._make_product(company, "B", "b", "B", Product.STATUS_IN_VALIDAZIONE)
+        self._make_product(company, "A", "a", "A", Specialista.STATUS_ATTIVO)
+        product = self._make_product(company, "B", "b", "B", Specialista.STATUS_IN_VALIDAZIONE)
         called = {}
 
         def fake_delay(company_id, **kwargs):
@@ -3445,7 +3445,7 @@ class TestConsistencyMotor:
         monkeypatch.setattr(tasks.run_consistency_audit, "delay", fake_delay)
         req = rf_with_tenant(
             "post",
-            reverse("product-promote", args=[product.pk]),
+            reverse("specialista-promote", args=[product.pk]),
             form=True,
         )
 
@@ -3467,8 +3467,8 @@ class TestConsistencyMotor:
         )
         WorkspaceSubscription.objects.create(client=tenant, plan=plan)
         company = self._make_company_with_dna()
-        self._make_product(company, "A", "a", "A", Product.STATUS_ATTIVO)
-        product = self._make_product(company, "B", "b", "B", Product.STATUS_IN_VALIDAZIONE)
+        self._make_product(company, "A", "a", "A", Specialista.STATUS_ATTIVO)
+        product = self._make_product(company, "B", "b", "B", Specialista.STATUS_IN_VALIDAZIONE)
         called = {}
 
         def fake_delay(company_id, **kwargs):
@@ -3478,7 +3478,7 @@ class TestConsistencyMotor:
         monkeypatch.setattr(tasks.run_consistency_audit, "delay", fake_delay)
         req = rf_with_tenant(
             "post",
-            reverse("product-promote", args=[product.pk]),
+            reverse("specialista-promote", args=[product.pk]),
             form=True,
         )
 
@@ -3521,13 +3521,13 @@ class TestConsistencyMotor:
 
     def test_updating_specialist_returns_to_validation_after_reapproval(self, rf_with_tenant):
         company = self._make_company_with_dna()
-        product = self._make_product(company, "A", "a", "A", Product.STATUS_UPDATING)
+        product = self._make_product(company, "A", "a", "A", Specialista.STATUS_UPDATING)
         dna = product.dna_versions.get(dna_type=ProductDNA.TYPE_COMPLETE)
 
         for section_key in views.PRODUCT_LAYER_KEYS:
             req = rf_with_tenant(
                 "post",
-                reverse("product-section-approve", args=[product.pk, section_key]),
+                reverse("specialista-section-approve", args=[product.pk, section_key]),
                 form=True,
             )
             resp = views.product_section_approve(req, product.pk, section_key)
@@ -3536,17 +3536,17 @@ class TestConsistencyMotor:
         product.refresh_from_db()
         dna.refresh_from_db()
         assert dna.is_fully_approved() is True
-        assert product.status == Product.STATUS_IN_VALIDAZIONE
+        assert product.status == Specialista.STATUS_IN_VALIDAZIONE
 
     def test_product_publish_creates_channel_snapshot(self, rf_with_tenant):
         company = self._make_company_with_dna()
-        product = self._make_product(company, "A", "a", "A", Product.STATUS_ATTIVO)
+        product = self._make_product(company, "A", "a", "A", Specialista.STATUS_ATTIVO)
         dna = product.dna_versions.get(dna_type=ProductDNA.TYPE_COMPLETE)
         dna.is_approved = timezone.now()
         dna.save(update_fields=["is_approved"])
         req = rf_with_tenant(
             "post",
-            reverse("product-publish", args=[product.pk]),
+            reverse("specialista-publish", args=[product.pk]),
             {"channel": ProductPublication.CHANNEL_WEBSITE},
             form=True,
         )
@@ -3562,7 +3562,7 @@ class TestConsistencyMotor:
 
     def test_product_publish_archives_existing_channel_snapshot(self, rf_with_tenant):
         company = self._make_company_with_dna()
-        product = self._make_product(company, "A", "a", "A", Product.STATUS_ATTIVO)
+        product = self._make_product(company, "A", "a", "A", Specialista.STATUS_ATTIVO)
         dna = product.dna_versions.get(dna_type=ProductDNA.TYPE_COMPLETE)
         dna.is_approved = timezone.now()
         dna.save(update_fields=["is_approved"])
@@ -3574,7 +3574,7 @@ class TestConsistencyMotor:
         )
         req = rf_with_tenant(
             "post",
-            reverse("product-publish", args=[product.pk]),
+            reverse("specialista-publish", args=[product.pk]),
             {"channel": ProductPublication.CHANNEL_WEBSITE},
             form=True,
         )
@@ -3607,7 +3607,7 @@ class TestConsistencyMotor:
 
     def test_consistency_report_hx_returns_partial_with_pending(self, rf_with_tenant):
         company = self._make_company_with_dna()
-        company_dna = company.dna_versions.get(dna_type=CompanyDNA.TYPE_COMPLETE)
+        company_dna = company.dna_versions.get(dna_type=DNAGenerale.TYPE_COMPLETE)
         company_dna.content["_consistency_audit_pending"] = {"scope": ConsistencyIssue.SCOPE_PERIODIC}
         company_dna.save(update_fields=["content"])
         req = rf_with_tenant("get", reverse("consistency-report"))

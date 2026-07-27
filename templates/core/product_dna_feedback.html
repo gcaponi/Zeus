@@ -5,7 +5,7 @@
 
 {% block page_header %}
 <header class="mb-8">
-    <a href="{% url 'product-review' product.pk %}" class="text-sm text-brand-cyan hover:underline">← {{ product.name }}</a>
+    <a href="{% url 'specialista-review' product.pk %}" class="text-sm text-brand-cyan hover:underline">← {{ product.name }}</a>
     <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">Feedback: Specialista → DNA Generale</h1>
     <p class="mt-2 text-content-secondary">ZEUS ha analizzato il DNA Specialista di "{{ product.name }}" e propone questi aggiornamenti al DNA Generale. Decidi quali accettare.</p>
 </header>

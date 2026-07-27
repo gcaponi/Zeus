@@ -15,7 +15,7 @@ from apps.companies.dna_schemas import (
     Tono,
 )
 from apps.companies.llm_client import MockLLMClient
-from apps.companies.models import Company, CompanyDNA, CompanyQuestion, SectionApproval
+from apps.companies.models import Company, DNAGenerale, CompanyQuestion, SectionApproval
 
 
 class TestDNASchema:
@@ -93,12 +93,12 @@ class TestDNASchema:
 
     @pytest.mark.django_db
     def test_missing_sections_uses_six_layer_keys(self):
-        """CompanyDNA.missing_sections must check approvals against the 6 layers."""
+        """DNAGenerale.missing_sections must check approvals against the 6 layers."""
         company = Company.objects.create(schema_name="testco6", name="TestCo")
-        dna = CompanyDNA.objects.create(
+        dna = DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             content={"identita": {}},
             is_current=True,
         )
@@ -136,10 +136,10 @@ class TestQuestionPoolField:
     def test_question_has_pool_field_with_default(self):
         """CompanyQuestion must have a pool field defaulting to 'template'."""
         company = Company.objects.create(schema_name="poolco", name="PoolCo")
-        dna = CompanyDNA.objects.create(
+        dna = DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_PRE,
+            dna_type=DNAGenerale.TYPE_PRE,
             content={"identita": {}},
             is_current=True,
         )
@@ -362,7 +362,7 @@ class TestDNAValidator:
         assert result.score <= 39
 
     def test_validator_accepts_dict_input(self):
-        """validate_dna must accept a plain dict (as stored in CompanyDNA.content)."""
+        """validate_dna must accept a plain dict (as stored in DNAGenerale.content)."""
         from apps.companies.dna_validator import validate_dna
 
         dna_dict = self._good_dna().model_dump()
@@ -658,7 +658,7 @@ class TestEvidenceGrounding:
         assert any(s.ref == "brochure.pdf" for s in file_refs)
 
     def test_extract_sources_from_dict(self):
-        """extract_sources must accept a plain dict (CompanyDNA.content shape)."""
+        """extract_sources must accept a plain dict (DNAGenerale.content shape)."""
         from apps.companies.evidence import extract_sources
 
         dna_dict = {
@@ -1061,7 +1061,7 @@ class TestPipelineIntegration:
     def test_create_complete_dna_links_audit_to_pre(self, monkeypatch):
         """Complete DNA audit chain must link to the pre-DNA audit_hash."""
         from apps.companies import tasks
-        from apps.companies.models import Company, CompanyDNA, Source
+        from apps.companies.models import Company, DNAGenerale, Source
         from apps.companies.views import _create_complete_dna
 
         company, source = self._company_with_source()
@@ -1092,7 +1092,7 @@ class TestPipelineIntegration:
     def test_compute_enrichment_recovers_sources_when_source_is_none(self):
         """Complete/post-edit enrichment must not lose real source availability."""
         from apps.companies import tasks
-        from apps.companies.models import CompanyDNA, CompanyFile, CompanyQuestion
+        from apps.companies.models import DNAGenerale, CompanyFile, CompanyQuestion
 
         company, _source = self._company_with_source()
         CompanyFile.objects.create(
@@ -1107,10 +1107,10 @@ class TestPipelineIntegration:
             content_text="Documento aziendale tecnico.",
             file_size=42,
         )
-        dna = CompanyDNA.objects.create(
+        dna = DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_PRE,
+            dna_type=DNAGenerale.TYPE_PRE,
             content=MockLLMClient().generate_structured(
                 prompt="GENERA DNA GENERALE",
                 response_model=DNAGeneraleSchema,
@@ -1137,13 +1137,13 @@ class TestPipelineIntegration:
         """A DNA in safe_mode (CRITICAL flag) cannot be approved even when
         all sections are marked as approved."""
         from apps.companies import views
-        from apps.companies.models import Company, CompanyDNA, SectionApproval
+        from apps.companies.models import Company, DNAGenerale, SectionApproval
 
         # Company schema_name must match the fixture's tenant (test-tenant).
         company = Company.objects.create(schema_name="test-tenant", name="SafeCo")
         # Build a DNA with an empty layer → layer_completeness CRITICAL → safe_mode.
-        dna = CompanyDNA.objects.create(
-            company=company, version=1, dna_type=CompanyDNA.TYPE_COMPLETE,
+        dna = DNAGenerale.objects.create(
+            company=company, version=1, dna_type=DNAGenerale.TYPE_COMPLETE,
             content={k: "testo" for k in LAYER_KEYS},
         )
         dna.content["confini"] = {}  # whole layer empty → CRITICAL
@@ -1172,7 +1172,7 @@ class TestPipelineIntegration:
     def test_safe_mode_allows_approval_when_clean(self, rf_with_tenant):
         """A clean DNA (no safe_mode) is approved normally."""
         from apps.companies import views
-        from apps.companies.models import Company, CompanyDNA, SectionApproval
+        from apps.companies.models import Company, DNAGenerale, SectionApproval
 
         company = Company.objects.create(schema_name="test-tenant", name="CleanCo")
         # Use a structurally-valid 6-layer content (from the mock) so the
@@ -1180,8 +1180,8 @@ class TestPipelineIntegration:
         clean_content = MockLLMClient().generate_structured(
             prompt="GENERA DNA GENERALE", response_model=DNAGeneraleSchema,
         ).model_dump()
-        dna = CompanyDNA.objects.create(
-            company=company, version=1, dna_type=CompanyDNA.TYPE_COMPLETE,
+        dna = DNAGenerale.objects.create(
+            company=company, version=1, dna_type=DNAGenerale.TYPE_COMPLETE,
             content=clean_content,
         )
         # Clean enrichment (no safe_mode).

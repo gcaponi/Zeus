@@ -14,11 +14,11 @@ from playwright.sync_api import expect, sync_playwright
 from apps.companies.dna_schemas import LAYER_KEYS, PRODUCT_LAYER_KEYS
 from apps.companies.models import (
     Company,
-    CompanyDNA,
+    DNAGenerale,
     CompanyFile,
     CompanyQuestion,
     ConsistencyIssue,
-    Product,
+    Specialista,
     ProductDNA,
 )
 from apps.core.models import Client as TenantClient
@@ -152,10 +152,10 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
             schema_name="ui-baseline",
             name="UI Baseline",
         )
-        pre_dna = CompanyDNA.objects.create(
+        pre_dna = DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_PRE,
+            dna_type=DNAGenerale.TYPE_PRE,
             content={
                 "identita": "Pre-DNA",
                 "_complete_generation": {
@@ -174,7 +174,7 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
         session_cookie = self.client.cookies[settings.SESSION_COOKIE_NAME].value
 
         def update_progress(step_num, step_label):
-            dna = CompanyDNA.objects.get(pk=pre_dna.pk)
+            dna = DNAGenerale.objects.get(pk=pre_dna.pk)
             content = dict(dna.content)
             progress = dict(content["_complete_generation"])
             progress.update(step_num=step_num, step_label=step_label)
@@ -183,11 +183,11 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
             dna.save(update_fields=["content"])
 
         def create_complete_dna():
-            CompanyDNA.objects.filter(pk=pre_dna.pk).update(is_current=False)
-            CompanyDNA.objects.create(
+            DNAGenerale.objects.filter(pk=pre_dna.pk).update(is_current=False)
+            DNAGenerale.objects.create(
                 company=company,
                 version=2,
-                dna_type=CompanyDNA.TYPE_COMPLETE,
+                dna_type=DNAGenerale.TYPE_COMPLETE,
                 content={key: f"Contenuto completo {key}." for key in LAYER_KEYS},
             )
 
@@ -312,7 +312,7 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
 
                 products_page = tenant_context.new_page()
                 products_response = products_page.goto(
-                    f"{self.live_server_url}{reverse('product-list-create')}",
+                    f"{self.live_server_url}{reverse('specialista-list-create')}",
                     wait_until="networkidle",
                 )
 
@@ -550,7 +550,7 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
 
                 products_page = context.new_page()
                 products_response = products_page.goto(
-                    f"{self.live_server_url}{reverse('product-list-create')}",
+                    f"{self.live_server_url}{reverse('specialista-list-create')}",
                     wait_until="networkidle",
                 )
 
@@ -597,10 +597,10 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
             schema_name="ui-baseline",
             name="UI Baseline",
         )
-        pre_dna = CompanyDNA.objects.create(
+        pre_dna = DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_PRE,
+            dna_type=DNAGenerale.TYPE_PRE,
             is_current=False,
             content={key: f"Contesto preliminare {key}." for key in LAYER_KEYS},
         )
@@ -625,13 +625,13 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
         complete_content["sintesi_cognitiva"] = (
             "UI Baseline traduce il contesto tecnico in decisioni verificabili."
         )
-        complete_dna = CompanyDNA.objects.create(
+        complete_dna = DNAGenerale.objects.create(
             company=company,
             version=2,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             content=complete_content,
         )
-        CompanyDNA.objects.filter(pk=complete_dna.pk).update(
+        DNAGenerale.objects.filter(pk=complete_dna.pk).update(
             created_at=datetime(2026, 7, 13, 18, 30, tzinfo=UTC)
         )
 
@@ -856,12 +856,12 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
             schema_name="ui-baseline",
             name="UI Baseline",
         )
-        product = Product.objects.create(
+        product = Specialista.objects.create(
             company=company,
             name="Vasca Premium",
             slug="vasca-premium",
             tipologia="Componente",
-            status=Product.STATUS_BOZZA,
+            status=Specialista.STATUS_BOZZA,
         )
         ProductDNA.objects.create(
             product=product,
@@ -888,35 +888,35 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
         surfaces = [
             (
                 "specialist-list",
-                reverse("product-list-create"),
+                reverse("specialista-list-create"),
                 "Specialisti",
                 'input[name="name"]',
                 False,
             ),
             (
                 "specialist-detail",
-                reverse("product-detail", args=[product.pk]),
+                reverse("specialista-detail", args=[product.pk]),
                 "Dettaglio Specialista",
                 "text=Vasca Premium",
                 False,
             ),
             (
                 "specialist-questions",
-                reverse("product-questions", args=[product.pk]),
+                reverse("specialista-questions", args=[product.pk]),
                 "Preparazione Domande",
                 "text=Preparazione domande",
                 True,
             ),
             (
                 "specialist-review",
-                reverse("product-review", args=[product.pk]),
+                reverse("specialista-review", args=[product.pk]),
                 "Revisione Specialista",
                 "text=Identità del prodotto",
                 False,
             ),
             (
                 "specialist-visualize",
-                reverse("product-dna-visualize", args=[product.pk]),
+                reverse("specialista-dna-visualize", args=[product.pk]),
                 "DNA Specialista",
                 "text=Identità del prodotto",
                 False,
@@ -1017,13 +1017,13 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
         products = []
         source_dna_ids = []
         for index, name in enumerate(("Vasca Premium", "Canale Tecnico"), start=1):
-            product = Product.objects.create(
+            product = Specialista.objects.create(
                 company=company,
                 name=name,
                 slug=f"specialista-{index}",
                 tipologia="Componente",
                 codice=f"ENG-{index:02d}",
-                status=Product.STATUS_ATTIVO,
+                status=Specialista.STATUS_ATTIVO,
             )
             product_dna = ProductDNA.objects.create(
                 product=product,
@@ -1034,10 +1034,10 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
             products.append(product)
             source_dna_ids.append(product_dna.pk)
 
-        company_dna = CompanyDNA.objects.create(
+        company_dna = DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             content={
                 **{key: f"Contenuto verificato per {key}." for key in LAYER_KEYS},
                 "_cross_specialist": {
@@ -1070,7 +1070,7 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                 },
             },
         )
-        CompanyDNA.objects.filter(pk=company_dna.pk).update(
+        DNAGenerale.objects.filter(pk=company_dna.pk).update(
             created_at=datetime(2026, 7, 14, 9, 0, tzinfo=UTC)
         )
         issue = ConsistencyIssue.objects.create(
@@ -1292,10 +1292,10 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
             schema_name=tenant.schema_name,
             name="Rossi Metalli SRL",
         )
-        company_dna = CompanyDNA.objects.create(
+        company_dna = DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             content={
                 "chi_siamo": "Produciamo componenti metallici ad alta precisione.",
                 "mission": "Rendere affidabile ogni passaggio produttivo.",
@@ -1309,7 +1309,7 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
             uploaded_by=staff,
         )
         fixed_created_at = datetime(2026, 7, 14, 10, 30, tzinfo=UTC)
-        CompanyDNA.objects.filter(pk=company_dna.pk).update(
+        DNAGenerale.objects.filter(pk=company_dna.pk).update(
             created_at=fixed_created_at,
         )
         CompanyFile.objects.filter(pk=company_file.pk).update(

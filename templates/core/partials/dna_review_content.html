@@ -139,9 +139,9 @@
     <div class="zeus-card p-5 flex flex-col items-center gap-3">
         <p class="zeus-label mb-1 w-full">DNA Approvato</p>
         {% if return_product %}
-            <a href="{% url 'product-review' return_product.pk %}" class="zeus-btn zeus-btn-primary w-full">Torna allo Specialista →</a>
+            <a href="{% url 'specialista-review' return_product.pk %}" class="zeus-btn zeus-btn-primary w-full">Torna allo Specialista →</a>
         {% else %}
-            <a href="{% url 'product-list-create' %}" class="zeus-btn zeus-btn-primary w-full">Vai agli Specialisti →</a>
+            <a href="{% url 'specialista-list-create' %}" class="zeus-btn zeus-btn-primary w-full">Vai agli Specialisti →</a>
         {% endif %}
         <a href="{% url 'dna-visualize' %}" class="zeus-btn zeus-btn-secondary w-full">Visualizza DNA</a>
         <a href="{% url 'dna-download-pdf' %}" class="zeus-btn zeus-btn-secondary w-full">Scarica PDF</a>

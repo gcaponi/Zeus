@@ -9,11 +9,11 @@ from django.urls import reverse
 
 from apps.companies.models import (
     Company,
-    CompanyDNA,
+    DNAGenerale,
     CompanyFile,
     LLMCall,
     PipelineRun,
-    Product,
+    Specialista,
     ProductDNA,
     ProductFile,
 )
@@ -77,13 +77,13 @@ class TestZeusAdminDashboard:
             schema_name="rossi-metalli",
             name="Rossi Metalli SRL",
         )
-        CompanyDNA.objects.create(
+        DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             content={"chi_siamo": "Rossi"},
         )
-        Product.objects.create(company=company, name="Canale X", slug="canale-x")
+        Specialista.objects.create(company=company, name="Canale X", slug="canale-x")
         PipelineRun.objects.create(
             company=company,
             status=PipelineRun.STATUS_COMPLETED,
@@ -185,10 +185,10 @@ class TestZeusAdminDashboard:
             schema_name="rossi-metalli",
             name="Rossi Metalli SRL",
         )
-        CompanyDNA.objects.create(
+        DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             content={"chi_siamo": "Rossi"},
         )
         request = RequestFactory().get(
@@ -263,10 +263,10 @@ class TestZeusAdminDashboard:
             schema_name="rossi-metalli",
             name="Rossi Metalli SRL",
         )
-        company_dna = CompanyDNA.objects.create(
+        company_dna = DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             content={"chi_siamo": "Rossi"},
         )
         CompanyFile.objects.create(
@@ -276,7 +276,7 @@ class TestZeusAdminDashboard:
             file_size=2048,
             uploaded_by=staff,
         )
-        product = Product.objects.create(
+        product = Specialista.objects.create(
             company=company,
             name="Prodotto Alpha",
             slug="prodotto-alpha",
@@ -468,14 +468,14 @@ class TestZeusAdminDashboard:
             file_size=100,
             uploaded_by=staff,
         )
-        product = Product.objects.create(
+        product = Specialista.objects.create(
             company=company,
             name="Prodotto File",
             slug="prodotto-file",
         )
         product_file = ProductFile.objects.create(
             product=product,
-            original_name="Product notes.txt",
+            original_name="Specialista notes.txt",
             content_text="Contenuto prodotto completo",
             file_size=200,
             uploaded_by=staff,
@@ -507,7 +507,7 @@ class TestZeusAdminDashboard:
         assert company_payload["content"] == "Contenuto aziendale completo"
         assert company_payload["meta"].startswith("Allegato aziendale")
         assert product_response.status_code == 200
-        assert product_payload["title"] == "Product notes.txt"
+        assert product_payload["title"] == "Specialista notes.txt"
         assert product_payload["content"] == "Contenuto prodotto completo"
         assert product_payload["meta"].startswith("Allegato prodotto")
 
@@ -554,20 +554,20 @@ class TestZeusAdminDashboard:
             schema_name="dna-client",
             name="DNA Client SRL",
         )
-        older_company_dna = CompanyDNA.objects.create(
+        older_company_dna = DNAGenerale.objects.create(
             company=company,
             version=1,
-            dna_type=CompanyDNA.TYPE_PRE,
+            dna_type=DNAGenerale.TYPE_PRE,
             content={"chi_siamo": "Versione precedente"},
             is_current=False,
         )
-        current_company_dna = CompanyDNA.objects.create(
+        current_company_dna = DNAGenerale.objects.create(
             company=company,
             version=2,
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             content={"chi_siamo": "Versione corrente"},
         )
-        product = Product.objects.create(
+        product = Specialista.objects.create(
             company=company,
             name="Prodotto DNA",
             slug="prodotto-dna",
@@ -641,7 +641,7 @@ class TestZeusAdminDashboard:
         older_product_dna.refresh_from_db()
         assert company_delete_response.status_code == 302
         assert product_delete_response.status_code == 302
-        assert not CompanyDNA.objects.filter(pk=current_company_dna.pk).exists()
+        assert not DNAGenerale.objects.filter(pk=current_company_dna.pk).exists()
         assert not ProductDNA.objects.filter(pk=current_product_dna.pk).exists()
         assert older_company_dna.is_current is True
         assert older_product_dna.is_current is True

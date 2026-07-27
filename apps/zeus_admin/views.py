@@ -19,13 +19,13 @@ from django_tenants.utils import schema_context
 from apps.companies.dna_schemas import LAYER_KEYS, LAYER_TITLES
 from apps.companies.models import (
     Company,
-    CompanyDNA,
     CompanyFile,
+    DNAGenerale,
     LLMCall,
     PipelineRun,
-    Product,
     ProductDNA,
     ProductFile,
+    Specialista,
 )
 from apps.core.models import Client, Plan, WorkspaceAccess, WorkspaceSubscription
 
@@ -257,10 +257,10 @@ def _company_metrics_for_client(client):
             latest_pipeline = company.pipeline_runs.select_related("source").first()
             latest_dna = company.dna_versions.filter(is_current=True).first()
             complete_dna = company.dna_versions.filter(
-                dna_type=CompanyDNA.TYPE_COMPLETE,
+                dna_type=DNAGenerale.TYPE_COMPLETE,
                 is_current=True,
             ).first()
-            products = Product.objects.filter(company=company)
+            products = Specialista.objects.filter(company=company)
 
             metrics.products_count = products.count()
             metrics.llm_cost_month = (
@@ -522,7 +522,7 @@ def _tenant_detail_data(client):
             )
             data["current_dna"] = company.dna_versions.filter(is_current=True).first()
             data["complete_dna"] = company.dna_versions.filter(
-                dna_type=CompanyDNA.TYPE_COMPLETE,
+                dna_type=DNAGenerale.TYPE_COMPLETE,
                 is_current=True,
             ).first()
             data["dna_versions"] = list(company.dna_versions.all()[:8])
@@ -871,7 +871,7 @@ def open_company_dna(request, client_id, dna_id):
     client = get_object_or_404(_clients_queryset(), pk=client_id)
     with _tenant_context(client.schema_name):
         company = _tenant_company_or_404(client)
-        dna = get_object_or_404(CompanyDNA, pk=dna_id, company=company)
+        dna = get_object_or_404(DNAGenerale, pk=dna_id, company=company)
         status = "Approvato" if dna.is_fully_approved() else "Review"
         return _dna_response(
             f"{dna.get_dna_type_display()} v{dna.version}",
@@ -887,7 +887,7 @@ def delete_company_dna(request, client_id, dna_id):
         return _client_detail_redirect(client, "not_deleted")
     with _tenant_context(client.schema_name):
         company = _tenant_company_or_404(client)
-        dna = get_object_or_404(CompanyDNA, pk=dna_id, company=company)
+        dna = get_object_or_404(DNAGenerale, pk=dna_id, company=company)
         was_current = dna.is_current
         dna.delete()
         if was_current and not company.dna_versions.filter(is_current=True).exists():

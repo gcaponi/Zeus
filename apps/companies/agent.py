@@ -1,7 +1,7 @@
 """Chat in-app "Testa il tuo agente" — system prompt + retrieval KB.
 
 L'agente risponde come il tecnico dell'azienda tenant usando come knowledge base:
-- DNA Generale (CompanyDNA completo, corrente, approvato) renderizzato in Markdown
+- DNA Generale (DNAGenerale completo, corrente, approvato) renderizzato in Markdown
 - DNA Specialista del prodotto selezionato (ProductDNA corrente), se presente
 - Estratti rilevanti dai file caricati (CompanyFile/ProductFile.content_text)
 
@@ -16,7 +16,7 @@ from django.db import connection
 
 from apps.companies.dna_renderer import render_sintesi_cognitiva
 from apps.companies.llm_client import AGENT_CHAT_MARKER
-from apps.companies.models import AgentMessage, CompanyDNA, CompanyFile, ProductDNA, ProductFile
+from apps.companies.models import AgentMessage, DNAGenerale, CompanyFile, ProductDNA, ProductFile
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ CHAT_RULES = """## Regole di comportamento
 def get_approved_company_dna(company):
     """DNA Generale completo, corrente e approvato — il gate della chat."""
     return company.dna_versions.filter(
-        dna_type=CompanyDNA.TYPE_COMPLETE,
+        dna_type=DNAGenerale.TYPE_COMPLETE,
         is_current=True,
         is_approved__isnull=False,
     ).first()

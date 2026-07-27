@@ -10,11 +10,11 @@ from apps.companies.dna_schemas import PRODUCT_LAYER_KEYS
 from apps.companies.llm_client import MockLLMClient
 from apps.companies.models import (
     Company,
-    CompanyDNA,
+    DNAGenerale,
     ConsistencyIssue,
     LLMCall,
     PipelineRun,
-    Product,
+    Specialista,
     ProductDNA,
     ProductFile,
     Source,
@@ -36,10 +36,10 @@ def _make_company(schema="taskco"):
         installatori_in_filiera=True,
         contesto_libero="Cliente tecnico con posa in cantiere e custom su lotto.",
     )
-    CompanyDNA.objects.create(
+    DNAGenerale.objects.create(
         company=company,
         version=1,
-        dna_type=CompanyDNA.TYPE_COMPLETE,
+        dna_type=DNAGenerale.TYPE_COMPLETE,
         content={
             "identita": "Azienda tecnica specializzata in acciaio INOX.",
             "nucleo_tecnico": "Canali ispezionabili e drenaggio tecnico.",
@@ -50,12 +50,12 @@ def _make_company(schema="taskco"):
 
 
 def _make_product(company, slug="canale", codice="CI-001"):
-    product = Product.objects.create(
+    product = Specialista.objects.create(
         company=company,
         name="Canale Ispezionabile",
         slug=slug,
         codice=codice,
-        status=Product.STATUS_IN_COSTRUZIONE,
+        status=Specialista.STATUS_IN_COSTRUZIONE,
     )
     ProductFile.objects.create(
         product=product,
@@ -244,10 +244,10 @@ class TestAsyncCompanyTasks:
 
         def fake_generate(source_arg, company_arg):
             company_arg.dna_versions.filter(is_current=True).update(is_current=False)
-            dna = CompanyDNA.objects.create(
+            dna = DNAGenerale.objects.create(
                 company=company_arg,
                 version=2,
-                dna_type=CompanyDNA.TYPE_PRE,
+                dna_type=DNAGenerale.TYPE_PRE,
                 content={"identita": "pre"},
             )
             return dna, _make_llm_call(company_arg, "pre-dna")
@@ -264,10 +264,10 @@ class TestAsyncCompanyTasks:
     def test_generate_complete_dna_task_calls_view_helper(self, monkeypatch):
         user = get_user_model().objects.create_user("u", "u@example.com", "pw")
         company = _make_company()
-        pre_dna = CompanyDNA.objects.create(
+        pre_dna = DNAGenerale.objects.create(
             company=company,
             version=2,
-            dna_type=CompanyDNA.TYPE_PRE,
+            dna_type=DNAGenerale.TYPE_PRE,
             content={"identita": "pre"},
             is_current=False,
         )
@@ -286,10 +286,10 @@ class TestAsyncCompanyTasks:
 
     def test_generate_company_questions_task_updates_state(self, monkeypatch):
         company = _make_company()
-        pre_dna = CompanyDNA.objects.create(
+        pre_dna = DNAGenerale.objects.create(
             company=company,
             version=2,
-            dna_type=CompanyDNA.TYPE_PRE,
+            dna_type=DNAGenerale.TYPE_PRE,
             content={"identita": "pre"},
             is_current=False,
         )
@@ -319,10 +319,10 @@ class TestAsyncCompanyTasks:
 
     def test_process_company_gap_round_dispatches_complete(self, monkeypatch):
         company = _make_company()
-        pre_dna = CompanyDNA.objects.create(
+        pre_dna = DNAGenerale.objects.create(
             company=company,
             version=2,
-            dna_type=CompanyDNA.TYPE_PRE,
+            dna_type=DNAGenerale.TYPE_PRE,
             content={"identita": "pre"},
             is_current=False,
         )
@@ -494,7 +494,7 @@ class TestAsyncCompanyTasks:
             dna_type=ProductDNA.TYPE_COMPLETE,
             content=_specialist_content("complete"),
         )
-        current_dna = company.dna_versions.get(dna_type=CompanyDNA.TYPE_COMPLETE)
+        current_dna = company.dna_versions.get(dna_type=DNAGenerale.TYPE_COMPLETE)
         current_dna.content = {
             "identita": "base",
             "_pending_specialist_feedback": {
@@ -531,12 +531,12 @@ class TestAsyncCompanyTasks:
 
     def test_run_consistency_audit_creates_issue_and_accumulated(self, monkeypatch):
         company = _make_company()
-        company_dna = company.dna_versions.get(dna_type=CompanyDNA.TYPE_COMPLETE)
+        company_dna = company.dna_versions.get(dna_type=DNAGenerale.TYPE_COMPLETE)
         company_dna.content["_consistency_audit_pending"] = {"scope": "periodic"}
         company_dna.save(update_fields=["content"])
         for index in range(3):
             product = _make_product(company, slug=f"canale-{index}", codice=f"CI-00{index}")
-            product.status = Product.STATUS_ATTIVO
+            product.status = Specialista.STATUS_ATTIVO
             product.save(update_fields=["status"])
             ProductDNA.objects.create(
                 product=product,
@@ -585,11 +585,11 @@ class TestAsyncCompanyTasks:
     def test_run_consistency_audit_caps_issues_at_max_issues(self, monkeypatch):
         """Foundation profile (max_issues=5) truncates the LLM output to 5."""
         company = _make_company(schema="capco")
-        company_dna = company.dna_versions.get(dna_type=CompanyDNA.TYPE_COMPLETE)
+        company_dna = company.dna_versions.get(dna_type=DNAGenerale.TYPE_COMPLETE)
         company_dna.content["_consistency_audit_pending"] = {"scope": "periodic"}
         company_dna.save(update_fields=["content"])
         product = _make_product(company, slug="canale", codice="CI-000")
-        product.status = Product.STATUS_ATTIVO
+        product.status = Specialista.STATUS_ATTIVO
         product.save(update_fields=["status"])
         ProductDNA.objects.create(
             product=product,
@@ -631,11 +631,11 @@ class TestAsyncCompanyTasks:
     def test_run_consistency_audit_injects_depth_and_max_into_prompt(self, monkeypatch):
         """max_issues and depth_instruction reach the LLM prompt."""
         company = _make_company(schema="depthco")
-        company_dna = company.dna_versions.get(dna_type=CompanyDNA.TYPE_COMPLETE)
+        company_dna = company.dna_versions.get(dna_type=DNAGenerale.TYPE_COMPLETE)
         company_dna.content["_consistency_audit_pending"] = {"scope": "periodic"}
         company_dna.save(update_fields=["content"])
         product = _make_product(company, slug="canale", codice="CI-001")
-        product.status = Product.STATUS_ATTIVO
+        product.status = Specialista.STATUS_ATTIVO
         product.save(update_fields=["status"])
         ProductDNA.objects.create(
             product=product,

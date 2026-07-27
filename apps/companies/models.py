@@ -89,7 +89,7 @@ class Company(models.Model):
 
 class DNAFeedback(models.Model):
     dna = models.ForeignKey(
-        "CompanyDNA", on_delete=models.CASCADE, related_name="feedbacks",
+        "DNAGenerale", on_delete=models.CASCADE, related_name="feedbacks",
     )
     rating = models.PositiveSmallIntegerField()  # 1-5
     comment = models.TextField(null=True, blank=True)
@@ -102,7 +102,7 @@ class DNAFeedback(models.Model):
         return f"Feedback {self.rating}/5 on DNA #{self.dna_id}"
 
 
-class CompanyDNA(models.Model):
+class DNAGenerale(models.Model):
     TYPE_PRE = "pre"
     TYPE_COMPLETE = "complete"
 
@@ -158,6 +158,7 @@ class CompanyDNA(models.Model):
         return round(weighted_sum / total_weight, 2)
 
     class Meta:
+        db_table = "companies_companydna"
         verbose_name = "Company DNA"
         verbose_name_plural = "Company DNAs"
         constraints = [
@@ -200,7 +201,7 @@ class SectionApproval(models.Model):
     SECTION_KEYS = DNA_GENERALE_SECTION_CHOICES
 
     dna = models.ForeignKey(
-        CompanyDNA,
+        DNAGenerale,
         on_delete=models.CASCADE,
         related_name="section_approvals",
     )
@@ -253,7 +254,7 @@ class CompanyQuestion(models.Model):
         related_name="company_questions",
     )
     dna = models.ForeignKey(
-        CompanyDNA,
+        DNAGenerale,
         on_delete=models.CASCADE,
         related_name="questions",
     )
@@ -399,7 +400,7 @@ class LLMCall(models.Model):
         return f"{self.model_name} @ {self.created_at:%H:%M}"
 
 
-class Product(models.Model):
+class Specialista(models.Model):
     STATUS_BOZZA = "bozza"
     STATUS_IN_COSTRUZIONE = "in_costruzione"
     STATUS_IN_VALIDAZIONE = "in_validazione"
@@ -443,6 +444,7 @@ class Product(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        db_table = "companies_product"
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(
@@ -495,7 +497,7 @@ class ProductDNA(models.Model):
     ]
 
     product = models.ForeignKey(
-        Product,
+        Specialista,
         on_delete=models.CASCADE,
         related_name="dna_versions",
     )
@@ -547,7 +549,7 @@ class ProductDNA(models.Model):
 
 class ProductFile(models.Model):
     product = models.ForeignKey(
-        Product,
+        Specialista,
         on_delete=models.CASCADE,
         related_name="product_files",
     )
@@ -587,7 +589,7 @@ class ProductPublication(models.Model):
     ]
 
     product = models.ForeignKey(
-        Product,
+        Specialista,
         on_delete=models.CASCADE,
         related_name="publications",
     )
@@ -631,7 +633,7 @@ class ProductQuestion(models.Model):
     ]
 
     product = models.ForeignKey(
-        Product,
+        Specialista,
         on_delete=models.CASCADE,
         related_name="product_questions",
     )
@@ -716,7 +718,7 @@ class AgentConversation(models.Model):
         related_name="agent_conversations",
     )
     product = models.ForeignKey(
-        "Product",
+        "Specialista",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -802,14 +804,14 @@ class ConsistencyIssue(models.Model):
         related_name="consistency_issues",
     )
     company_dna = models.ForeignKey(
-        CompanyDNA,
+        DNAGenerale,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="consistency_issues",
     )
     product = models.ForeignKey(
-        Product,
+        Specialista,
         on_delete=models.CASCADE,
         null=True,
         blank=True,

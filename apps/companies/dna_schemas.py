@@ -31,7 +31,7 @@ LAYER_TITLES = {
 
 
 # ---------------------------------------------------------------------------
-# Product / Specialist DNA — 6 technical layers (hierarchical extraction)
+# Specialista / Specialist DNA — 6 technical layers (hierarchical extraction)
 # ---------------------------------------------------------------------------
 
 PRODUCT_LAYER_KEYS = [

@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from apps.companies.models import (
     Company,
-    CompanyDNA,
+    DNAGenerale,
     CompanyFile,
     CompanyQuestion,
     ConsistencyIssue,
@@ -15,7 +15,7 @@ from apps.companies.models import (
 
 
 class CompanyDNAInline(admin.StackedInline):
-    model = CompanyDNA
+    model = DNAGenerale
     extra = 0
     fields = [
         "version",

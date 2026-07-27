@@ -39,14 +39,14 @@ from apps.companies.models import (
     AgentConversation,
     AgentMessage,
     Company,
-    CompanyDNA,
+    DNAGenerale,
     CompanyFile,
     CompanyQuestion,
     ConsistencyIssue,
     DNAFeedback,
     LLMCall,
     PipelineRun,
-    Product,
+    Specialista,
     ProductDNA,
     ProductFile,
     ProductPublication,
@@ -261,7 +261,7 @@ def _onboarding_context(request):
     run_is_pending = bool(latest_run and latest_run.status in {"running", "pending"})
     if review_start:
         step = 1
-    elif latest_dna and latest_dna.dna_type == CompanyDNA.TYPE_COMPLETE:
+    elif latest_dna and latest_dna.dna_type == DNAGenerale.TYPE_COMPLETE:
         step = 3
     elif latest_dna:
         step = 2
@@ -1322,7 +1322,7 @@ def _start_product_gap_processing(request, product, pre_dna, current_round):
         tenant_schema=tenant_schema.schema_name if tenant_schema else None,
     )
     return redirect(
-        "product-gap-processing",
+        "specialista-gap-processing",
         pk=product.id,
         round_number=current_round,
     )
@@ -1341,7 +1341,7 @@ def _process_product_answers_after_round(request, product, pre_dna, current_roun
     # If current_round > max_rounds + 1, we have used all allowed follow-ups.
     if current_round > limits["max_rounds"] + 1:
         _trigger_complete_product_dna(request, product, pre_dna)
-        return redirect("product-review", pk=product.id)
+        return redirect("specialista-review", pk=product.id)
 
     try:
         evaluation = _evaluate_product_answer_sufficiency(
@@ -1352,15 +1352,15 @@ def _process_product_answers_after_round(request, product, pre_dna, current_roun
             "Gap Engine evaluation failed for product %s", product.name
         )
         _trigger_complete_product_dna(request, product, pre_dna)
-        return redirect("product-review", pk=product.id)
+        return redirect("specialista-review", pk=product.id)
 
     followups = evaluation.get("follow_ups", [])[: limits["max_followups"]]
     if evaluation.get("overall_sufficient") or not followups:
         _trigger_complete_product_dna(request, product, pre_dna)
-        return redirect("product-review", pk=product.id)
+        return redirect("specialista-review", pk=product.id)
 
     _create_product_gap_followups(product, pre_dna, followups, current_round, plan_slug)
-    return redirect("product-gap-questions", pk=product.id, round_number=current_round + 1)
+    return redirect("specialista-gap-questions", pk=product.id, round_number=current_round + 1)
 
 
 def _trigger_complete_product_dna(request, product, pre_dna):
@@ -1386,7 +1386,7 @@ def _trigger_complete_dna(request, company, pre_dna):
 
     tenant_schema = getattr(request, "tenant", None)
     latest_complete = company.dna_versions.filter(
-        dna_type=CompanyDNA.TYPE_COMPLETE,
+        dna_type=DNAGenerale.TYPE_COMPLETE,
     ).order_by("-version").first()
     _set_pending_complete_generation(
         request,
@@ -1868,10 +1868,10 @@ def _create_complete_dna(company, pre_dna, user):
     last_version = company.dna_versions.order_by("-version").first()
     next_version = (last_version.version + 1) if last_version else 1
     company.dna_versions.filter(is_current=True).update(is_current=False)
-    dna = CompanyDNA.objects.create(
+    dna = DNAGenerale.objects.create(
         company=company,
         version=next_version,
-        dna_type=CompanyDNA.TYPE_COMPLETE,
+        dna_type=DNAGenerale.TYPE_COMPLETE,
         content=content,
         created_by=user if user and user.is_authenticated else None,
     )
@@ -2098,7 +2098,7 @@ def _pending_complete_source_dna(request):
     source_dna_id = request.session.get("pending_complete_source_dna_id")
     if not source_dna_id:
         return None
-    return CompanyDNA.objects.filter(pk=source_dna_id).first()
+    return DNAGenerale.objects.filter(pk=source_dna_id).first()
 
 
 def _clear_pending_complete_generation(request):
@@ -2118,7 +2118,7 @@ def _specialist_feedback_return_product(request, company):
     product_id = request.session.get("specialist_feedback_return_product_id")
     if not product_id:
         return None
-    return Product.objects.filter(pk=product_id, company=company).first()
+    return Specialista.objects.filter(pk=product_id, company=company).first()
 
 
 def _set_company_generation_progress(dna, step_num, steps_total, label, **extra):
@@ -2460,7 +2460,7 @@ def onboarding_dna(request, pk):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    dna = CompanyDNA.objects.filter(
+    dna = DNAGenerale.objects.filter(
         pk=pk, company=company, is_current=True,
     ).first()
     if not dna:
@@ -2747,7 +2747,7 @@ def dna_feedback(request, pk):
     tenant = getattr(request, "tenant", None)
     if not tenant or tenant.schema_name == "public":
         return JsonResponse({"error": "no tenant"}, status=400)
-    dna = CompanyDNA.objects.filter(
+    dna = DNAGenerale.objects.filter(
         pk=pk, company__schema_name=tenant.schema_name,
     ).first()
     if not dna:
@@ -2763,7 +2763,7 @@ def dna_feedback(request, pk):
         rating=rating,
         comment=body.get("comment", ""),
     )
-    dna.confidence_score = CompanyDNA.recalculate_confidence(dna.id)
+    dna.confidence_score = DNAGenerale.recalculate_confidence(dna.id)
     dna.save(update_fields=["confidence_score"])
 
     return JsonResponse({
@@ -2828,11 +2828,11 @@ def dna_create(request):
     # mark previous current as False
     company.dna_versions.filter(is_current=True).update(is_current=False)
 
-    dna = CompanyDNA.objects.create(
+    dna = DNAGenerale.objects.create(
         company=company,
         version=next_version,
         content=content,
-        dna_type=body.get("dna_type", CompanyDNA.TYPE_PRE),
+        dna_type=body.get("dna_type", DNAGenerale.TYPE_PRE),
         created_by=request.user if request.user.is_authenticated else None,
     )
     return JsonResponse({
@@ -2851,9 +2851,9 @@ def dna_questions(request):
     if not company:
         return HttpResponse("No tenant", status=400)
 
-    pre_dna = company.dna_versions.filter(dna_type=CompanyDNA.TYPE_PRE).order_by("-version").first()
+    pre_dna = company.dna_versions.filter(dna_type=DNAGenerale.TYPE_PRE).order_by("-version").first()
     complete_dna = company.dna_versions.filter(
-        dna_type=CompanyDNA.TYPE_COMPLETE,
+        dna_type=DNAGenerale.TYPE_COMPLETE,
         is_current=True,
     ).first()
     if not pre_dna:
@@ -2935,7 +2935,7 @@ def dna_gap_questions(request, round_number):
     if not company:
         return HttpResponse("No tenant", status=400)
 
-    pre_dna = company.dna_versions.filter(dna_type=CompanyDNA.TYPE_PRE).order_by("-version").first()
+    pre_dna = company.dna_versions.filter(dna_type=DNAGenerale.TYPE_PRE).order_by("-version").first()
     if not pre_dna:
         return HttpResponse("Pre-DNA not found", status=404)
 
@@ -2945,7 +2945,7 @@ def dna_gap_questions(request, round_number):
         return _process_answers_after_round(request, company, pre_dna, current_round=round_number)
 
     complete_dna = company.dna_versions.filter(
-        dna_type=CompanyDNA.TYPE_COMPLETE,
+        dna_type=DNAGenerale.TYPE_COMPLETE,
         is_current=True,
     ).first()
     error = None
@@ -3006,7 +3006,7 @@ def dna_processing(request, operation, round_number):
     if not company:
         return HttpResponse("No tenant", status=400)
     pre_dna = company.dna_versions.filter(
-        dna_type=CompanyDNA.TYPE_PRE,
+        dna_type=DNAGenerale.TYPE_PRE,
     ).order_by("-version").first()
     if not pre_dna:
         return HttpResponse("Pre-DNA not found", status=404)
@@ -3062,7 +3062,7 @@ def dna_generating(request):
     if not company:
         return HttpResponse("No tenant", status=400)
     complete_dna = company.dna_versions.filter(
-        dna_type=CompanyDNA.TYPE_COMPLETE,
+        dna_type=DNAGenerale.TYPE_COMPLETE,
         is_current=True,
     ).first()
     min_complete_version = _pending_complete_min_version(request)
@@ -3070,7 +3070,7 @@ def dna_generating(request):
     poll_seconds = getattr(settings, "DNA_GENERATION_POLL_SECONDS", 4)
     if min_complete_version:
         complete_dna = company.dna_versions.filter(
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             is_current=True,
             version__gte=min_complete_version,
         ).first()
@@ -3129,7 +3129,7 @@ def motore_b_report(request):
     if not company:
         return HttpResponse("No tenant", status=400)
     dna = company.dna_versions.filter(
-        dna_type=CompanyDNA.TYPE_COMPLETE,
+        dna_type=DNAGenerale.TYPE_COMPLETE,
         is_current=True,
     ).first()
     if not dna:
@@ -3224,7 +3224,7 @@ def _render_dna_review_fragment(request, company, dna, status=200):
 
 def _active_specialist_records(company):
     records = []
-    products = company.products.filter(status=Product.STATUS_ATTIVO).order_by("name")
+    products = company.products.filter(status=Specialista.STATUS_ATTIVO).order_by("name")
     for product in products:
         dna = product.dna_versions.filter(
             dna_type=ProductDNA.TYPE_COMPLETE,
@@ -3314,7 +3314,7 @@ def _consistency_periodic_threshold(company):
 
 def _dispatch_specialist_consistency_audit(request, company, product):
     company_dna = company.dna_versions.filter(
-        dna_type=CompanyDNA.TYPE_COMPLETE,
+        dna_type=DNAGenerale.TYPE_COMPLETE,
         is_current=True,
     ).first()
     if not company_dna:
@@ -3342,9 +3342,9 @@ def _dispatch_specialist_consistency_audit(request, company, product):
 
 
 def _maybe_trigger_product_upload_consistency_audit(request, company, product):
-    if product.status != Product.STATUS_ATTIVO:
+    if product.status != Specialista.STATUS_ATTIVO:
         return False
-    product.status = Product.STATUS_UPDATING
+    product.status = Specialista.STATUS_UPDATING
     product.save(update_fields=["status"])
     try:
         return _dispatch_specialist_consistency_audit(request, company, product)
@@ -3679,7 +3679,7 @@ def dna_cross_specialist_analyze(request):
     if not company:
         return HttpResponse("No tenant", status=400)
     dna = company.dna_versions.filter(
-        dna_type=CompanyDNA.TYPE_COMPLETE,
+        dna_type=DNAGenerale.TYPE_COMPLETE,
         is_current=True,
     ).first()
     if not dna:
@@ -3717,7 +3717,7 @@ def dna_cross_specialist_apply(request):
     if not company:
         return HttpResponse("No tenant", status=400)
     old_dna = company.dna_versions.filter(
-        dna_type=CompanyDNA.TYPE_COMPLETE,
+        dna_type=DNAGenerale.TYPE_COMPLETE,
         is_current=True,
     ).first()
     if not old_dna:
@@ -3754,10 +3754,10 @@ def dna_cross_specialist_apply(request):
     last_version = company.dna_versions.order_by("-version").first()
     next_version = (last_version.version + 1) if last_version else 1
     company.dna_versions.filter(is_current=True).update(is_current=False)
-    new_dna = CompanyDNA.objects.create(
+    new_dna = DNAGenerale.objects.create(
         company=company,
         version=next_version,
-        dna_type=CompanyDNA.TYPE_COMPLETE,
+        dna_type=DNAGenerale.TYPE_COMPLETE,
         content=new_content,
         is_current=True,
         created_by=request.user if request.user.is_authenticated else None,
@@ -3777,7 +3777,7 @@ def consistency_report(request):
     if not company:
         return HttpResponse("No tenant", status=400)
     company_dna = company.dna_versions.filter(
-        dna_type=CompanyDNA.TYPE_COMPLETE,
+        dna_type=DNAGenerale.TYPE_COMPLETE,
         is_current=True,
     ).first()
     issues = company.consistency_issues.select_related(
@@ -3811,7 +3811,7 @@ def consistency_audit_run(request):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    company_dna = company.dna_versions.filter(dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True).first()
+    company_dna = company.dna_versions.filter(dna_type=DNAGenerale.TYPE_COMPLETE, is_current=True).first()
     if not company_dna:
         return HttpResponse("DNA Generale non trovato", status=404)
     from apps.companies.tasks import run_consistency_audit
@@ -3855,7 +3855,7 @@ def product_consistency_check(request, pk):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    product = Product.objects.filter(pk=pk, company=company).first()
+    product = Specialista.objects.filter(pk=pk, company=company).first()
     if not product:
         return HttpResponse("Prodotto non trovato", status=404)
     if not product.dna_versions.filter(dna_type=ProductDNA.TYPE_COMPLETE, is_current=True).exists():
@@ -3872,7 +3872,7 @@ def dna_section_approve(request, pk, section_key):
     company = _tenant_company(request)
     if not company:
         return JsonResponse({"error": "no tenant"}, status=400)
-    dna = CompanyDNA.objects.filter(pk=pk, company=company, is_current=True).first()
+    dna = DNAGenerale.objects.filter(pk=pk, company=company, is_current=True).first()
     if not dna:
         return JsonResponse({"error": "dna not found"}, status=404)
     if section_key not in LAYER_KEYS:
@@ -3946,7 +3946,7 @@ def dna_section_edit(request, pk, section_key):
     company = _tenant_company(request)
     if not company:
         return JsonResponse({"error": "no tenant"}, status=400)
-    old_dna = CompanyDNA.objects.filter(pk=pk, company=company, is_current=True).first()
+    old_dna = DNAGenerale.objects.filter(pk=pk, company=company, is_current=True).first()
     if not old_dna:
         return JsonResponse({"error": "dna not found"}, status=404)
     if section_key not in LAYER_KEYS:
@@ -3971,7 +3971,7 @@ def dna_section_edit(request, pk, section_key):
     company.dna_versions.filter(is_current=True).update(is_current=False)
 
     # Create new DNA v+1
-    new_dna = CompanyDNA.objects.create(
+    new_dna = DNAGenerale.objects.create(
         company=company,
         version=old_dna.version + 1,
         dna_type=old_dna.dna_type,
@@ -4135,7 +4135,7 @@ def _product_question_generation_prompt(product, dna, plan_slug):
     documents = _product_document_context_rich(product)
     company = product.company
     company_dna = company.dna_versions.filter(
-        dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True
+        dna_type=DNAGenerale.TYPE_COMPLETE, is_current=True
     ).first()
     company_context = ""
     if company_dna:
@@ -4245,7 +4245,7 @@ def _generate_product_questions(product, dna):
         system_prompt=ZEUS_SYSTEM_PROMPT,
         temperatures=(0.5, 0.3, 0.2),
         parse=_parse_product_question_generation,
-        context="product-questions",
+        context="specialista-questions",
     )
     LLMCall.objects.create(
         company=product.company,
@@ -4297,9 +4297,9 @@ def _global_product_dna_synthesis(product, pre_dna_content, questions):
     qa_block = _format_qa_block(questions)
     pre_dna_json = json.dumps(prev_content, ensure_ascii=False, indent=2)
 
-    # Include CompanyDNA as context (eredita, non ripete)
+    # Include DNAGenerale as context (eredita, non ripete)
     company_dna = product.company.dna_versions.filter(
-        dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True
+        dna_type=DNAGenerale.TYPE_COMPLETE, is_current=True
     ).first()
     company_dna_json = ""
     if company_dna:
@@ -4585,7 +4585,7 @@ def _create_complete_product_dna(product, pre_dna, user):
         logger.exception("Editorial leakage check failed for product %s", product.pk)
 
     # Transition status to in_validazione (DNA complete, ready for review)
-    product.status = Product.STATUS_IN_VALIDAZIONE
+    product.status = Specialista.STATUS_IN_VALIDAZIONE
     product.save(update_fields=["status"])
 
     return dna
@@ -4679,7 +4679,7 @@ def product_list_create(request):
 
         from django.utils.text import slugify
         slug = slugify(name)
-        if Product.objects.filter(company=company, slug=slug).exists():
+        if Specialista.objects.filter(company=company, slug=slug).exists():
             return render(request, template_name, {
                 "company": company,
                 "products": products,
@@ -4688,20 +4688,20 @@ def product_list_create(request):
 
         tipologia = request.POST.get("tipologia", "").strip()
         codice = request.POST.get("codice", "").strip()
-        if codice and Product.objects.filter(company=company, codice=codice).exists():
+        if codice and Specialista.objects.filter(company=company, codice=codice).exists():
             return render(request, template_name, {
                 "company": company,
                 "products": products,
                 "error": "Codice gia in uso per un altro specialista.",
             }, status=400)
 
-        Product.objects.create(
+        Specialista.objects.create(
             company=company,
             name=name,
             slug=slug,
             tipologia=tipologia,
             codice=codice,
-            status=Product.STATUS_BOZZA,
+            status=Specialista.STATUS_BOZZA,
         )
         subscription = _subscription_for_company(company)
         if subscription:
@@ -4721,7 +4721,7 @@ def product_delete(request, pk):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    product = Product.objects.filter(pk=pk, company=company).first()
+    product = Specialista.objects.filter(pk=pk, company=company).first()
     if not product:
         return HttpResponse("Specialista non trovato", status=404)
     product_name = product.name
@@ -4731,7 +4731,7 @@ def product_delete(request, pk):
         subscription.product_dnas_used = company.products.count()
         subscription.save(update_fields=["product_dnas_used"])
     if not _wants_json(request):
-        return redirect("product-list-create")
+        return redirect("specialista-list-create")
     return JsonResponse({"status": "ok", "deleted": product_name})
 
 
@@ -4744,14 +4744,14 @@ def _product_detail_context(product, error=None):
     dna = product.dna_versions.filter(is_current=True).first()
     sections = _product_dna_sections(dna.content) if dna else []
     product_files = list(product.product_files.all())
-    company_dna = CompanyDNA.objects.filter(company=product.company, is_current=True).first()
+    company_dna = DNAGenerale.objects.filter(company=product.company, is_current=True).first()
     return {
         "product": product,
         "dna": dna,
         "sections": sections,
         "product_files": product_files,
         "product_files_count": len(product_files),
-        "is_updating": product.status == Product.STATUS_UPDATING,
+        "is_updating": product.status == Specialista.STATUS_UPDATING,
         "product_step": 1,
         "error": error,
         "company_dna": company_dna,
@@ -4819,7 +4819,7 @@ def product_detail(request, pk):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    product = Product.objects.filter(pk=pk, company=company).first()
+    product = Specialista.objects.filter(pk=pk, company=company).first()
     if not product:
         return HttpResponse("Prodotto non trovato", status=404)
 
@@ -4829,9 +4829,9 @@ def product_detail(request, pk):
         if pre_dna and pre_dna.questions.exists():
             if request.headers.get("HX-Request") == "true":
                 response = HttpResponse(status=204)
-                response["HX-Redirect"] = reverse("product-questions", args=[product.pk])
+                response["HX-Redirect"] = reverse("specialista-questions", args=[product.pk])
                 return response
-            return redirect("product-questions", pk=product.pk)
+            return redirect("specialista-questions", pk=product.pk)
         template_name = (
             "core/app_shell_product_dna_loading.html"
             if settings.ZEUS_APP_SHELL_ENABLED
@@ -4852,7 +4852,7 @@ def product_file_upload(request, pk):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    product = Product.objects.filter(pk=pk, company=company).first()
+    product = Specialista.objects.filter(pk=pk, company=company).first()
     if not product:
         return HttpResponse("Prodotto non trovato", status=404)
 
@@ -4915,7 +4915,7 @@ def product_file_upload(request, pk):
     _maybe_trigger_product_upload_consistency_audit(request, company, product)
 
     if not _wants_json(request):
-        return redirect("product-detail", pk=product.pk)
+        return redirect("specialista-detail", pk=product.pk)
     return JsonResponse({"status": "ok", "files_count": product.product_files.count()})
 
 
@@ -4925,7 +4925,7 @@ def product_file_delete(request, pk, file_pk):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    product = Product.objects.filter(pk=pk, company=company).first()
+    product = Specialista.objects.filter(pk=pk, company=company).first()
     if not product:
         return HttpResponse("Prodotto non trovato", status=404)
     product_file = product.product_files.filter(pk=file_pk).first()
@@ -4937,7 +4937,7 @@ def product_file_delete(request, pk, file_pk):
         subscription.product_files_bytes_used = _product_file_bytes_used(product)
         subscription.save(update_fields=["product_files_bytes_used"])
     if not _wants_json(request):
-        return redirect("product-detail", pk=product.pk)
+        return redirect("specialista-detail", pk=product.pk)
     return JsonResponse({"status": "ok", "files_count": product.product_files.count()})
 
 
@@ -4947,12 +4947,12 @@ def product_dna_generate(request, pk):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    product = Product.objects.filter(pk=pk, company=company).first()
+    product = Specialista.objects.filter(pk=pk, company=company).first()
     if not product:
         return HttpResponse("Prodotto non trovato", status=404)
 
-    if product.status == Product.STATUS_IN_COSTRUZIONE:
-        target = f"{reverse('product-detail', args=[product.pk])}?generating=1"
+    if product.status == Specialista.STATUS_IN_COSTRUZIONE:
+        target = f"{reverse('specialista-detail', args=[product.pk])}?generating=1"
         if not _wants_json(request):
             return redirect(target)
         return JsonResponse({
@@ -4984,7 +4984,7 @@ def product_dna_generate(request, pk):
 
     from apps.companies.tasks import generate_product_dna_task
     tenant_schema = getattr(request, "tenant", None)
-    product.status = Product.STATUS_IN_COSTRUZIONE
+    product.status = Specialista.STATUS_IN_COSTRUZIONE
     product.generation_step = "1/5: Concept Map"
     product.save(update_fields=["status", "generation_step", "updated_at"])
     generate_product_dna_task.delay(
@@ -4993,7 +4993,7 @@ def product_dna_generate(request, pk):
     )
 
     if not _wants_json(request):
-        return redirect(f"{reverse('product-detail', args=[product.pk])}?generating=1")
+        return redirect(f"{reverse('specialista-detail', args=[product.pk])}?generating=1")
     return JsonResponse({
         "status": "generating",
         "product_id": product.pk,
@@ -5006,7 +5006,7 @@ def product_questions(request, pk):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    product = Product.objects.filter(pk=pk, company=company).first()
+    product = Specialista.objects.filter(pk=pk, company=company).first()
     if not product:
         return HttpResponse("Prodotto non trovato", status=404)
 
@@ -5027,7 +5027,7 @@ def product_questions(request, pk):
         .first()
     )
     if latest_unanswered_round and latest_unanswered_round > 1:
-        return redirect("product-gap-questions", pk=product.id, round_number=latest_unanswered_round)
+        return redirect("specialista-gap-questions", pk=product.id, round_number=latest_unanswered_round)
 
     error = None
     questions = list(pre_dna.questions.filter(question_round=1).order_by("id"))
@@ -5066,7 +5066,7 @@ def product_questions(request, pk):
         if missing:
             error = "Rispondi a tutte le domande prima di generare il DNA completo."
         elif complete_dna and not answers_changed:
-            return redirect("product-review", pk=product.id)
+            return redirect("specialista-review", pk=product.id)
         else:
             return _start_product_gap_processing(
                 request, product, pre_dna, current_round=1
@@ -5098,7 +5098,7 @@ def product_gap_questions(request, pk, round_number):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    product = Product.objects.filter(pk=pk, company=company).first()
+    product = Specialista.objects.filter(pk=pk, company=company).first()
     if not product:
         return HttpResponse("Prodotto non trovato", status=404)
 
@@ -5135,7 +5135,7 @@ def product_gap_questions(request, pk, round_number):
         if missing:
             error = "Rispondi a tutte le domande di approfondimento prima di proseguire."
         elif complete_dna and not answers_changed:
-            return redirect("product-review", pk=product.id)
+            return redirect("specialista-review", pk=product.id)
         else:
             return _start_product_gap_processing(
                 request, product, pre_dna, current_round=round_number
@@ -5168,7 +5168,7 @@ def product_gap_processing(request, pk, round_number):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    product = Product.objects.filter(pk=pk, company=company).first()
+    product = Specialista.objects.filter(pk=pk, company=company).first()
     if not product:
         return HttpResponse("Prodotto non trovato", status=404)
 
@@ -5179,7 +5179,7 @@ def product_gap_processing(request, pk, round_number):
     state = _product_gap_processing_state(pre_dna)
     next_round = _latest_unanswered_product_round(pre_dna, after_round=round_number)
     if next_round:
-        target = reverse("product-gap-questions", args=[product.id, next_round])
+        target = reverse("specialista-gap-questions", args=[product.id, next_round])
         if request.headers.get("HX-Request") == "true":
             response = HttpResponse(status=204)
             response["HX-Redirect"] = target
@@ -5195,7 +5195,7 @@ def product_gap_processing(request, pk, round_number):
         complete_qs = complete_qs.filter(version__gte=expected_version)
     complete_dna = complete_qs.first()
     if complete_dna:
-        target = reverse("product-review", args=[product.id])
+        target = reverse("specialista-review", args=[product.id])
         if request.headers.get("HX-Request") == "true":
             response = HttpResponse(status=204)
             response["HX-Redirect"] = target
@@ -5225,7 +5225,7 @@ def product_review(request, pk):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    product = Product.objects.filter(pk=pk, company=company).first()
+    product = Specialista.objects.filter(pk=pk, company=company).first()
     if not product:
         return HttpResponse("Prodotto non trovato", status=404)
     dna = product.dna_versions.filter(is_current=True).first()
@@ -5267,20 +5267,20 @@ def product_promote(request, pk):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    product = Product.objects.filter(pk=pk, company=company).first()
+    product = Specialista.objects.filter(pk=pk, company=company).first()
     if not product:
         return HttpResponse("Prodotto non trovato", status=404)
-    if product.status != Product.STATUS_IN_VALIDAZIONE:
+    if product.status != Specialista.STATUS_IN_VALIDAZIONE:
         return HttpResponse("Stato non valido per la promozione", status=400)
-    product.status = Product.STATUS_ATTIVO
+    product.status = Specialista.STATUS_ATTIVO
     product.save(update_fields=["status"])
-    active_count = company.products.filter(status=Product.STATUS_ATTIVO).count()
+    active_count = company.products.filter(status=Specialista.STATUS_ATTIVO).count()
     threshold = _consistency_periodic_threshold(company)
     if active_count and active_count % threshold == 0:
         from apps.companies.tasks import run_consistency_audit
 
         company_dna = company.dna_versions.filter(
-            dna_type=CompanyDNA.TYPE_COMPLETE,
+            dna_type=DNAGenerale.TYPE_COMPLETE,
             is_current=True,
         ).first()
         if company_dna:
@@ -5294,7 +5294,7 @@ def product_promote(request, pk):
             max_issues=profile["max_issues"],
             depth_instruction=profile["depth_instruction"],
         )
-    return redirect("product-detail", pk=product.pk)
+    return redirect("specialista-detail", pk=product.pk)
 
 
 @login_required
@@ -5303,10 +5303,10 @@ def product_publish(request, pk):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    product = Product.objects.filter(pk=pk, company=company).first()
+    product = Specialista.objects.filter(pk=pk, company=company).first()
     if not product:
         return HttpResponse("Prodotto non trovato", status=404)
-    if product.status != Product.STATUS_ATTIVO:
+    if product.status != Specialista.STATUS_ATTIVO:
         return HttpResponse("Pubblicazione disponibile solo per specialisti attivi", status=400)
     dna = product.dna_versions.filter(
         dna_type=ProductDNA.TYPE_COMPLETE,
@@ -5338,7 +5338,7 @@ def product_publish(request, pk):
             content_md=content_md,
             created_by=request.user if request.user.is_authenticated else None,
         )
-    return redirect("product-review", pk=product.pk)
+    return redirect("specialista-review", pk=product.pk)
 
 
 @login_required
@@ -5347,7 +5347,7 @@ def product_publication_archive(request, pk, publication_pk):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    product = Product.objects.filter(pk=pk, company=company).first()
+    product = Specialista.objects.filter(pk=pk, company=company).first()
     if not product:
         return HttpResponse("Prodotto non trovato", status=404)
     publication = get_object_or_404(
@@ -5359,7 +5359,7 @@ def product_publication_archive(request, pk, publication_pk):
     publication.status = ProductPublication.STATUS_ARCHIVED
     publication.archived_at = timezone.now()
     publication.save(update_fields=["status", "archived_at"])
-    return redirect("product-review", pk=product.pk)
+    return redirect("specialista-review", pk=product.pk)
 
 
 def _get_critique_proposal(dna, index):
@@ -5375,7 +5375,7 @@ def product_critique_accept(request, pk, proposal_index):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    product = Product.objects.filter(pk=pk, company=company).first()
+    product = Specialista.objects.filter(pk=pk, company=company).first()
     if not product:
         return HttpResponse("Prodotto non trovato", status=404)
     dna = product.dna_versions.filter(is_current=True).first()
@@ -5399,7 +5399,7 @@ def product_critique_accept(request, pk, proposal_index):
     except Exception:
         pass
     dna.save(update_fields=["content", "audit_hash"])
-    return redirect("product-review", pk=product.pk)
+    return redirect("specialista-review", pk=product.pk)
 
 
 @login_required
@@ -5408,7 +5408,7 @@ def product_critique_reject(request, pk, proposal_index):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    product = Product.objects.filter(pk=pk, company=company).first()
+    product = Specialista.objects.filter(pk=pk, company=company).first()
     if not product:
         return HttpResponse("Prodotto non trovato", status=404)
     dna = product.dna_versions.filter(is_current=True).first()
@@ -5421,7 +5421,7 @@ def product_critique_reject(request, pk, proposal_index):
     proposals.pop(proposal_index)
     dna.content["_critique"] = proposals
     dna.save(update_fields=["content"])
-    return redirect("product-review", pk=product.pk)
+    return redirect("specialista-review", pk=product.pk)
 
 
 @login_required
@@ -5430,7 +5430,7 @@ def product_section_approve(request, pk, section_key):
     company = _tenant_company(request)
     if not company:
         return JsonResponse({"error": "no tenant"}, status=400)
-    product = Product.objects.filter(pk=pk, company=company).first()
+    product = Specialista.objects.filter(pk=pk, company=company).first()
     if not product:
         return JsonResponse({"error": "product not found"}, status=404)
     dna = ProductDNA.objects.filter(product=product, is_current=True).first()
@@ -5480,8 +5480,8 @@ def product_section_approve(request, pk, section_key):
             # Decision 1B: auto-promote product to in_validazione once the
             # specialist DNA is fully approved. The final attivo transition
             # stays manual (product_promote view) as the human gate.
-            if product.status in {Product.STATUS_IN_COSTRUZIONE, Product.STATUS_UPDATING}:
-                product.status = Product.STATUS_IN_VALIDAZIONE
+            if product.status in {Specialista.STATUS_IN_COSTRUZIONE, Specialista.STATUS_UPDATING}:
+                product.status = Specialista.STATUS_IN_VALIDAZIONE
                 product.save(update_fields=["status"])
 
     if is_clarification and request.headers.get("HX-Request"):
@@ -5491,7 +5491,7 @@ def product_section_approve(request, pk, section_key):
         )
 
     if request.headers.get("HX-Request") == "true":
-        return _redirect_after_htmx_action(request, "product-review", product.pk)
+        return _redirect_after_htmx_action(request, "specialista-review", product.pk)
 
     return JsonResponse({
         "section_key": section_key,
@@ -5508,7 +5508,7 @@ def product_section_edit(request, pk, section_key):
     company = _tenant_company(request)
     if not company:
         return JsonResponse({"error": "no tenant"}, status=400)
-    product = Product.objects.filter(pk=pk, company=company).first()
+    product = Specialista.objects.filter(pk=pk, company=company).first()
     if not product:
         return JsonResponse({"error": "product not found"}, status=404)
     old_dna = ProductDNA.objects.filter(product=product, is_current=True).first()
@@ -5552,7 +5552,7 @@ def product_section_edit(request, pk, section_key):
             )
 
     if request.headers.get("HX-Request") == "true":
-        return _redirect_after_htmx_action(request, "product-review", product.pk)
+        return _redirect_after_htmx_action(request, "specialista-review", product.pk)
 
     return JsonResponse({
         "dna_id": new_dna.id,
@@ -5567,7 +5567,7 @@ def product_dna_visualize(request, pk):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    product = Product.objects.filter(pk=pk, company=company).first()
+    product = Specialista.objects.filter(pk=pk, company=company).first()
     if not product:
         return HttpResponse("Prodotto non trovato", status=404)
     dna = product.dna_versions.filter(is_current=True).first()
@@ -5593,7 +5593,7 @@ def product_dna_download_pdf(request, pk):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    product = Product.objects.filter(pk=pk, company=company).first()
+    product = Specialista.objects.filter(pk=pk, company=company).first()
     if not product:
         return HttpResponse("Prodotto non trovato", status=404)
     dna = product.dna_versions.filter(is_current=True).first()
@@ -5893,7 +5893,7 @@ def product_dna_feedback(request, pk):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    product = Product.objects.filter(pk=pk, company=company).first()
+    product = Specialista.objects.filter(pk=pk, company=company).first()
     if not product:
         return HttpResponse("Prodotto non trovato", status=404)
 
@@ -5909,7 +5909,7 @@ def product_dna_feedback(request, pk):
         )
 
     company_dna = company.dna_versions.filter(
-        dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True,
+        dna_type=DNAGenerale.TYPE_COMPLETE, is_current=True,
     ).first()
     if not company_dna:
         return HttpResponse("DNA Generale non trovato", status=404)
@@ -5933,7 +5933,7 @@ def product_dna_feedback(request, pk):
         # Task completed: show the proposals (empty list = nothing to add).
         if request.headers.get("HX-Request") == "true":
             response = HttpResponse(status=204)
-            response["HX-Redirect"] = reverse("product-dna-feedback", args=[product.pk])
+            response["HX-Redirect"] = reverse("specialista-dna-feedback", args=[product.pk])
             return response
         if hasattr(request, "session"):
             request.session[_feedback_session_key(product, specialist_dna, company_dna)] = proposals
@@ -6004,7 +6004,7 @@ def product_dna_feedback(request, pk):
         tenant_schema=tenant_schema.schema_name if tenant_schema else None,
     )
     return redirect(
-        f"{reverse('product-dna-feedback', args=[product.pk])}?generating=1"
+        f"{reverse('specialista-dna-feedback', args=[product.pk])}?generating=1"
     )
 
 
@@ -6015,7 +6015,7 @@ def product_dna_feedback_apply(request, pk):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    product = Product.objects.filter(pk=pk, company=company).first()
+    product = Specialista.objects.filter(pk=pk, company=company).first()
     if not product:
         return HttpResponse("Prodotto non trovato", status=404)
 
@@ -6031,7 +6031,7 @@ def product_dna_feedback_apply(request, pk):
         )
 
     company_dna = company.dna_versions.filter(
-        dna_type=CompanyDNA.TYPE_COMPLETE, is_current=True,
+        dna_type=DNAGenerale.TYPE_COMPLETE, is_current=True,
     ).first()
     if not company_dna:
         return HttpResponse("DNA Generale non trovato", status=404)
@@ -6051,7 +6051,7 @@ def product_dna_feedback_apply(request, pk):
         selected_indices,
     )
     if not selected_proposals:
-        return redirect("product-dna-feedback", pk=product.pk)
+        return redirect("specialista-dna-feedback", pk=product.pk)
 
     content = dict(company_dna.content) if isinstance(company_dna.content, dict) else {}
     content["_pending_specialist_feedback"] = {
@@ -6115,10 +6115,10 @@ def _agent_selected_product(company, raw_id):
         pk = int(raw_id)
     except (TypeError, ValueError):
         return None
-    return Product.objects.filter(
+    return Specialista.objects.filter(
         pk=pk,
         company=company,
-        status=Product.STATUS_ATTIVO,
+        status=Specialista.STATUS_ATTIVO,
     ).first()
 
 
@@ -6136,7 +6136,7 @@ def _agent_chat_context(company, product):
     return {
         "company": company,
         "agent_enabled": get_approved_company_dna(company) is not None,
-        "products": company.products.filter(status=Product.STATUS_ATTIVO),
+        "products": company.products.filter(status=Specialista.STATUS_ATTIVO),
         "selected_product": product,
         "conversation": conversation,
         "chat_messages": list(conversation.messages.all()) if conversation else [],

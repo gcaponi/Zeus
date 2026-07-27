@@ -1,5 +1,5 @@
 """Central enrichment orchestrator — computes the full cognitive bundle
-for a DNA and packs it into the _enrichment JSON field on CompanyDNA.
+for a DNA and packs it into the _enrichment JSON field on DNAGenerale.
 
 This is the single integration point the pipeline calls: instead of each
 view/task importing validator, scoring and evidence separately, they call
@@ -24,7 +24,7 @@ def build_enrichment(
     """Compute the full cognitive enrichment bundle for a DNA payload.
 
     Args:
-        content: the DNA content dict (as stored in CompanyDNA.content).
+        content: the DNA content dict (as stored in DNAGenerale.content).
         available_sources: optional dict for evidence consistency:
             {"scrape": bool, "note": bool, "files": [str]}.
             When None, evidence mismatches on unavailable categories are

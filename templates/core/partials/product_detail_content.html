@@ -28,7 +28,7 @@
             Nuovi documenti caricati: lo specialista è in aggiornamento. Rigenera il pre-DNA per completare il ciclo updating.
         </div>
     {% endif %}
-    <form method="post" action="{% url 'product-file-upload' product.pk %}" enctype="multipart/form-data" id="product-file-upload-form" class="mt-4 space-y-4">
+    <form method="post" action="{% url 'specialista-file-upload' product.pk %}" enctype="multipart/form-data" id="product-file-upload-form" class="mt-4 space-y-4">
         {% csrf_token %}
         <div>
             <label class="zeus-label">File (PDF, TXT, MD, PNG, JPG)</label>
@@ -61,7 +61,7 @@
                         <span class="text-xs text-content-muted whitespace-nowrap">{{ file.file_size|filesizeformat }}</span>
                         <span class="text-xs text-content-muted whitespace-nowrap">{{ file.created_at|date:"d/m/Y H:i" }}</span>
                     </div>
-                    <form method="post" action="{% url 'product-file-delete' product.pk file.pk %}" onsubmit="return confirm('Eliminare {{ file.original_name }}?');">
+                    <form method="post" action="{% url 'specialista-file-delete' product.pk file.pk %}" onsubmit="return confirm('Eliminare {{ file.original_name }}?');">
                         {% csrf_token %}
                         <button type="submit" class="zeus-btn zeus-btn-destructive zeus-btn-sm">Elimina</button>
                     </form>
@@ -77,7 +77,7 @@
     <div class="zeus-card p-6">
         <h2 class="text-lg font-bold font-display">Genera pre-DNA</h2>
         <p class="mt-2 text-sm text-content-secondary">Carica almeno un file, poi genera il pre-DNA.</p>
-        <form method="post" action="{% url 'product-dna-generate' product.pk %}" class="mt-4" onsubmit="showNeuralPopup();">
+        <form method="post" action="{% url 'specialista-dna-generate' product.pk %}" class="mt-4" onsubmit="showNeuralPopup();">
             {% csrf_token %}
             <button type="submit" class="zeus-btn zeus-btn-primary w-full">Genera pre-DNA →</button>
         </form>
@@ -103,11 +103,11 @@
             </div>
         </div>
         {% if dna.dna_type == "pre" and not dna.is_approved %}
-            <a href="{% url 'product-questions' product.pk %}" class="zeus-btn zeus-btn-primary w-full block text-center">Rispondi alle domande D1-D20 →</a>
+            <a href="{% url 'specialista-questions' product.pk %}" class="zeus-btn zeus-btn-primary w-full block text-center">Rispondi alle domande D1-D20 →</a>
         {% elif dna.dna_type == "complete" and not dna.is_approved %}
-            <a href="{% url 'product-review' product.pk %}" class="zeus-btn zeus-btn-primary w-full block text-center">Vai alla revisione finale →</a>
+            <a href="{% url 'specialista-review' product.pk %}" class="zeus-btn zeus-btn-primary w-full block text-center">Vai alla revisione finale →</a>
         {% elif is_updating %}
-            <form method="post" action="{% url 'product-dna-generate' product.pk %}" onsubmit="showNeuralPopup();">
+            <form method="post" action="{% url 'specialista-dna-generate' product.pk %}" onsubmit="showNeuralPopup();">
                 {% csrf_token %}
                 <button type="submit" class="zeus-btn zeus-btn-primary w-full">Rigenera pre-DNA aggiornato →</button>
             </form>

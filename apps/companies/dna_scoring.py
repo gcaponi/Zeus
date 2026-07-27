@@ -297,7 +297,7 @@ def _overall(completeness, cognitive_tension, evidence_density, source_diversity
 def score_dna(dna) -> DNAScore:
     """Compute the six deterministic metrics for a DNA.
 
-    Accepts a DNAGeneraleSchema or a dict (as stored in CompanyDNA.content).
+    Accepts a DNAGeneraleSchema or a dict (as stored in DNAGenerale.content).
     A payload that cannot be coerced into the schema scores all-zero.
     """
     schema = _to_schema(dna)

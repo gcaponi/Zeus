@@ -8,7 +8,7 @@
 
 {% block page_header %}
 <header class="mb-8">
-    <a href="{% url 'product-detail' product.pk %}" class="text-sm text-brand-cyan hover:underline">← {{ product.name }}</a>
+    <a href="{% url 'specialista-detail' product.pk %}" class="text-sm text-brand-cyan hover:underline">← {{ product.name }}</a>
     <h1 class="mt-4 text-3xl font-bold tracking-tight sm:text-4xl font-display">10 domande per il DNA specialista</h1>
     <p class="mt-2 text-content-secondary">Generate dai principi D1-D20 sul pre-DNA v{{ pre_dna.version }}.</p>
     <span class="zeus-badge zeus-badge-cyan mt-3">{{ plan_label }}</span>

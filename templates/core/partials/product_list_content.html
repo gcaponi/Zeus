@@ -22,7 +22,7 @@
         {% for product in products %}
             <div class="zeus-card p-5 hover:translate-y-[-2px] transition-transform zeus-product-item">
                 <div class="flex items-center justify-between gap-4 zeus-product-item-layout">
-                    <a href="{% url 'product-detail' product.pk %}" class="flex-1 min-w-0 zeus-product-main-link">
+                    <a href="{% url 'specialista-detail' product.pk %}" class="flex-1 min-w-0 zeus-product-main-link">
                         <div class="flex items-center gap-3 flex-wrap zeus-product-title-row">
                             <h3 class="text-lg font-bold font-display text-content-primary">{{ product.name }}</h3>
                             <span class="zeus-badge {{ product.status_badge_class }}">
@@ -46,11 +46,11 @@
                         <p class="mt-2 text-xs text-content-muted italic zeus-product-next-action">{{ product.next_action }}</p>
                     </a>
                     <div class="flex items-center gap-3 zeus-product-actions">
-                        <form method="post" action="{% url 'product-delete' product.pk %}" onsubmit="return confirm('Eliminare lo specialista &quot;{{ product.name }}&quot; e tutti i suoi file e DNA? Questa azione e irreversibile.');">
+                        <form method="post" action="{% url 'specialista-delete' product.pk %}" onsubmit="return confirm('Eliminare lo specialista &quot;{{ product.name }}&quot; e tutti i suoi file e DNA? Questa azione e irreversibile.');">
                             {% csrf_token %}
                             <button type="submit" class="zeus-btn zeus-btn-destructive zeus-btn-sm">Elimina</button>
                         </form>
-                        <a href="{% url 'product-detail' product.pk %}" class="text-content-muted text-xl zeus-product-open" aria-label="Apri {{ product.name }}">→</a>
+                        <a href="{% url 'specialista-detail' product.pk %}" class="text-content-muted text-xl zeus-product-open" aria-label="Apri {{ product.name }}">→</a>
                     </div>
                 </div>
             </div>
