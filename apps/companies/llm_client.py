@@ -15,8 +15,15 @@ logger = logging.getLogger(__name__)
 
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "")
-LLM_MODEL = os.environ.get("LLM_MODEL", "deepseek-chat")
-LLM_MODEL_PRO = os.environ.get("LLM_MODEL_PRO", "deepseek-v4-pro")
+LLM_MODEL = os.environ.get("LLM_MODEL", "deepseek-v4-flash")
+LLM_MODEL_PRO = os.environ.get("LLM_MODEL_PRO", "deepseek-v4-flash")
+
+# DeepSeek V4 ha il thinking attivo di default e rifiuta tool_choice
+# ("Thinking mode does not support this tool_choice", 400). Regole:
+# - chiamate structured (instructor/tool_choice): thinking disabilitato;
+# - chiamate plain: reasoning_effort=max ("Flash Max", qualita' massima).
+EXTRA_BODY_THINKING_DISABLED = {"thinking": {"type": "disabled"}}
+EXTRA_BODY_EFFORT_MAX = {"reasoning_effort": "max"}
 
 # Marker embedded in the agent-chat system prompt ("Testa il tuo agente") so the
 # MockLLMClient can recognise and answer those calls deterministically in tests.
@@ -285,6 +292,8 @@ class OpenAIClient(LLMClient):
         kwargs: dict = {
             "model": model,
             "messages": messages,
+            # Plain call: nessun tool_choice, thinking attivo con effort max.
+            "extra_body": EXTRA_BODY_EFFORT_MAX,
         }
         if temperature is not None:
             kwargs["temperature"] = temperature
@@ -326,6 +335,8 @@ class OpenAIClient(LLMClient):
             "response_model": response_model,
             "max_retries": 2,
             "messages": messages,
+            # Structured (tool_choice): il thinking lo rifiuterebbe (400).
+            "extra_body": EXTRA_BODY_THINKING_DISABLED,
         }
         if temperature is not None:
             kwargs["temperature"] = temperature
@@ -356,6 +367,8 @@ class OpenAIClient(LLMClient):
             "response_model": response_model,
             "max_retries": 2,
             "messages": messages,
+            # Structured (tool_choice): il thinking lo rifiuterebbe (400).
+            "extra_body": EXTRA_BODY_THINKING_DISABLED,
         }
         if temperature is not None:
             kwargs["temperature"] = temperature
