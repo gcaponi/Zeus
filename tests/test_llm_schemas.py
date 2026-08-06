@@ -317,3 +317,28 @@ class TestMockStructuredDispatch:
         )
         assert instance.sintesi_cognitiva.strip()
         assert instance.identita.postura.strip()
+
+
+class TestExtraBodyGate:
+    """Regressione OCR review: extra_body V4 solo per modelli deepseek-v4."""
+
+    def test_v4_flash_plain_gets_effort_max(self):
+        from apps.companies.llm_client import _extra_body_for
+
+        assert _extra_body_for("deepseek-v4-flash", structured=False) == {
+            "reasoning_effort": "max"
+        }
+
+    def test_v4_pro_structured_gets_thinking_disabled(self):
+        from apps.companies.llm_client import _extra_body_for
+
+        assert _extra_body_for("deepseek-v4-pro", structured=True) == {
+            "thinking": {"type": "disabled"}
+        }
+
+    def test_legacy_models_get_no_extra_body(self):
+        from apps.companies.llm_client import _extra_body_for
+
+        for model in ("deepseek-chat", "gpt-4o", "gpt-4o-mini"):
+            assert _extra_body_for(model, structured=False) is None
+            assert _extra_body_for(model, structured=True) is None

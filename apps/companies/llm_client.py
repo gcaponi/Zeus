@@ -25,6 +25,17 @@ LLM_MODEL_PRO = os.environ.get("LLM_MODEL_PRO", "deepseek-v4-flash")
 EXTRA_BODY_THINKING_DISABLED = {"thinking": {"type": "disabled"}}
 EXTRA_BODY_EFFORT_MAX = {"reasoning_effort": "max"}
 
+
+def _extra_body_for(model: str, *, structured: bool) -> dict | None:
+    """extra_body solo per DeepSeek V4: i campi thinking/reasoning_effort non
+    sono supportati dai modelli legacy (deepseek-chat, gpt-4o, ...). Mandarli a
+    un'API che non li conosce produce 400 o degradazione silenziosa — il modello
+    resta sovrascrivibile via env, quindi il gate va applicato a ogni chiamata.
+    """
+    if not model.startswith("deepseek-v4"):
+        return None
+    return EXTRA_BODY_THINKING_DISABLED if structured else EXTRA_BODY_EFFORT_MAX
+
 # Marker embedded in the agent-chat system prompt ("Testa il tuo agente") so the
 # MockLLMClient can recognise and answer those calls deterministically in tests.
 AGENT_CHAT_MARKER = "AGENT_CHAT"
@@ -292,9 +303,11 @@ class OpenAIClient(LLMClient):
         kwargs: dict = {
             "model": model,
             "messages": messages,
-            # Plain call: nessun tool_choice, thinking attivo con effort max.
-            "extra_body": EXTRA_BODY_EFFORT_MAX,
         }
+        # Plain call: nessun tool_choice, thinking attivo con effort max (solo V4).
+        extra = _extra_body_for(model, structured=False)
+        if extra is not None:
+            kwargs["extra_body"] = extra
         if temperature is not None:
             kwargs["temperature"] = temperature
 
@@ -335,9 +348,11 @@ class OpenAIClient(LLMClient):
             "response_model": response_model,
             "max_retries": 2,
             "messages": messages,
-            # Structured (tool_choice): il thinking lo rifiuterebbe (400).
-            "extra_body": EXTRA_BODY_THINKING_DISABLED,
         }
+        # Structured (tool_choice): il thinking lo rifiuterebbe (400, solo V4).
+        extra = _extra_body_for(model, structured=True)
+        if extra is not None:
+            kwargs["extra_body"] = extra
         if temperature is not None:
             kwargs["temperature"] = temperature
         instance = structured_client.chat.completions.create(**kwargs)
@@ -367,9 +382,11 @@ class OpenAIClient(LLMClient):
             "response_model": response_model,
             "max_retries": 2,
             "messages": messages,
-            # Structured (tool_choice): il thinking lo rifiuterebbe (400).
-            "extra_body": EXTRA_BODY_THINKING_DISABLED,
         }
+        # Structured (tool_choice): il thinking lo rifiuterebbe (400, solo V4).
+        extra = _extra_body_for(model, structured=True)
+        if extra is not None:
+            kwargs["extra_body"] = extra
         if temperature is not None:
             kwargs["temperature"] = temperature
         t0 = time.time()
