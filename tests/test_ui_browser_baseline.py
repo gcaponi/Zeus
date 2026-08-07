@@ -1214,7 +1214,13 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                             "name": settings.SESSION_COOKIE_NAME,
                             "value": session_cookie,
                             "url": self.live_server_url,
-                        }
+                        },
+                        {
+                            # la zona admin usa un cookie di sessione dedicato
+                            "name": settings.ADMIN_SESSION_COOKIE_NAME,
+                            "value": session_cookie,
+                            "url": self.live_server_url,
+                        },
                     ]
                 )
 
@@ -1357,7 +1363,13 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                             "name": settings.SESSION_COOKIE_NAME,
                             "value": session_cookie,
                             "url": self.live_server_url,
-                        }
+                        },
+                        {
+                            # la zona admin usa un cookie di sessione dedicato
+                            "name": settings.ADMIN_SESSION_COOKIE_NAME,
+                            "value": session_cookie,
+                            "url": self.live_server_url,
+                        },
                     ]
                 )
                 page_errors = []

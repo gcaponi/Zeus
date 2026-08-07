@@ -2,6 +2,7 @@ import json
 from datetime import date
 
 import pytest
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import Client as TestClient
 from django.test import RequestFactory
@@ -34,6 +35,11 @@ class TestZeusAdminDashboard:
         )
         client = TestClient()
         client.force_login(user)
+        # La zona admin usa un cookie di sessione dedicato: allinea il cookie
+        # admin alla sessione app per i test (vedi TenantAwareSessionMiddleware).
+        client.cookies[settings.ADMIN_SESSION_COOKIE_NAME] = client.cookies[
+            settings.SESSION_COOKIE_NAME
+        ]
 
         response = client.get(reverse("zeus-admin-dashboard"))
 

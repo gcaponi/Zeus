@@ -172,4 +172,8 @@ def public_logout(request):
     """Logout from any domain and redirect to public login with cookie cleared."""
     auth_logout(request)
     response = redirect("https://zeus.cais.uno/accounts/login/")
+    # Svuota entrambi i cookie di sessione: la zona admin usa un cookie
+    # separato (ADMIN_SESSION_COOKIE_NAME) gestito da TenantAwareSessionMiddleware.
+    for cookie_name in (settings.SESSION_COOKIE_NAME, settings.ADMIN_SESSION_COOKIE_NAME):
+        response.delete_cookie(cookie_name, domain=settings.SESSION_COOKIE_DOMAIN)
     return _clear_workspace_cookie(response)
