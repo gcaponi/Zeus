@@ -5,6 +5,14 @@ from django.test import override_settings
 from django.urls import reverse
 
 from apps.companies import views
+from apps.companies.forms import (
+    CompanyAnagraficaForm,
+    ContactValueForm,
+    PhoneFormSet,
+    SocialFormSet,
+    SocialProfileForm,
+    WhatsAppFormSet,
+)
 from apps.companies.models import Company, CompanyContact, CompanySocial
 from apps.core.middleware import CompanyAnagraficaRequiredMiddleware
 
@@ -68,6 +76,62 @@ def _valid_payload():
 
 @pytest.mark.django_db
 class TestCompanyAnagrafica:
+    def test_every_visible_field_has_format_guidance(self):
+        forms = (CompanyAnagraficaForm(), ContactValueForm(), SocialProfileForm())
+
+        for form in forms:
+            for field in form.visible_fields():
+                attrs = field.field.widget.attrs
+                assert attrs["placeholder"].startswith("Es. "), field.name
+                assert attrs["title"].startswith("Esempio corretto: "), field.name
+                assert attrs["data-input-mask"], field.name
+                assert attrs["data-format-example"], field.name
+
+    @pytest.mark.parametrize(
+        ("field_name", "invalid_value"),
+        [
+            ("name", ""),
+            ("nome_commerciale", ""),
+            ("partita_iva", "1234567890"),
+            ("codice_fiscale", "ABC!"),
+            ("rea", "123456"),
+            ("pec", "pec-non-valida"),
+            ("email_contatto", "email-non-valida"),
+            ("sito_web", "sito non valido"),
+        ],
+    )
+    def test_every_company_field_error_contains_a_correct_example(
+        self, field_name, invalid_value
+    ):
+        payload = _valid_payload()
+        payload[field_name] = invalid_value
+
+        form = CompanyAnagraficaForm(data=payload)
+
+        assert form.is_valid() is False
+        assert "Esempio:" in " ".join(form.errors[field_name])
+
+    @pytest.mark.parametrize(
+        ("form_class", "payload", "field_name"),
+        [
+            (ContactValueForm, {"value": "numero-non-valido"}, "value"),
+            (SocialProfileForm, {"network": "", "url": "https://example.it"}, "network"),
+            (SocialProfileForm, {"network": "LinkedIn", "url": "link non valido"}, "url"),
+        ],
+    )
+    def test_every_repeatable_field_error_contains_a_correct_example(
+        self, form_class, payload, field_name
+    ):
+        form = form_class(data=payload)
+
+        assert form.is_valid() is False
+        assert "Esempio:" in " ".join(form.errors[field_name])
+
+    def test_empty_repeatable_formsets_render_one_required_row(self):
+        assert PhoneFormSet(prefix="phones").total_form_count() == 1
+        assert WhatsAppFormSet(prefix="whatsapp").total_form_count() == 1
+        assert SocialFormSet(prefix="socials").total_form_count() == 1
+
     def test_completion_requires_scalars_contacts_and_social(self):
         company = Company.objects.create(schema_name="test-tenant", name="Esempio S.r.l.")
         assert company.has_complete_anagrafica() is False
@@ -113,7 +177,32 @@ class TestCompanyAnagrafica:
         response = views.company_anagrafica(request)
 
         assert response.status_code == 400
+        assert b"Telefono:" in response.content
         assert Company.objects.get(schema_name="test-tenant").has_complete_anagrafica() is False
+
+    @override_settings(ROOT_URLCONF="config.urls")
+    def test_removed_extra_row_stays_hidden_after_validation_error(self, rf_with_tenant):
+        Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        payload = _valid_payload()
+        payload["name"] = ""
+        payload["phones-TOTAL_FORMS"] = "2"
+        payload["phones-1-value"] = "+39 02 9999999"
+        payload["phones-1-DELETE"] = "on"
+        request = rf_with_tenant(
+            "post",
+            reverse("company-anagrafica"),
+            payload,
+            form=True,
+        )
+        request._messages = FallbackStorage(request)
+
+        response = views.company_anagrafica(request)
+        html = response.content.decode()
+
+        assert response.status_code == 400
+        assert 'data-form-index="1" hidden' in html
+        assert 'name="phones-1-DELETE"' in html
+        assert "checked" in html
 
     @override_settings(ROOT_URLCONF="config.urls")
     def test_onboarding_prefills_and_syncs_company_website(self, rf_with_tenant):

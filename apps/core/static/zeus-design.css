@@ -2899,6 +2899,292 @@ html,
   opacity: 1;
 }
 
+/* Company profile — semantic layout, independent from utility shims. */
+.zeus-anagrafica-form {
+  display: grid;
+  width: 100%;
+  max-width: 72rem;
+  gap: 20px;
+}
+
+.zeus-anagrafica-alert {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fff7f7;
+  color: #b91c1c;
+  font-size: 0.8125rem;
+}
+
+.zeus-anagrafica-alert strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.zeus-anagrafica-alert ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.zeus-anagrafica-section {
+  padding: 24px;
+}
+
+.zeus-anagrafica-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.zeus-anagrafica-kicker {
+  margin: 0 0 3px;
+  color: var(--shell-accent-strong, #0e7490);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.zeus-anagrafica-section-head h2,
+.zeus-anagrafica-group-head h3 {
+  margin: 0;
+  color: var(--shell-text, var(--text-primary));
+  font-family: var(--font-display);
+}
+
+.zeus-anagrafica-section-head h2 {
+  font-size: 1.125rem;
+  line-height: 1.35;
+}
+
+.zeus-anagrafica-section-head p:last-child,
+.zeus-anagrafica-group-head p {
+  margin: 4px 0 0;
+  color: var(--shell-muted, var(--text-secondary));
+  font-size: 0.8125rem;
+}
+
+.zeus-anagrafica-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.zeus-anagrafica-field {
+  min-width: 0;
+}
+
+.zeus-anagrafica-field label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--shell-muted, var(--text-secondary));
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.zeus-anagrafica-contact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.zeus-anagrafica-group {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--shell-border, var(--border-color));
+  border-radius: 8px;
+  background: var(--shell-panel-muted, var(--bg-input));
+}
+
+.zeus-anagrafica-group--social {
+  grid-column: 1 / -1;
+}
+
+.zeus-anagrafica-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.zeus-anagrafica-group-head h3 {
+  font-size: 0.9375rem;
+}
+
+.zeus-anagrafica-add {
+  flex: 0 0 auto;
+  min-height: 34px !important;
+  padding: 6px 10px !important;
+}
+
+.zeus-anagrafica-rows {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.zeus-anagrafica-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px;
+  align-items: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.zeus-anagrafica-row--social {
+  grid-template-columns: minmax(8rem, 0.55fr) minmax(0, 1.45fr) 36px;
+}
+
+.zeus-anagrafica-row[hidden],
+.zeus-anagrafica-remove[hidden],
+.zeus-anagrafica-delete-input {
+  display: none !important;
+}
+
+.zeus-anagrafica-remove {
+  display: inline-grid;
+  width: 36px;
+  height: 40px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--shell-muted, var(--text-secondary));
+  font: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.zeus-anagrafica-remove:hover {
+  border-color: #fecaca;
+  background: #fff7f7;
+  color: #b91c1c;
+}
+
+.zeus-anagrafica-remove:focus-visible {
+  outline: 2px solid var(--shell-accent-strong, #0e7490);
+  outline-offset: 2px;
+}
+
+.zeus-anagrafica-social-labels {
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.55fr) minmax(0, 1.45fr) 36px;
+  gap: 8px;
+  margin: 14px 0 -8px;
+  color: var(--shell-muted, var(--text-secondary));
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+.zeus-anagrafica-error {
+  margin: 5px 0 0;
+  color: #b91c1c;
+  font-size: 0.75rem;
+}
+
+.zeus-anagrafica-field:has(.zeus-anagrafica-error) .zeus-input,
+.zeus-anagrafica-row > div:has(.zeus-anagrafica-error) .zeus-input {
+  border-color: #ef4444;
+  background: #fffafa;
+}
+
+.zeus-anagrafica-field:has(.zeus-anagrafica-error) label {
+  color: #b91c1c;
+}
+
+.zeus-anagrafica-actions {
+  position: sticky;
+  z-index: 10;
+  bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--shell-border, var(--border-color));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--shell-panel, var(--bg-card)) 94%, transparent);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(14px);
+}
+
+.zeus-anagrafica-actions p {
+  margin: 0;
+  color: var(--shell-muted, var(--text-secondary));
+  font-size: 0.75rem;
+}
+
+.dark .zeus-anagrafica-alert,
+.dark .zeus-anagrafica-remove:hover {
+  border-color: rgba(248, 113, 113, 0.30);
+  background: rgba(239, 68, 68, 0.10);
+  color: #fca5a5;
+}
+
+.dark .zeus-anagrafica-field:has(.zeus-anagrafica-error) .zeus-input,
+.dark .zeus-anagrafica-row > div:has(.zeus-anagrafica-error) .zeus-input {
+  border-color: #f87171;
+  background: rgba(127, 29, 29, 0.12);
+}
+
+@media (max-width: 800px) {
+  .zeus-anagrafica-fields,
+  .zeus-anagrafica-contact-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .zeus-anagrafica-group--social {
+    grid-column: auto;
+  }
+
+  .zeus-anagrafica-social-labels {
+    display: none;
+  }
+
+  .zeus-anagrafica-row--social {
+    grid-template-columns: minmax(0, 1fr) 36px;
+  }
+
+  .zeus-anagrafica-row--social > div:nth-child(1),
+  .zeus-anagrafica-row--social > div:nth-child(2) {
+    grid-column: 1;
+  }
+
+  .zeus-anagrafica-row--social .zeus-anagrafica-remove {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+}
+
+@media (max-width: 520px) {
+  .zeus-anagrafica-section {
+    padding: 18px;
+  }
+
+  .zeus-anagrafica-group-head {
+    align-items: flex-start;
+  }
+
+  .zeus-anagrafica-add {
+    font-size: 0.75rem !important;
+  }
+
+  .zeus-anagrafica-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .zeus-anagrafica-actions .zeus-btn {
+    width: 100%;
+  }
+}
+
 @keyframes zeus-app-chat-spin {
   to {
     transform: rotate(360deg);

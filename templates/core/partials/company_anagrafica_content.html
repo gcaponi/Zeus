@@ -1,149 +1,289 @@
 {% if form.errors or phone_formset.errors or whatsapp_formset.errors or social_formset.errors %}
-<div class="mb-6 rounded-xl border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-300" role="alert">
-    Controlla i campi evidenziati: tutti i dati della scheda sono obbligatori.
+<div class="zeus-anagrafica-alert" role="alert">
+    <strong>Controlla questi dati:</strong>
+    <ul>
+        {% for field in form %}
+            {% for error in field.errors %}<li>{{ field.label }}: {{ error }}</li>{% endfor %}
+        {% endfor %}
+        {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+        {% for error in phone_formset.non_form_errors %}<li>Telefoni: {{ error }}</li>{% endfor %}
+        {% for row in phone_formset %}
+            {% if not row.DELETE.value %}{% for error in row.value.errors %}<li>Telefono: {{ error }}</li>{% endfor %}{% endif %}
+        {% endfor %}
+        {% for error in whatsapp_formset.non_form_errors %}<li>WhatsApp: {{ error }}</li>{% endfor %}
+        {% for row in whatsapp_formset %}
+            {% if not row.DELETE.value %}{% for error in row.value.errors %}<li>WhatsApp: {{ error }}</li>{% endfor %}{% endif %}
+        {% endfor %}
+        {% for error in social_formset.non_form_errors %}<li>Social: {{ error }}</li>{% endfor %}
+        {% for row in social_formset %}
+            {% if not row.DELETE.value %}
+                {% for error in row.network.errors %}<li>Social: {{ error }}</li>{% endfor %}
+                {% for error in row.url.errors %}<li>URL social: {{ error }}</li>{% endfor %}
+            {% endif %}
+        {% endfor %}
+    </ul>
 </div>
 {% endif %}
 
-<form method="post" id="company-anagrafica-form" class="space-y-6" novalidate>
+<form method="post" id="company-anagrafica-form" class="zeus-anagrafica-form" novalidate>
     {% csrf_token %}
     <input type="hidden" name="next" value="{{ next_url }}">
 
-    <section class="zeus-card p-5 sm:p-6">
-        <div class="mb-5">
-            <p class="zeus-label text-brand-cyan">Identità aziendale</p>
-            <p class="mt-2 text-sm text-content-muted">Dati ufficiali e identificativi del workspace.</p>
-        </div>
-        <div class="grid gap-5 md:grid-cols-2">
-            {% for field in form %}
-            <div{% if field.name == "sito_web" %} class="md:col-span-2"{% endif %}>
-                <label class="zeus-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                {{ field }}
-                {% for error in field.errors %}<p class="mt-2 text-xs text-red-400">{{ error }}</p>{% endfor %}
+    <section class="zeus-card zeus-anagrafica-section">
+        <header class="zeus-anagrafica-section-head">
+            <div>
+                <p class="zeus-anagrafica-kicker">Identità aziendale</p>
+                <h2>Dati ufficiali</h2>
+                <p>Informazioni legali e identificative del workspace.</p>
             </div>
-            {% endfor %}
+        </header>
+
+        <div class="zeus-anagrafica-fields">
+            <div class="zeus-anagrafica-field">
+                <label for="{{ form.name.id_for_label }}">{{ form.name.label }}</label>
+                {{ form.name }}
+                {% for error in form.name.errors %}<p class="zeus-anagrafica-error">{{ error }}</p>{% endfor %}
+            </div>
+            <div class="zeus-anagrafica-field">
+                <label for="{{ form.nome_commerciale.id_for_label }}">{{ form.nome_commerciale.label }}</label>
+                {{ form.nome_commerciale }}
+                {% for error in form.nome_commerciale.errors %}<p class="zeus-anagrafica-error">{{ error }}</p>{% endfor %}
+            </div>
+            <div class="zeus-anagrafica-field">
+                <label for="{{ form.partita_iva.id_for_label }}">{{ form.partita_iva.label }}</label>
+                {{ form.partita_iva }}
+                {% for error in form.partita_iva.errors %}<p class="zeus-anagrafica-error">{{ error }}</p>{% endfor %}
+            </div>
+            <div class="zeus-anagrafica-field">
+                <label for="{{ form.codice_fiscale.id_for_label }}">{{ form.codice_fiscale.label }}</label>
+                {{ form.codice_fiscale }}
+                {% for error in form.codice_fiscale.errors %}<p class="zeus-anagrafica-error">{{ error }}</p>{% endfor %}
+            </div>
+            <div class="zeus-anagrafica-field">
+                <label for="{{ form.rea.id_for_label }}">{{ form.rea.label }}</label>
+                {{ form.rea }}
+                {% for error in form.rea.errors %}<p class="zeus-anagrafica-error">{{ error }}</p>{% endfor %}
+            </div>
+            <div class="zeus-anagrafica-field">
+                <label for="{{ form.pec.id_for_label }}">{{ form.pec.label }}</label>
+                {{ form.pec }}
+                {% for error in form.pec.errors %}<p class="zeus-anagrafica-error">{{ error }}</p>{% endfor %}
+            </div>
         </div>
-        {% for error in form.non_field_errors %}<p class="mt-3 text-sm text-red-400">{{ error }}</p>{% endfor %}
+        {% for error in form.non_field_errors %}<p class="zeus-anagrafica-error">{{ error }}</p>{% endfor %}
     </section>
 
-    <section class="zeus-card p-5 sm:p-6" data-formset="phones">
-        <div class="mb-5 flex items-start justify-between gap-4">
+    <section class="zeus-card zeus-anagrafica-section">
+        <header class="zeus-anagrafica-section-head">
             <div>
-                <p class="zeus-label text-brand-cyan">Telefoni</p>
-                <p class="mt-2 text-sm text-content-muted">Inserisci almeno un numero; puoi aggiungerne altri.</p>
+                <p class="zeus-anagrafica-kicker">Comunicazione</p>
+                <h2>Canali ufficiali</h2>
+                <p>Recapiti e profili pubblici utilizzati dall’azienda.</p>
             </div>
-            <button type="button" class="zeus-btn zeus-btn-secondary zeus-btn-sm" data-add-form>Aggiungi</button>
+        </header>
+
+        <div class="zeus-anagrafica-fields">
+            <div class="zeus-anagrafica-field">
+                <label for="{{ form.email_contatto.id_for_label }}">{{ form.email_contatto.label }}</label>
+                {{ form.email_contatto }}
+                {% for error in form.email_contatto.errors %}<p class="zeus-anagrafica-error">{{ error }}</p>{% endfor %}
+            </div>
+            <div class="zeus-anagrafica-field">
+                <label for="{{ form.sito_web.id_for_label }}">{{ form.sito_web.label }}</label>
+                {{ form.sito_web }}
+                {% for error in form.sito_web.errors %}<p class="zeus-anagrafica-error">{{ error }}</p>{% endfor %}
+            </div>
         </div>
-        {{ phone_formset.management_form }}
-        {% for error in phone_formset.non_form_errors %}<p class="mb-3 text-sm text-red-400">{{ error }}</p>{% endfor %}
-        <div class="space-y-3" data-form-list>
-            {% for row in phone_formset %}
-            <div class="flex items-start gap-3" data-form-row>
-                <div class="flex-1">
-                    {{ row.value }}
-                    {% for error in row.value.errors %}<p class="mt-2 text-xs text-red-400">{{ error }}</p>{% endfor %}
+
+        <div class="zeus-anagrafica-contact-grid">
+            <div class="zeus-anagrafica-group" data-formset="phones">
+                <div class="zeus-anagrafica-group-head">
+                    <div>
+                        <h3>Telefoni</h3>
+                        <p>Almeno un numero.</p>
+                    </div>
+                    <button type="button" class="zeus-btn zeus-btn-secondary zeus-btn-sm zeus-anagrafica-add" data-add-form>
+                        <span aria-hidden="true">+</span> Aggiungi
+                    </button>
                 </div>
-                <span class="hidden">{{ row.DELETE }}</span>
-                <button type="button" class="zeus-btn zeus-btn-destructive zeus-btn-sm" data-remove-form>Rimuovi</button>
-            </div>
-            {% endfor %}
-        </div>
-        <template data-empty-form>
-            <div class="flex items-start gap-3" data-form-row>
-                <div class="flex-1">{{ phone_formset.empty_form.value }}</div>
-                <span class="hidden">{{ phone_formset.empty_form.DELETE }}</span>
-                <button type="button" class="zeus-btn zeus-btn-destructive zeus-btn-sm" data-remove-form>Rimuovi</button>
-            </div>
-        </template>
-    </section>
-
-    <section class="zeus-card p-5 sm:p-6" data-formset="whatsapp">
-        <div class="mb-5 flex items-start justify-between gap-4">
-            <div>
-                <p class="zeus-label text-brand-cyan">WhatsApp</p>
-                <p class="mt-2 text-sm text-content-muted">Inserisci almeno un numero WhatsApp.</p>
-            </div>
-            <button type="button" class="zeus-btn zeus-btn-secondary zeus-btn-sm" data-add-form>Aggiungi</button>
-        </div>
-        {{ whatsapp_formset.management_form }}
-        {% for error in whatsapp_formset.non_form_errors %}<p class="mb-3 text-sm text-red-400">{{ error }}</p>{% endfor %}
-        <div class="space-y-3" data-form-list>
-            {% for row in whatsapp_formset %}
-            <div class="flex items-start gap-3" data-form-row>
-                <div class="flex-1">
-                    {{ row.value }}
-                    {% for error in row.value.errors %}<p class="mt-2 text-xs text-red-400">{{ error }}</p>{% endfor %}
+                {{ phone_formset.management_form }}
+                {% for error in phone_formset.non_form_errors %}<p class="zeus-anagrafica-error">{{ error }}</p>{% endfor %}
+                <div class="zeus-anagrafica-rows" data-form-list>
+                    {% for row in phone_formset %}
+                    <div class="zeus-anagrafica-row" data-form-row data-form-index="{{ forloop.counter0 }}"{% if row.DELETE.value %} hidden{% endif %}>
+                        <div>
+                            {{ row.value }}
+                            {% for error in row.value.errors %}<p class="zeus-anagrafica-error">{{ error }}</p>{% endfor %}
+                        </div>
+                        <span class="zeus-anagrafica-delete-input">{{ row.DELETE }}</span>
+                        <button type="button" class="zeus-anagrafica-remove" data-remove-form aria-label="Rimuovi numero di telefono" title="Rimuovi">×</button>
+                    </div>
+                    {% endfor %}
                 </div>
-                <span class="hidden">{{ row.DELETE }}</span>
-                <button type="button" class="zeus-btn zeus-btn-destructive zeus-btn-sm" data-remove-form>Rimuovi</button>
+                <template data-empty-form>
+                    <div class="zeus-anagrafica-row" data-form-row data-form-index="__prefix__">
+                        <div>{{ phone_formset.empty_form.value }}</div>
+                        <span class="zeus-anagrafica-delete-input">{{ phone_formset.empty_form.DELETE }}</span>
+                        <button type="button" class="zeus-anagrafica-remove" data-remove-form aria-label="Rimuovi numero di telefono" title="Rimuovi">×</button>
+                    </div>
+                </template>
             </div>
-            {% endfor %}
+
+            <div class="zeus-anagrafica-group" data-formset="whatsapp">
+                <div class="zeus-anagrafica-group-head">
+                    <div>
+                        <h3>WhatsApp</h3>
+                        <p>Almeno un numero.</p>
+                    </div>
+                    <button type="button" class="zeus-btn zeus-btn-secondary zeus-btn-sm zeus-anagrafica-add" data-add-form>
+                        <span aria-hidden="true">+</span> Aggiungi
+                    </button>
+                </div>
+                {{ whatsapp_formset.management_form }}
+                {% for error in whatsapp_formset.non_form_errors %}<p class="zeus-anagrafica-error">{{ error }}</p>{% endfor %}
+                <div class="zeus-anagrafica-rows" data-form-list>
+                    {% for row in whatsapp_formset %}
+                    <div class="zeus-anagrafica-row" data-form-row data-form-index="{{ forloop.counter0 }}"{% if row.DELETE.value %} hidden{% endif %}>
+                        <div>
+                            {{ row.value }}
+                            {% for error in row.value.errors %}<p class="zeus-anagrafica-error">{{ error }}</p>{% endfor %}
+                        </div>
+                        <span class="zeus-anagrafica-delete-input">{{ row.DELETE }}</span>
+                        <button type="button" class="zeus-anagrafica-remove" data-remove-form aria-label="Rimuovi numero WhatsApp" title="Rimuovi">×</button>
+                    </div>
+                    {% endfor %}
+                </div>
+                <template data-empty-form>
+                    <div class="zeus-anagrafica-row" data-form-row data-form-index="__prefix__">
+                        <div>{{ whatsapp_formset.empty_form.value }}</div>
+                        <span class="zeus-anagrafica-delete-input">{{ whatsapp_formset.empty_form.DELETE }}</span>
+                        <button type="button" class="zeus-anagrafica-remove" data-remove-form aria-label="Rimuovi numero WhatsApp" title="Rimuovi">×</button>
+                    </div>
+                </template>
+            </div>
+
+            <div class="zeus-anagrafica-group zeus-anagrafica-group--social" data-formset="socials">
+                <div class="zeus-anagrafica-group-head">
+                    <div>
+                        <h3>Social</h3>
+                        <p>Profili ufficiali dell’azienda.</p>
+                    </div>
+                    <button type="button" class="zeus-btn zeus-btn-secondary zeus-btn-sm zeus-anagrafica-add" data-add-form>
+                        <span aria-hidden="true">+</span> Aggiungi
+                    </button>
+                </div>
+                {{ social_formset.management_form }}
+                {% for error in social_formset.non_form_errors %}<p class="zeus-anagrafica-error">{{ error }}</p>{% endfor %}
+                <div class="zeus-anagrafica-social-labels" aria-hidden="true">
+                    <span>Canale</span>
+                    <span>Link profilo</span>
+                </div>
+                <div class="zeus-anagrafica-rows" data-form-list>
+                    {% for row in social_formset %}
+                    <div class="zeus-anagrafica-row zeus-anagrafica-row--social" data-form-row data-form-index="{{ forloop.counter0 }}"{% if row.DELETE.value %} hidden{% endif %}>
+                        <div>{{ row.network }}{% for error in row.network.errors %}<p class="zeus-anagrafica-error">{{ error }}</p>{% endfor %}</div>
+                        <div>{{ row.url }}{% for error in row.url.errors %}<p class="zeus-anagrafica-error">{{ error }}</p>{% endfor %}</div>
+                        <span class="zeus-anagrafica-delete-input">{{ row.DELETE }}</span>
+                        <button type="button" class="zeus-anagrafica-remove" data-remove-form aria-label="Rimuovi profilo social" title="Rimuovi">×</button>
+                    </div>
+                    {% endfor %}
+                </div>
+                <template data-empty-form>
+                    <div class="zeus-anagrafica-row zeus-anagrafica-row--social" data-form-row data-form-index="__prefix__">
+                        <div>{{ social_formset.empty_form.network }}</div>
+                        <div>{{ social_formset.empty_form.url }}</div>
+                        <span class="zeus-anagrafica-delete-input">{{ social_formset.empty_form.DELETE }}</span>
+                        <button type="button" class="zeus-anagrafica-remove" data-remove-form aria-label="Rimuovi profilo social" title="Rimuovi">×</button>
+                    </div>
+                </template>
+            </div>
         </div>
-        <template data-empty-form>
-            <div class="flex items-start gap-3" data-form-row>
-                <div class="flex-1">{{ whatsapp_formset.empty_form.value }}</div>
-                <span class="hidden">{{ whatsapp_formset.empty_form.DELETE }}</span>
-                <button type="button" class="zeus-btn zeus-btn-destructive zeus-btn-sm" data-remove-form>Rimuovi</button>
-            </div>
-        </template>
     </section>
 
-    <section class="zeus-card p-5 sm:p-6" data-formset="socials">
-        <div class="mb-5 flex items-start justify-between gap-4">
-            <div>
-                <p class="zeus-label text-brand-cyan">Social</p>
-                <p class="mt-2 text-sm text-content-muted">Inserisci almeno un profilo sociale ufficiale.</p>
-            </div>
-            <button type="button" class="zeus-btn zeus-btn-secondary zeus-btn-sm" data-add-form>Aggiungi</button>
-        </div>
-        {{ social_formset.management_form }}
-        {% for error in social_formset.non_form_errors %}<p class="mb-3 text-sm text-red-400">{{ error }}</p>{% endfor %}
-        <div class="space-y-3" data-form-list>
-            {% for row in social_formset %}
-            <div class="grid gap-3 md:grid-cols-[0.8fr_1.6fr_auto]" data-form-row>
-                <div>{{ row.network }}{% for error in row.network.errors %}<p class="mt-2 text-xs text-red-400">{{ error }}</p>{% endfor %}</div>
-                <div>{{ row.url }}{% for error in row.url.errors %}<p class="mt-2 text-xs text-red-400">{{ error }}</p>{% endfor %}</div>
-                <span class="hidden">{{ row.DELETE }}</span>
-                <button type="button" class="zeus-btn zeus-btn-destructive zeus-btn-sm" data-remove-form>Rimuovi</button>
-            </div>
-            {% endfor %}
-        </div>
-        <template data-empty-form>
-            <div class="grid gap-3 md:grid-cols-[0.8fr_1.6fr_auto]" data-form-row>
-                <div>{{ social_formset.empty_form.network }}</div>
-                <div>{{ social_formset.empty_form.url }}</div>
-                <span class="hidden">{{ social_formset.empty_form.DELETE }}</span>
-                <button type="button" class="zeus-btn zeus-btn-destructive zeus-btn-sm" data-remove-form>Rimuovi</button>
-            </div>
-        </template>
-    </section>
-
-    <div class="sticky-bottom-bar">
-        <button type="submit" class="zeus-btn zeus-btn-primary flex-1">Salva scheda e continua</button>
+    <div class="zeus-anagrafica-actions">
+        <p>Tutti i campi sono obbligatori.</p>
+        <button type="submit" class="zeus-btn zeus-btn-primary">Salva scheda e continua</button>
     </div>
 </form>
 
 <script>
 (function () {
+    var companyForm = document.getElementById('company-anagrafica-form');
+    if (!companyForm) { return; }
+
+    function applyInputMask(input) {
+        var mask = input.dataset.inputMask;
+        if (mask === 'digits') {
+            input.value = input.value.replace(/\D/g, '').slice(0, 11);
+        } else if (mask === 'alphanumeric-upper') {
+            input.value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16);
+        } else if (mask === 'rea') {
+            input.value = input.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 13);
+        } else if (mask === 'phone') {
+            input.value = input.value.replace(/[^+()0-9 .-]/g, '').slice(0, 40);
+        }
+    }
+
+    companyForm.addEventListener('input', function (event) {
+        if (event.target.matches('[data-input-mask]')) {
+            applyInputMask(event.target);
+        }
+    });
+
+    companyForm.addEventListener('blur', function (event) {
+        var input = event.target;
+        if (!input.matches('[data-input-mask="url"]') || !input.value.trim()) { return; }
+        if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(input.value)) {
+            input.value = 'https://' + input.value.trim();
+        }
+    }, true);
+
+    function visibleRows(root) {
+        return Array.from(root.querySelectorAll('[data-form-row]')).filter(function (row) {
+            return !row.hidden;
+        });
+    }
+
+    function updateRemoveButtons(root) {
+        var rows = visibleRows(root);
+        rows.forEach(function (row) {
+            var button = row.querySelector('[data-remove-form]');
+            if (button) { button.hidden = rows.length <= 1; }
+        });
+    }
+
     document.querySelectorAll('[data-formset]').forEach(function (root) {
         var list = root.querySelector('[data-form-list]');
         var template = root.querySelector('[data-empty-form]');
         var total = root.querySelector('input[name$="-TOTAL_FORMS"]');
+
+        root.querySelectorAll('[data-form-row]').forEach(function (row) {
+            var deleteInput = row.querySelector('input[name$="-DELETE"]');
+            if (deleteInput && deleteInput.checked) { row.hidden = true; }
+        });
 
         root.querySelector('[data-add-form]').addEventListener('click', function () {
             var index = parseInt(total.value, 10);
             var html = template.innerHTML.replace(/__prefix__/g, String(index));
             list.insertAdjacentHTML('beforeend', html);
             total.value = String(index + 1);
+            updateRemoveButtons(root);
+            var newRow = visibleRows(root).at(-1);
+            var firstInput = newRow && newRow.querySelector('input:not([type="checkbox"])');
+            if (firstInput) { firstInput.focus(); }
         });
 
         root.addEventListener('click', function (event) {
             var button = event.target.closest('[data-remove-form]');
-            if (!button) { return; }
+            if (!button || visibleRows(root).length <= 1) { return; }
             var row = button.closest('[data-form-row]');
             var deleteInput = row.querySelector('input[name$="-DELETE"]');
             if (deleteInput) { deleteInput.checked = true; }
             row.hidden = true;
+            updateRemoveButtons(root);
         });
+
+        updateRemoveButtons(root);
     });
 })();
 </script>

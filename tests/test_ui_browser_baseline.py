@@ -175,6 +175,92 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
             f"Regressione visuale: {name}; {comparison.summary()}",
         )
 
+    @override_settings(ZEUS_APP_SHELL_ENABLED=True)
+    def test_anagrafica_repeatable_rows_add_and_remove_in_browser(self):
+        self._create_complete_company()
+        user = get_user_model().objects.create_user(
+            username="browser-anagrafica",
+            email="browser-anagrafica@example.com",
+            password="test-password",
+        )
+        self.client.force_login(user)
+        session_cookie = self.client.cookies[settings.SESSION_COOKIE_NAME].value
+
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            context = browser.new_context(
+                viewport=VIEWPORTS["desktop"],
+                extra_http_headers={"X-Zeus-Test-Tenant": "ui-baseline"},
+            )
+            context.add_cookies(
+                [
+                    {
+                        "name": settings.SESSION_COOKIE_NAME,
+                        "value": session_cookie,
+                        "url": self.live_server_url,
+                    }
+                ]
+            )
+            page = context.new_page()
+            response = page.goto(
+                f"{self.live_server_url}{reverse('company-anagrafica')}",
+                wait_until="networkidle",
+            )
+
+            self.assertTrue(response.ok)
+            visible_inputs = page.locator(
+                '#company-anagrafica-form input:not([type="hidden"]):visible'
+            )
+            self.assertEqual(visible_inputs.count(), 12)
+            for index in range(visible_inputs.count()):
+                guided_input = visible_inputs.nth(index)
+                self.assertTrue(guided_input.get_attribute("placeholder").startswith("Es. "))
+                self.assertTrue(
+                    guided_input.get_attribute("title").startswith("Esempio corretto: ")
+                )
+                self.assertTrue(guided_input.get_attribute("data-input-mask"))
+
+            phones = page.locator('[data-formset="phones"]')
+            visible_rows = phones.locator('[data-form-row]:visible')
+            self.assertEqual(visible_rows.count(), 1)
+            self.assertFalse(phones.locator('[data-remove-form]').first.is_visible())
+
+            add_button = phones.locator('[data-add-form]')
+            self.assertLessEqual(add_button.bounding_box()["height"], 40)
+            add_button.click()
+            self.assertEqual(visible_rows.count(), 2)
+
+            remove_buttons = phones.locator('[data-remove-form]:visible')
+            self.assertEqual(remove_buttons.count(), 2)
+            remove_buttons.last.click()
+            self.assertEqual(visible_rows.count(), 1)
+            self.assertEqual(
+                phones.locator('input[name$="-DELETE"]:checked').count(),
+                1,
+            )
+
+            page.locator("#id_name").fill("")
+            with page.expect_navigation(wait_until="networkidle") as navigation:
+                page.locator('button[type="submit"]').click()
+            self.assertEqual(navigation.value.status, 400)
+            phones = page.locator('[data-formset="phones"]')
+            self.assertEqual(phones.locator('[data-form-row]:visible').count(), 1)
+            self.assertEqual(
+                phones.locator('input[name$="-DELETE"]:checked').count(),
+                1,
+            )
+
+            social_row = page.locator(
+                '[data-formset="socials"] .zeus-anagrafica-row--social:visible'
+            ).first
+            self.assertEqual(
+                social_row.evaluate("element => getComputedStyle(element).display"),
+                "grid",
+            )
+            self._assert_no_horizontal_overflow(page)
+            context.close()
+            browser.close()
+
     @override_settings(
         ZEUS_APP_SHELL_ENABLED=True,
         DNA_GENERATION_POLL_SECONDS=0.1,
