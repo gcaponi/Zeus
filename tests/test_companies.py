@@ -14,6 +14,7 @@ from django.utils import timezone
 from django.utils.html import escape
 
 from apps.companies import tasks, views
+from apps.companies.dna_schemas import PRODUCT_LAYER_KEYS
 from apps.companies.models import (
     Company,
     DNAGenerale,
@@ -2517,6 +2518,11 @@ class TestProductViews:
                     "question": f"Domanda {index}",
                     "answer_depth": "generica",
                     "answer_guidance": "Guida",
+                    "suggested_answers": [
+                        f"Risposta {index} A",
+                        f"Risposta {index} B",
+                        f"Risposta {index} C",
+                    ],
                 }
                 for index in range(10)
             ]
@@ -2539,6 +2545,57 @@ class TestProductViews:
 
         assert len(questions) == 10
         assert len({question.code for question in questions}) == 10
+
+    def test_foundation_product_questions_include_three_suggested_answers(
+        self, rf_with_tenant
+    ):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
+        dna = ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_PRE,
+            content={"identita_tecnica": "Vasca tecnica"},
+        )
+
+        questions = views._generate_product_questions(product, dna)
+        response = views.product_questions(
+            rf_with_tenant("get", reverse("specialista-questions", args=[product.pk])),
+            product.pk,
+        )
+
+        assert len(questions) == 10
+        assert response.status_code == 200
+        assert b"Possibili risposte" in response.content
+        for question in questions:
+            assert question.plan_slug == Plan.SLUG_STARTER
+            assert len(question.suggested_answers) == 3
+            assert len(set(question.suggested_answers)) == 3
+        assert escape(questions[0].suggested_answers[0]).encode() in response.content
+
+    def test_professional_product_questions_keep_free_text_only(
+        self, rf_with_tenant, monkeypatch
+    ):
+        monkeypatch.setattr(Client, "auto_create_schema", False)
+        tenant = Client.objects.create(schema_name="test-tenant", name="Test Tenant")
+        plan, _ = Plan.objects.update_or_create(
+            slug=Plan.SLUG_PROFESSIONAL,
+            defaults=Plan.default_values(Plan.SLUG_PROFESSIONAL),
+        )
+        WorkspaceSubscription.objects.create(client=tenant, plan=plan)
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        product = Specialista.objects.create(company=company, name="Vasca", slug="vasca")
+        dna = ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_PRE,
+            content={"identita_tecnica": "Vasca tecnica"},
+        )
+
+        questions = views._generate_product_questions(product, dna)
+
+        assert len(questions) == 10
+        assert all(question.suggested_answers == [] for question in questions)
 
     def test_product_questions_loading_does_not_dispatch_duplicate_task(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
@@ -2954,8 +3011,8 @@ class TestProductViews:
         complete_dna = views._create_complete_product_dna(product, pre_dna, user)
 
         assert complete_dna.version == 2
-        assert "sintesi_cognitiva" in complete_dna.content
-        assert "identita" in complete_dna.content
+        assert all(key in complete_dna.content for key in PRODUCT_LAYER_KEYS)
+        assert "identita_tecnica" in complete_dna.content
         # Behavior: completing the DNA transitions the product to in_validazione
         # (ready for review), not in_costruzione anymore.
         assert product.status == Specialista.STATUS_IN_VALIDAZIONE

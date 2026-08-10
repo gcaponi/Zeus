@@ -22,6 +22,8 @@ principi trasversali, poi scende nel comportamento prodotto, infine si vincola \
 al dato tecnico reale. Se le fonti tecniche contraddicono il DNA, prevalgono \
 le fonti. Ma se mancano le fonti, il DNA Generale guida il ragionamento.
 
+{{source_priority_rules}}
+
 # PROTOCOLLO EVIDENCE — Marcatori Fonte
 
 Ogni claim delle 6 sezioni interne DEVE riportare un marcatore fonte:
@@ -161,18 +163,6 @@ Rispondi ESCLUSIVAMENTE con il JSON grezzo.
 - Il primo carattere del tuo output deve essere `{`.
 - L'ultimo carattere del tuo output deve essere `}`.
 
-=== SITO WEB AZIENDALE (scraped) ===
+=== FONTI DISPONIBILI IN ORDINE DI PRIORITA ===
 
-{{scraped_content}}
-
-=== NOTE DEL CLIENTE ===
-
-{{company_notes}}
-
-=== PROFILO OPERATIVO E CONTESTO LIBERO ===
-
-{{operational_profile}}
-
-=== DOCUMENTI AZIENDALI ===
-
-{{company_documents}}
+{{source_context}}

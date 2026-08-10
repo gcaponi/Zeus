@@ -489,7 +489,10 @@ class MockLLMClient(LLMClient):
                 latency_ms=600,
             )
 
-        if "SINTESI_GLOBALE_DNA" in prompt:
+        if (
+            "SINTESI_GLOBALE_DNA" in prompt
+            and "SINTESI_GLOBALE_DNA_SPECIALISTA" not in prompt
+        ):
             return LLMResult(
                 text=json.dumps({
                     "identita": {
@@ -720,7 +723,7 @@ class MockLLMClient(LLMClient):
                         8: "Cosa sa chi lavora con questo prodotto ogni giorno che non e scritto nei documenti e che cambierebbe il modo in cui lo presentiamo ai clienti?",
                         9: "Qual e l'errore piu costoso che un installatore fa con questo prodotto nei primi 30 giorni, e come lo preveniamo?",
                     }[index]
-                questions.append({
+                question_obj = {
                     "code": code,
                     "pool": pool,
                     "section_key": sections[index % len(sections)],
@@ -728,7 +731,14 @@ class MockLLMClient(LLMClient):
                     "question": question,
                     "answer_depth": answer_depth,
                     "answer_guidance": guidance,
-                })
+                }
+                if plan_slug == "starter":
+                    question_obj["suggested_answers"] = [
+                        f"Per {code}, confermiamo il dato tecnico indicato nei documenti.",
+                        f"Per {code}, il caso operativo richiede una verifica con il tecnico.",
+                        f"Per {code}, adottiamo il criterio del DNA Generale per questo prodotto.",
+                    ]
+                questions.append(question_obj)
             return LLMResult(
                 text=json.dumps({"questions": questions}, ensure_ascii=False),
                 tokens_in=500,

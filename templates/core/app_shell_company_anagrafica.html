@@ -1,0 +1,21 @@
+{% extends "core/app_shell_tenant.html" %}
+
+{% block title %}Scheda anagrafica · ZEUS{% endblock %}
+{% block shell_page_title %}Scheda anagrafica{% endblock %}
+
+{% block tenant_main %}
+<section class="zeus-app-page zeus-app-page--core-flow">
+    <header class="zeus-app-page-header">
+        <div>
+            <p class="zeus-app-eyebrow">Configurazione obbligatoria</p>
+            <h1>Scheda anagrafica</h1>
+            <p>Completa i dati aziendali prima di iniziare l’onboarding.</p>
+        </div>
+    </header>
+    <div class="zeus-app-page-body">
+        <div class="zeus-app-page-main">
+            {% include "core/partials/company_anagrafica_content.html" %}
+        </div>
+    </div>
+</section>
+{% endblock %}

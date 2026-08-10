@@ -16,9 +16,11 @@ from playwright.sync_api import expect, sync_playwright
 from apps.companies.dna_schemas import LAYER_KEYS, PRODUCT_LAYER_KEYS
 from apps.companies.models import (
     Company,
+    CompanyContact,
     DNAGenerale,
     CompanyFile,
     CompanyQuestion,
+    CompanySocial,
     ConsistencyIssue,
     Specialista,
     ProductDNA,
@@ -48,6 +50,39 @@ VIEWPORTS = {
     DEBUG=True,
 )
 class TestUIBrowserBaseline(StaticLiveServerTestCase):
+    def _create_complete_company(self):
+        company = Company.objects.create(
+            schema_name="ui-baseline",
+            name="UI Baseline",
+            nome_commerciale="UI Baseline",
+            partita_iva="12345678901",
+            codice_fiscale="ABCDEF12G34H567I",
+            rea="MI-1234567",
+            pec="ui-baseline@example.test",
+            email_contatto="contatti@example.test",
+            sito_web="https://ui-baseline.example.test",
+        )
+        CompanyContact.objects.bulk_create(
+            [
+                CompanyContact(
+                    company=company,
+                    kind=CompanyContact.KIND_PHONE,
+                    value="+39 02 1234567",
+                ),
+                CompanyContact(
+                    company=company,
+                    kind=CompanyContact.KIND_WHATSAPP,
+                    value="+39 333 1234567",
+                ),
+            ]
+        )
+        CompanySocial.objects.create(
+            company=company,
+            network="LinkedIn",
+            url="https://linkedin.com/company/ui-baseline",
+        )
+        return company
+
     def _assert_no_horizontal_overflow(self, page):
         has_overflow = page.evaluate(
             "document.documentElement.scrollWidth > document.documentElement.clientWidth"
@@ -167,10 +202,7 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
             email="browser-generation-poll@example.com",
             password="test-password",
         )
-        company = Company.objects.create(
-            schema_name="ui-baseline",
-            name="UI Baseline",
-        )
+        company = self._create_complete_company()
         pre_dna = DNAGenerale.objects.create(
             company=company,
             version=1,
@@ -259,6 +291,7 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
             browser.close()
 
     def test_login_and_dashboard_visual_baselines(self):
+        self._create_complete_company()
         user = get_user_model().objects.create_user(
             username="browser-baseline",
             email="browser-baseline@example.com",
@@ -377,6 +410,7 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
 
     @override_settings(ZEUS_APP_SHELL_ENABLED=True)
     def test_tenant_app_shell_visual_baselines(self):
+        self._create_complete_company()
         user = get_user_model().objects.create_user(
             username="browser-app-shell",
             email="browser-app-shell@example.com",
@@ -618,10 +652,7 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
             email="browser-onboarding-shell@example.com",
             password="test-password",
         )
-        company = Company.objects.create(
-            schema_name="ui-baseline",
-            name="UI Baseline",
-        )
+        company = self._create_complete_company()
         pre_dna = DNAGenerale.objects.create(
             company=company,
             version=1,
@@ -877,10 +908,7 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
             email="browser-specialist-shell@example.com",
             password="test-password",
         )
-        company = Company.objects.create(
-            schema_name="ui-baseline",
-            name="UI Baseline",
-        )
+        company = self._create_complete_company()
         product = Specialista.objects.create(
             company=company,
             name="Vasca Premium",
@@ -1035,10 +1063,7 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
             email="browser-engine-shell@example.com",
             password="test-password",
         )
-        company = Company.objects.create(
-            schema_name="ui-baseline",
-            name="UI Baseline",
-        )
+        company = self._create_complete_company()
         products = []
         source_dna_ids = []
         for index, name in enumerate(("Vasca Premium", "Canale Tecnico"), start=1):

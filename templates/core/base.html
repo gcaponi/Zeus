@@ -685,6 +685,7 @@
             ZEUS
         </a>
         <div class="zeus-nav-links">
+            <a href="{% url 'company-anagrafica' %}"{% if '/company/anagrafica' in request.path %} class="is-active" aria-current="page"{% endif %}>Anagrafica</a>
             <a href="{% url 'onboarding-index' %}"{% if '/onboarding' in request.path %} class="is-active" aria-current="page"{% endif %}>Onboarding</a>
             <a href="{% url 'specialista-list-create' %}"{% if '/specialisti' in request.path or '/products' in request.path %} class="is-active" aria-current="page"{% endif %}>Specialisti</a>
             <a href="{% url 'motore-b-report' %}"{% if '/motore-b' in request.path %} class="is-active" aria-current="page"{% endif %}>Motore B</a>
@@ -701,6 +702,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
         </button>
         <div id="zeus-mobile-menu" class="zeus-mobile-menu">
+            <a href="{% url 'company-anagrafica' %}"{% if '/company/anagrafica' in request.path %} class="is-active" aria-current="page"{% endif %}>Anagrafica</a>
             <a href="{% url 'onboarding-index' %}"{% if '/onboarding' in request.path %} class="is-active" aria-current="page"{% endif %}>Onboarding</a>
             <a href="{% url 'specialista-list-create' %}"{% if '/specialisti' in request.path or '/products' in request.path %} class="is-active" aria-current="page"{% endif %}>Specialisti</a>
             <a href="{% url 'motore-b-report' %}"{% if '/motore-b' in request.path %} class="is-active" aria-current="page"{% endif %}>Motore B</a>

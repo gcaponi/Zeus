@@ -33,6 +33,12 @@ from apps.companies.models import (
     Source,
 )
 from apps.companies.scraper import get_scraper
+from apps.companies.source_priority import (
+    DNA_SOURCE_PRIORITY_RULES,
+    build_company_generation_context,
+    build_specialist_generation_context,
+    has_declared_user_context,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +81,7 @@ def _available_sources(source, company) -> dict:
         for f in company.company_files.all()
         if f.original_name != "note-azienda.txt"
     ]
-    has_note = company.company_files.filter(original_name="note-azienda.txt").exists()
+    has_note = has_declared_user_context(company)
     has_answer = company.company_questions.exclude(answer="").exists()
     return {
         "scrape": bool(source and source.scraped_data),
@@ -405,36 +411,17 @@ def _validate_dna_content(content, company, *, stage="pre-dna"):
 def _generate_dna(source: Source, company):
     """Shared DNA generation logic — called by view or pipeline task.
 
-    Reads 3 separate sources: scraped website, client notes, and company documents.
-    The client notes (saved as 'note-azienda.txt') are separated from real documents
-    so the LLM sees them as distinct context blocks.
+    Sources are assembled in deterministic priority order before the LLM call.
     """
     prompt_path = Path(__file__).parent / "prompts" / "dna_generale_v1.md"
     prompt_template = prompt_path.read_text(encoding="utf-8")
-
-    notes_parts = []
-    docs_parts = []
-    for company_file in company.company_files.all()[:10]:
-        if company_file.original_name == "note-azienda.txt":
-            notes_parts.append(company_file.content_text)
-        else:
-            docs_parts.append(f"# {company_file.original_name}\n{company_file.content_text}")
-
-    from apps.companies.sector_archetypes import get_archetype_context
-    operational_profile = get_archetype_context(company)
-
+    source_context = build_company_generation_context(company, source=source)
     prompt = prompt_template.replace(
-        "{{scraped_content}}",
-        source.scraped_data.get("markdown", "") if source.scraped_data else "",
+        "{{source_priority_rules}}",
+        DNA_SOURCE_PRIORITY_RULES,
     ).replace(
-        "{{company_notes}}",
-        "\n\n".join(notes_parts) or "Nessuna nota del cliente.",
-    ).replace(
-        "{{company_documents}}",
-        "\n\n".join(docs_parts) or "Nessun documento aziendale caricato.",
-    ).replace(
-        "{{operational_profile}}",
-        operational_profile or "Nessun profilo operativo fornito.",
+        "{{source_context}}",
+        source_context,
     )
 
     client = get_llm_client()
@@ -510,6 +497,8 @@ CONCEPT_MAP_SPECIALISTA
 
 Sei ZEUS. Analizza i documenti tecnici del prodotto "{product.name}" dell'azienda {company.name}.
 Estrai una mappa concettuale strutturata. Non generare ancora il DNA: estrai SOLO i dati grezzi organizzati.
+
+{DNA_SOURCE_PRIORITY_RULES}
 
 DNA AZIENDALE (contesto):
 {company_context or "Non disponibile"}
@@ -629,6 +618,8 @@ SEED_VARIANT — {instruction}
 Sei ZEUS. Analizza il prodotto "{product.name}" dell'azienda {company.name}.
 Genera il DNA a 6 sezioni tecniche partendo dall'angolo indicato sopra.
 
+{DNA_SOURCE_PRIORITY_RULES}
+
 {source_block}
 
 DNA AZIENDALE (contesto):
@@ -695,6 +686,8 @@ MERGE_DNA_SPECIALISTA
 Sei ZEUS. Tre analisi parallele del prodotto "{product.name}" sono state generate
 da angoli di lettura diversi. Uniscile in un DNA unificato.
 
+{DNA_SOURCE_PRIORITY_RULES}
+
 {chr(10).join(variant_blocks)}
 
 DNA AZIENDALE (riferimento):
@@ -756,6 +749,8 @@ REFINEMENT_SEZIONE — {key.upper()}
 
 Sei ZEUS. Raffina UNA sola sezione del DNA Specialista per "{product.name}".
 Non vedere le altre sezioni — concentrati esclusivamente su questa.
+
+{DNA_SOURCE_PRIORITY_RULES}
 
 FOCUS DELLA SEZIONE: {focus}
 
@@ -923,6 +918,7 @@ def _generate_product_dna_singlepass(product: Specialista, company, concept_map=
 
     from apps.companies.sector_archetypes import get_archetype_context
     archetype_context = get_archetype_context(company)
+    raw_sources = build_specialist_generation_context(product)
 
     if concept_map:
         source_block = f"CONCEPT MAP:\n{json.dumps(concept_map, ensure_ascii=False, indent=2)}"
@@ -941,6 +937,8 @@ MISSIONE: estrai GIUDIZIO, non solo fatti. Un DNA che elenca solo specifiche tec
 e un lettore di brochure, non un fondatore. Per ogni sezione, cerca il principio
 cognitivo, il trade-off, il confine, la logica decisionale che i documenti rivelano.
 
+{DNA_SOURCE_PRIORITY_RULES}
+
 {source_block}
 
 DNA AZIENDALE (contesto — eredita senza ripetere):
@@ -948,6 +946,9 @@ DNA AZIENDALE (contesto — eredita senza ripetere):
 
 PROFILO OPERATIVO:
 {archetype_context or "Non disponibile"}
+
+FONTI ORIGINALI IN ORDINE DI PRIORITA:
+{raw_sources}
 
 REGOLE:
 - Tutte le 6 sezioni devono essere presenti e complete.

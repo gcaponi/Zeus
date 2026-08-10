@@ -1,12 +1,14 @@
 import logging
 import time
 import uuid
-from importlib import import_module
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib.sessions.backends.base import UpdateError
 from django.contrib.sessions.exceptions import SessionInterrupted
 from django.contrib.sessions.middleware import SessionMiddleware
+from django.http import JsonResponse
+from django.shortcuts import redirect
 from django.utils.cache import patch_vary_headers
 from django.utils.http import http_date
 
@@ -16,6 +18,18 @@ except ImportError:  # pragma: no cover - production dependency, fallback for ba
     structlog = None
 
 logger = structlog.get_logger(__name__) if structlog else logging.getLogger(__name__)
+
+
+ANAGRAFICA_ALLOWED_PATHS = (
+    "/company/anagrafica/",
+    "/accounts/",
+    "/admin/",
+    "/zeus-admin/",
+    "/health/",
+    "/metrics/",
+    "/static/",
+    "/__shell_preview/",
+)
 
 
 def _log(level, event, **fields):
@@ -123,6 +137,41 @@ class RequestContextLoggingMiddleware:
         return response
 
 
+class CompanyAnagraficaRequiredMiddleware:
+    """Gate authenticated tenant traffic until company identity is complete."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        tenant = getattr(request, "tenant", None)
+        user = getattr(request, "user", None)
+        is_tenant = tenant is not None and getattr(tenant, "schema_name", "public") != "public"
+        is_authenticated = bool(user and getattr(user, "is_authenticated", False))
+        is_allowed_path = request.path.startswith(ANAGRAFICA_ALLOWED_PATHS)
+
+        if is_tenant and is_authenticated and not is_allowed_path:
+            from apps.companies.models import Company
+
+            company = Company.objects.filter(schema_name=tenant.schema_name).first()
+            if company is None or not company.has_complete_anagrafica():
+                target = "/company/anagrafica/"
+                if request.path.startswith("/api/") or "application/json" in request.headers.get(
+                    "Accept", ""
+                ):
+                    return JsonResponse(
+                        {
+                            "error": "company_profile_required",
+                            "anagrafica_url": target,
+                        },
+                        status=409,
+                    )
+                query = urlencode({"next": request.get_full_path()})
+                return redirect(f"{target}?{query}")
+
+        return self.get_response(request)
+
+
 # --- Sessioni separate per la zona admin (fix logout incrociato app/admin) ---
 #
 # La sessione Django è unica per tutto il dominio .zeus.cais.uno (tabella
@@ -191,7 +240,7 @@ class TenantAwareSessionMiddleware(SessionMiddleware):
                             "The request's session was deleted before the "
                             "request completed. The user may have logged "
                             "out in a concurrent request, for example."
-                        )
+                        ) from None
                     response.set_cookie(
                         cookie_name,
                         request.session.session_key,

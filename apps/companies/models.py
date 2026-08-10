@@ -59,6 +59,13 @@ class Company(models.Model):
         help_text="Corrisponde a Client.schema_name del tenant",
     )
     name = models.CharField(max_length=255)
+    nome_commerciale = models.CharField(max_length=255, blank=True, default="")
+    partita_iva = models.CharField(max_length=11, blank=True, default="")
+    codice_fiscale = models.CharField(max_length=16, blank=True, default="")
+    rea = models.CharField(max_length=64, blank=True, default="")
+    pec = models.EmailField(blank=True, default="")
+    email_contatto = models.EmailField(blank=True, default="")
+    sito_web = models.URLField(max_length=2048, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -85,6 +92,68 @@ class Company(models.Model):
 
     def __str__(self):
         return self.name
+
+    def has_complete_anagrafica(self) -> bool:
+        """Return whether every mandatory company-profile datum is present."""
+        scalar_values = (
+            self.name,
+            self.nome_commerciale,
+            self.partita_iva,
+            self.codice_fiscale,
+            self.rea,
+            self.pec,
+            self.email_contatto,
+            self.sito_web,
+        )
+        if not all(str(value or "").strip() for value in scalar_values):
+            return False
+        contact_kinds = set(self.contacts.values_list("kind", flat=True))
+        return (
+            CompanyContact.KIND_PHONE in contact_kinds
+            and CompanyContact.KIND_WHATSAPP in contact_kinds
+            and self.social_profiles.exists()
+        )
+
+
+class CompanyContact(models.Model):
+    KIND_PHONE = "phone"
+    KIND_WHATSAPP = "whatsapp"
+    KIND_CHOICES = [
+        (KIND_PHONE, "Telefono"),
+        (KIND_WHATSAPP, "WhatsApp"),
+    ]
+
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name="contacts",
+    )
+    kind = models.CharField(max_length=12, choices=KIND_CHOICES)
+    value = models.CharField(max_length=40)
+    position = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["kind", "position", "id"]
+
+    def __str__(self):
+        return f"{self.get_kind_display()}: {self.value}"
+
+
+class CompanySocial(models.Model):
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name="social_profiles",
+    )
+    network = models.CharField(max_length=80)
+    url = models.URLField(max_length=2048)
+    position = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["position", "id"]
+
+    def __str__(self):
+        return f"{self.network}: {self.url}"
 
 
 class DNAFeedback(models.Model):
@@ -651,6 +720,7 @@ class ProductQuestion(models.Model):
     answer_guidance = models.TextField(blank=True)
     answer = models.TextField(blank=True)
     answered_at = models.DateTimeField(null=True, blank=True)
+    suggested_answers = models.JSONField(default=list, blank=True)
     pool = models.CharField(
         max_length=20,
         choices=POOL_CHOICES,

@@ -14,11 +14,18 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_http_methods
 
 from apps.companies.dna_numeric import (
     extract_all_layer_specs,
     extract_technical_specs,
+)
+from apps.companies.forms import (
+    CompanyAnagraficaForm,
+    PhoneFormSet,
+    SocialFormSet,
+    WhatsAppFormSet,
 )
 from apps.companies.dna_schemas import (
     LAYER_KEYS,
@@ -27,6 +34,11 @@ from apps.companies.dna_schemas import (
     PRODUCT_LAYER_TITLES,
 )
 from apps.companies.sector_archetypes import get_archetype_context
+from apps.companies.source_priority import (
+    DNA_SOURCE_PRIORITY_RULES,
+    build_company_generation_context,
+    build_specialist_generation_context,
+)
 from apps.companies.llm_client import (
     LLM_MODEL,
     LLM_MODEL_PRO,
@@ -48,9 +60,11 @@ from apps.companies.llm_schemas import (
 )
 from apps.companies.models import (
     Company,
+    CompanyContact,
     DNAGenerale,
     CompanyFile,
     CompanyQuestion,
+    CompanySocial,
     ConsistencyIssue,
     DNAFeedback,
     LLMCall,
@@ -603,6 +617,12 @@ def _company_document_context(company):
 
 
 def _latest_source_url(company):
+    if company.sito_web:
+        return company.sito_web
+    return _latest_scrape_source_url(company)
+
+
+def _latest_scrape_source_url(company):
     source = company.sources.order_by("-created_at").first()
     return source.url if source else ""
 
@@ -660,7 +680,7 @@ def _company_files_response(request, company, error=None):
 def _initial_info_changed(company, url, notes, uploaded_file) -> bool:
     if not company.dna_versions.exists():
         return True
-    if url != _latest_source_url(company):
+    if url != _latest_scrape_source_url(company):
         return True
     if notes.strip() != _current_company_notes(company).strip():
         return True
@@ -701,7 +721,7 @@ Regole per le 3 risposte suggerite:
         else ""
     )
     suggested_format = (
-        '\n      "suggested_answers": ["risposta 1", "risposta 2", "risposta 3"],'
+        ',\n      "suggested_answers": ["risposta 1", "risposta 2", "risposta 3"]'
         if is_foundation
         else ""
     )
@@ -1646,12 +1666,15 @@ def _global_dna_synthesis(company, pre_dna_content, questions):
     prev_content = _public_content(pre_dna_content)
     qa_block = _format_qa_block(questions)
     pre_dna_json = json.dumps(prev_content, ensure_ascii=False, indent=2)
+    raw_sources = build_company_generation_context(company)
 
     prompt = f"""SINTESI_GLOBALE_DNA
 
 Hai un pre-DNA generato dalle fonti aziendali e le risposte del cliente a domande \
 di approfondimento. Il tuo compito è LEGGERE, COMPRENDERE e RIGENERARE il DNA \
 completo come documento cognitivo coerente.
+
+{DNA_SOURCE_PRIORITY_RULES}
 
 REGOLE FONDAMENTALI:
 
@@ -1705,6 +1728,9 @@ PRE-DNA COMPLETO:
 
 RISPOSTE CLIENTE:
 {qa_block}
+
+FONTI ORIGINALI IN ORDINE DI PRIORITA:
+{raw_sources}
 
 Rispondi con SOLO il JSON, senza markdown, senza preambolo.""".strip()
 
@@ -2220,6 +2246,117 @@ def onboarding_index(request):
 
 
 @login_required
+@require_http_methods(["GET", "POST"])
+def company_anagrafica(request):
+    """Mandatory, editable company identity card shown before onboarding."""
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+
+    phone_initial = [
+        {"value": value}
+        for value in company.contacts.filter(kind=CompanyContact.KIND_PHONE)
+        .order_by("position", "id")
+        .values_list("value", flat=True)
+    ]
+    whatsapp_initial = [
+        {"value": value}
+        for value in company.contacts.filter(kind=CompanyContact.KIND_WHATSAPP)
+        .order_by("position", "id")
+        .values_list("value", flat=True)
+    ]
+    social_initial = list(
+        company.social_profiles.order_by("position", "id").values("network", "url")
+    )
+
+    if request.method == "POST":
+        form = CompanyAnagraficaForm(request.POST, instance=company)
+        phone_formset = PhoneFormSet(request.POST, prefix="phones")
+        whatsapp_formset = WhatsAppFormSet(request.POST, prefix="whatsapp")
+        social_formset = SocialFormSet(request.POST, prefix="socials")
+        if all(
+            (
+                form.is_valid(),
+                phone_formset.is_valid(),
+                whatsapp_formset.is_valid(),
+                social_formset.is_valid(),
+            )
+        ):
+            with transaction.atomic():
+                form.save()
+                company.contacts.all().delete()
+                CompanyContact.objects.bulk_create(
+                    [
+                        CompanyContact(
+                            company=company,
+                            kind=CompanyContact.KIND_PHONE,
+                            value=row["value"],
+                            position=index,
+                        )
+                        for index, row in enumerate(phone_formset.cleaned_data)
+                        if row and not row.get("DELETE")
+                    ]
+                    + [
+                        CompanyContact(
+                            company=company,
+                            kind=CompanyContact.KIND_WHATSAPP,
+                            value=row["value"],
+                            position=index,
+                        )
+                        for index, row in enumerate(whatsapp_formset.cleaned_data)
+                        if row and not row.get("DELETE")
+                    ]
+                )
+                company.social_profiles.all().delete()
+                CompanySocial.objects.bulk_create(
+                    [
+                        CompanySocial(
+                            company=company,
+                            network=row["network"].strip(),
+                            url=row["url"],
+                            position=index,
+                        )
+                        for index, row in enumerate(social_formset.cleaned_data)
+                        if row and not row.get("DELETE")
+                    ]
+                )
+            messages.success(request, "Scheda anagrafica salvata.")
+            next_url = request.POST.get("next", "").strip()
+            if next_url and url_has_allowed_host_and_scheme(
+                next_url,
+                allowed_hosts={request.get_host()},
+                require_https=request.is_secure(),
+            ):
+                return redirect(next_url)
+            return redirect("onboarding-index")
+    else:
+        form = CompanyAnagraficaForm(instance=company)
+        phone_formset = PhoneFormSet(initial=phone_initial, prefix="phones")
+        whatsapp_formset = WhatsAppFormSet(initial=whatsapp_initial, prefix="whatsapp")
+        social_formset = SocialFormSet(initial=social_initial, prefix="socials")
+
+    template_name = (
+        "core/app_shell_company_anagrafica.html"
+        if settings.ZEUS_APP_SHELL_ENABLED
+        else "core/company_anagrafica.html"
+    )
+    return render(
+        request,
+        template_name,
+        {
+            "company": company,
+            "form": form,
+            "phone_formset": phone_formset,
+            "whatsapp_formset": whatsapp_formset,
+            "social_formset": social_formset,
+            "next_url": request.POST.get("next", request.GET.get("next", "")),
+            "anagrafica_complete": company.has_complete_anagrafica(),
+        },
+        status=400 if request.method == "POST" else 200,
+    )
+
+
+@login_required
 @require_http_methods(["POST"])
 def onboarding_source_create(request):
     company = _tenant_company(request)
@@ -2261,10 +2398,11 @@ def onboarding_source_create(request):
     company.installatori_in_filiera = request.POST.get("installatori_in_filiera") == "true"
     company.settore_secondario = request.POST.get("settore_secondario", "").strip()
     company.contesto_libero = request.POST.get("contesto_libero", "").strip()
+    company.sito_web = url
     company.save(update_fields=[
         "settore_primario", "prodotto_fisico", "cliente_diretto",
         "custom_frequenza", "installatori_in_filiera",
-        "settore_secondario", "contesto_libero",
+        "settore_secondario", "contesto_libero", "sito_web",
     ])
     if has_existing_dna and not _initial_info_changed(company, url, notes, uploaded_file):
         return _source_form_response(
@@ -4094,6 +4232,29 @@ def _product_question_generation_prompt(product, dna, plan_slug):
     profile = QUESTION_GENERATION_PROFILES[plan_slug]
     content = json.dumps(dna.content, ensure_ascii=False, indent=2)
     documents = _product_document_context_rich(product)
+    is_foundation = plan_slug == Plan.SLUG_STARTER
+    suggested_block = (
+        """
+RISPOSTE_SUGGERITE_FOUNDATION:
+Per OGNI domanda genera anche `suggested_answers`, un array di esattamente 3
+risposte distinte e plausibili che il cliente puo scegliere e modificare.
+
+Regole:
+- Le risposte devono essere coerenti con pre-DNA Specialista, documenti e DNA Generale.
+- Non inventare numeri, materiali, certificazioni o lavorazioni non supportati.
+- Ogni alternativa deve essere una frase autonoma, concreta e comprensibile.
+- Se il contesto sostiene una sola interpretazione, usa 3 formulazioni distinte
+  e segnala nella frase cio che resta da confermare.
+- Le proposte guidano il cliente ma non sostituiscono la sua risposta.
+"""
+        if is_foundation
+        else ""
+    )
+    suggested_format = (
+        ',\n      "suggested_answers": ["risposta 1", "risposta 2", "risposta 3"]'
+        if is_foundation
+        else ""
+    )
     company = product.company
     company_dna = company.dna_versions.filter(
         dna_type=DNAGenerale.TYPE_COMPLETE, is_current=True
@@ -4151,6 +4312,7 @@ Regole obbligatorie:
   - Pool "meta": 2 domande ispirate alle DOMANDE META UNIVERSALI e alle
     CATEGORIE DI CONOSCENZA TACITA del settore rilevato. Queste domande
     cercano conoscenza operativa che NON compare nei documenti.
+{suggested_block}
 - Rispondi SOLO JSON valido, senza markdown.
 
 Formato JSON:
@@ -4163,7 +4325,7 @@ Formato JSON:
       "principle": "nome breve del principio usato",
       "question": "domanda al cliente",
       "answer_depth": "generica|mirata|analitica",
-      "answer_guidance": "che tipo di risposta ti aspetti dal cliente"
+      "answer_guidance": "che tipo di risposta ti aspetti dal cliente"{suggested_format}
     }}
   ]
 }}
@@ -4191,10 +4353,15 @@ def _generate_product_questions(product, dna):
     profile = QUESTION_GENERATION_PROFILES[plan_slug]
     prompt = _product_question_generation_prompt(product, dna, plan_slug)
     client = get_llm_client()
+    schema = (
+        StarterQuestionSetSchema
+        if plan_slug == Plan.SLUG_STARTER
+        else QuestionSetSchema
+    )
     result, question_set = _generate_structured_tracked(
         client,
         prompt,
-        response_model=QuestionSetSchema,
+        response_model=schema,
         model=LLM_MODEL,
         system_prompt=ZEUS_SYSTEM_PROMPT,
         temperatures=(0.5, 0.3, 0.2),
@@ -4240,6 +4407,9 @@ def _generate_product_questions(product, dna):
                     raw_question.get("answer_depth") or profile["answer_depth"]
                 )[:40],
                 answer_guidance=str(raw_question.get("answer_guidance", "")).strip(),
+                suggested_answers=_foundation_suggested_answers(
+                    raw_question, plan_slug
+                ),
                 pool=pool,
             )
         return list(locked_dna.questions.all())
@@ -4250,6 +4420,7 @@ def _global_product_dna_synthesis(product, pre_dna_content, questions):
     prev_content = _public_content(pre_dna_content)
     qa_block = _format_qa_block(questions)
     pre_dna_json = json.dumps(prev_content, ensure_ascii=False, indent=2)
+    raw_sources = build_specialist_generation_context(product)
 
     # Include DNAGenerale as context (eredita, non ripete)
     company_dna = product.company.dna_versions.filter(
@@ -4264,6 +4435,8 @@ def _global_product_dna_synthesis(product, pre_dna_content, questions):
 Hai un pre-DNA specialista generato dalle fonti prodotto e le risposte del cliente.
 Il tuo compito e LEGGERE, COMPRENDERE e RIGENERARE il DNA Specialista completo come
 documento tecnico coerente per il prodotto "{product.name}".
+
+{DNA_SOURCE_PRIORITY_RULES}
 
 REGOLE FONDAMENTALI:
 
@@ -4305,6 +4478,9 @@ RISPOSTE CLIENTE:
 
 DNA GENERALE DI RIFERIMENTO (principi trasversali — NON ripetere):
 {company_dna_json or "Nessun DNA Generale disponibile."}
+
+FONTI ORIGINALI IN ORDINE DI PRIORITA:
+{raw_sources}
 
 Rispondi con SOLO il JSON, senza markdown, senza preambolo.""".strip()
 

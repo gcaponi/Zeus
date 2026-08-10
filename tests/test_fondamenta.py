@@ -163,8 +163,7 @@ class TestQuestionPoolField:
 @pytest.mark.django_db
 class TestGenerateDnaNotesSeparation:
     def test_notes_and_documents_separated_in_prompt(self, monkeypatch):
-        """_generate_dna must place client notes in {{company_notes}} and
-        real documents in {{company_documents}}, not concatenate them."""
+        """_generate_dna must keep notes above documents in source priority."""
         from apps.companies import tasks
         from apps.companies.models import Company, CompanyFile, Source
 
@@ -226,10 +225,16 @@ class TestGenerateDnaNotesSeparation:
         tasks._generate_dna(source, company)
 
         prompt = captured_prompt["prompt"]
-        assert "=== NOTE DEL CLIENTE ===" in prompt
+        assert "## PRIORITA 2 — INFORMAZIONI DICHIARATE DAL CLIENTE" in prompt
+        assert "## PRIORITA 3 — DOCUMENTI CARICATI" in prompt
+        assert "## PRIORITA 4 — SITO WEB" in prompt
         assert "Note importanti del cliente" in prompt
         assert "Catalogo prodotti" in prompt
         assert "# note-azienda.txt" not in prompt
+        assert prompt.index("Note importanti del cliente") < prompt.index(
+            "Catalogo prodotti"
+        )
+        assert prompt.index("Catalogo prodotti") < prompt.index("# Example Corp")
 
 
 class TestDNAValidator:

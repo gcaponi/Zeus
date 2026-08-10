@@ -1,0 +1,22 @@
+{% extends "core/base.html" %}
+
+{% block title %}Scheda anagrafica — ZEUS{% endblock %}
+
+{% block page_header %}
+<header class="mb-8">
+    <p class="zeus-badge zeus-badge-cyan mb-3">Configurazione obbligatoria</p>
+    <h1 class="text-3xl font-bold tracking-tight sm:text-4xl">Scheda anagrafica</h1>
+    <p class="mt-2 text-content-secondary">Completa i dati aziendali prima di iniziare l’onboarding.</p>
+</header>
+{% endblock %}
+
+{% block main_content %}
+{% include "core/partials/company_anagrafica_content.html" %}
+{% endblock %}
+
+{% block sidebar_content %}
+<div class="zeus-card p-5">
+    <p class="zeus-label">Stato</p>
+    <p class="mt-2 text-sm text-content-secondary">{% if anagrafica_complete %}Scheda completa e modificabile.{% else %}Tutti i campi sono obbligatori.{% endif %}</p>
+</div>
+{% endblock %}

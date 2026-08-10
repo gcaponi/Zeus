@@ -1,6 +1,7 @@
 from django.urls import path
 
 from apps.companies.views import (
+    company_anagrafica,
     onboarding_dna,
     onboarding_dna_reset,
     onboarding_file_delete,
@@ -11,6 +12,7 @@ from apps.companies.views import (
 )
 
 urlpatterns = [
+    path("company/anagrafica/", company_anagrafica, name="company-anagrafica"),
     path("onboarding/", onboarding_index, name="onboarding-index"),
     path("onboarding/source/", onboarding_source_create, name="onboarding-source-create"),
     path("onboarding/status/<int:pk>/", onboarding_status, name="onboarding-status"),
