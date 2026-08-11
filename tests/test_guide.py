@@ -205,10 +205,11 @@ class TestComputeProgress:
         assert progress["current"]["id"] == "anagrafica"
 
         _complete_anagrafica(company)
-        assert guide_service.compute_progress(company)["current"]["id"] == "sito_web"
+        # Il sito e' noto dall'anagrafica: fase sito gia' completata,
+        # documenti opzionali -> il passo corrente e' il pre-DNA.
+        assert guide_service.compute_progress(company)["current"]["id"] == "pre_dna"
 
         _scraped_source(company)
-        # Documenti opzionali: non bloccano, il passo corrente e' gia' il pre-DNA.
         assert guide_service.compute_progress(company)["current"]["id"] == "pre_dna"
 
         _company_file(company)
@@ -259,6 +260,21 @@ class TestComputeProgress:
             for phase in guide_service.compute_progress(company)["phases"]
         }
         assert statuses["documenti_aziendali"] == "done"
+
+    def test_site_stays_connected_after_onboarding_reset(self):
+        """Caso reale: "Riparti da capo" cancella le Source ma l'anagrafica
+        conserva sito_web — la fase sito resta completata."""
+        company = _company()
+        _complete_anagrafica(company)
+        _scraped_source(company)
+        company.sources.all().delete()
+
+        statuses = {
+            phase["id"]: phase["status"]
+            for phase in guide_service.compute_progress(company)["phases"]
+        }
+        assert statuses["sito_web"] == "done"
+        assert guide_service.compute_progress(company)["current"]["id"] == "pre_dna"
 
     def test_checklist_block_marks_recommended_phase(self):
         company = _company()
@@ -364,8 +380,21 @@ class TestBuildGuideSystemPrompt:
         _complete_anagrafica(company)
         prompt = guide_service.build_guide_system_prompt(company)
         assert "[x] Anagrafica aziendale" in prompt
-        assert "[>] Sito web collegato  <- passo corrente" in prompt
-        assert "Collega il tuo sito" in prompt
+        # Il sito e' gia' noto dall'anagrafica: il passo corrente e' il pre-DNA.
+        assert "[x] Sito web collegato" in prompt
+        assert "[>] Analisi iniziale (pre-DNA)  <- passo corrente" in prompt
+
+    def test_site_phase_done_via_anagrafica_without_sources(self):
+        """sito_web e' obbligatorio in anagrafica: completata l'anagrafica
+        la fase sito risulta sempre collegata, anche senza Source."""
+        company = _company()
+        _complete_anagrafica(company)
+        assert not company.sources.exists()
+        statuses = {
+            phase["id"]: phase["status"]
+            for phase in guide_service.compute_progress(company)["phases"]
+        }
+        assert statuses["sito_web"] == "done"
 
     def test_completed_path_has_no_current_phase(self):
         company = _company()

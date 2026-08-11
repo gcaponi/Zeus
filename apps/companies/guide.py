@@ -26,7 +26,7 @@ from apps.companies.agent import (
     retrieve_context,
 )
 from apps.companies.llm_client import GUIDE_CHAT_MARKER
-from apps.companies.models import DNAGenerale, ProductDNA, ProductQuestion, Source
+from apps.companies.models import DNAGenerale, ProductDNA, ProductQuestion
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +43,17 @@ def _has_complete_anagrafica(company):
     return company.has_complete_anagrafica()
 
 
-def _has_scraped_source(company):
-    return company.sources.filter(status=Source.STATUS_SCRAPED).exists()
+def _has_connected_site(company):
+    """Sito collegato: URL noto, da una Source registrata o dall'anagrafica.
+
+    Il campo `sito_web` dell'anagrafica sopravvive al reset dell'onboarding
+    ("Riparti da capo" cancella le Source): l'utente considera il sito gia'
+    collegato e la guida deve rifletterlo. L'analisi vera e' gated dalla
+    fase pre-DNA, che richiede lo scraping alla generazione.
+    """
+    if company.sources.exists():
+        return True
+    return bool(company.sito_web)
 
 
 def _has_company_files(company):
@@ -129,7 +138,7 @@ PHASES = [
         ],
         "cta_url_name": "onboarding-index",
         "cta_label": "Collega il tuo sito",
-        "is_done": _has_scraped_source,
+        "is_done": _has_connected_site,
     },
     {
         "id": "documenti_aziendali",
