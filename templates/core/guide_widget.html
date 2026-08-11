@@ -59,7 +59,7 @@ page and htmx would swap that HTML into the widget containers.
 
         <div class="guide-widget__body">
             <aside class="guide-widget__path" aria-label="Il tuo percorso">
-                <div id="guide-state" class="guide-widget__state" hx-get="{{ guide_state_url }}" hx-trigger="load" hx-swap="innerHTML" aria-live="polite"></div>
+                <div id="guide-state" class="guide-widget__state" hx-get="{{ guide_state_url }}" hx-trigger="load, guide-refresh" hx-swap="innerHTML" aria-live="polite" data-guide-state></div>
             </aside>
 
             <div class="guide-widget__chat">
@@ -116,6 +116,7 @@ page and htmx would swap that HTML into the widget containers.
     var toggle = widget.querySelector("[data-guide-toggle]");
     var panel = widget.querySelector("[data-guide-panel]");
     var log = widget.querySelector("[data-guide-log]");
+    var state = widget.querySelector("[data-guide-state]");
     var composer = widget.querySelector("[data-guide-composer]");
     var input = widget.querySelector("[data-guide-input]");
     var actionField = widget.querySelector("[data-guide-action]");
@@ -190,6 +191,12 @@ page and htmx would swap that HTML into the widget containers.
             toggle.setAttribute("aria-expanded", String(isOpen));
         }
         if (isOpen) {
+            // Refresh the deterministic path state every time the panel opens:
+            // the tenant may have completed steps since the page was loaded
+            // (e.g. site scraping finishing while staying on the onboarding page).
+            if (state && window.htmx) {
+                window.htmx.trigger(state, "guide-refresh");
+            }
             window.requestAnimationFrame(function () {
                 scrollLogToBottom();
                 if (input) {
