@@ -214,6 +214,29 @@ page and htmx would swap that HTML into the widget containers.
         });
     }
 
+    // The path state must also follow in-page HTMX mutations (file uploads,
+    // question answers, form submits) that do not reload the page: when a
+    // request completes outside the widget while the panel is open, refresh
+    // guide/state/ (debounced — a burst of swaps triggers one reload).
+    var stateRefreshTimer = null;
+    function scheduleStateRefresh() {
+        if (!state || !window.htmx) {
+            return;
+        }
+        if (stateRefreshTimer) {
+            clearTimeout(stateRefreshTimer);
+        }
+        stateRefreshTimer = setTimeout(function () {
+            window.htmx.trigger(state, "guide-refresh");
+        }, 800);
+    }
+
+    document.body.addEventListener("htmx:afterRequest", function (event) {
+        if (panel && !panel.hidden && event.target && !widget.contains(event.target)) {
+            scheduleStateRefresh();
+        }
+    });
+
     if (closeButton) {
         closeButton.addEventListener("click", function () {
             setPanelOpen(false);
