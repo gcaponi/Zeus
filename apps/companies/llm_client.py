@@ -40,6 +40,9 @@ def _extra_body_for(model: str, *, structured: bool) -> dict | None:
 # MockLLMClient can recognise and answer those calls deterministically in tests.
 AGENT_CHAT_MARKER = "AGENT_CHAT"
 
+# Marker embedded in the ZEUS Guide system prompt (in-app onboarding guide).
+GUIDE_CHAT_MARKER = "GUIDE_CHAT"
+
 MODEL_PRICING = {
     "gpt-4o-mini": {"input": 0.15 / 1_000_000, "output": 0.60 / 1_000_000},
     "gpt-4o": {"input": 2.50 / 1_000_000, "output": 10.00 / 1_000_000},
@@ -435,6 +438,18 @@ class MockLLMClient(LLMClient):
                 tokens_out=40,
                 cost=0.0001,
                 latency_ms=200,
+            )
+
+        if GUIDE_CHAT_MARKER in haystack:
+            return LLMResult(
+                text=(
+                    "Risposta di prova della guida: ti indico il prossimo passo "
+                    "del percorso in base allo stato reale del tuo account."
+                ),
+                tokens_in=250,
+                tokens_out=45,
+                cost=0.0001,
+                latency_ms=180,
             )
 
         if "RISCRIVI_SEZIONE_" in prompt and "RIFORMULA_DNA_CON_RISPOSTE" in prompt:

@@ -16,7 +16,7 @@
         }
     </script>
     <link rel="stylesheet" href="{% static 'zeus-fonts.css' %}">
-    <link rel="stylesheet" href="{% static 'zeus-design.css' %}?v=20260810-1">
+    <link rel="stylesheet" href="{% static 'zeus-design.css' %}?v=20260811-8">
     {% block shell_head %}{% endblock %}
 </head>
 <body class="zeus-app-shell-body">
@@ -31,6 +31,7 @@
         <main id="app-main" class="zeus-app-shell__main {% block shell_main_class %}{% endblock %}" tabindex="-1">
             {% block shell_main %}{% endblock %}
         </main>
+        {% include "core/guide_widget.html" %}
     </div>
     {% block shell_scripts %}{% endblock %}
 </body>

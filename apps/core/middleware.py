@@ -29,6 +29,7 @@ ANAGRAFICA_ALLOWED_PATHS = (
     "/metrics/",
     "/static/",
     "/__shell_preview/",
+    "/guide/",
 )
 
 

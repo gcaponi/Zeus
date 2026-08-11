@@ -1,0 +1,28 @@
+{% load zeus_filters %}
+{% for message in chat_messages %}
+    {% if message.role == 'user' %}
+    <div class="guida-message guida-message--user">
+        <div class="guida-message-stack">
+            <p class="guida-message-role">Tu</p>
+            <div class="guida-message-body">{{ message.content|linebreaksbr }}</div>
+        </div>
+        <span class="guida-avatar guida-avatar--user" aria-hidden="true">🧑‍💼</span>
+    </div>
+    {% else %}
+    <div class="guida-message guida-message--assistant">
+        <span class="guida-avatar guida-avatar--assistant" aria-hidden="true">🧭</span>
+        <div class="guida-message-stack">
+            <p class="guida-message-role">ZEUS Guide</p>
+            <div class="guida-message-body">{{ message.content|escape|markdownify }}</div>
+        </div>
+    </div>
+    {% endif %}
+{% empty %}
+    <div class="guida-chat-hint" data-guide-chat-hint>
+        <p>
+            Sono la guida di ZEUS: ti accompagno passo passo, dall'anagrafica
+            al tuo agente pronto. Chiedimi cosa ti manca, perché serve un passo
+            o aiuto per rispondere alle domande.
+        </p>
+    </div>
+{% endfor %}

@@ -3201,3 +3201,442 @@ html,
     animation-iteration-count: 1 !important;
   }
 }
+
+/* ---------- GUIDE WIDGET (floating ZEUS guide chat) ---------- */
+/* New guide-widget__* classes only — appended, nothing above changed.
+   z-index 105: above shell content, below mobile menu overlay (110/120),
+   DNA popup (150) and command palette (220). */
+.guide-widget {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 105;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.guide-widget__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 1px solid rgba(103, 232, 249, 0.35);
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-cyan-light), var(--accent-violet));
+  color: #020617;
+  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.22);
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.35rem;
+  font-weight: 900;
+  line-height: 1;
+  transition: transform 0.22s ease, box-shadow 0.22s ease;
+}
+
+.guide-widget__toggle:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.28);
+}
+
+.guide-widget__panel {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(640px, calc(100vh - 96px));
+  overflow: hidden;
+  border: 1px solid var(--shell-border);
+  border-radius: var(--radius-xl);
+  background: var(--shell-panel);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
+}
+
+.dark .guide-widget__panel {
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+}
+
+.guide-widget__panel[hidden] {
+  display: none !important;
+}
+
+.guide-widget__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--shell-border);
+}
+
+.guide-widget__header .zeus-app-eyebrow {
+  margin-bottom: 3px;
+}
+
+.guide-widget__header h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1rem;
+}
+
+.guide-widget__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.guide-widget__body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.guide-widget__path {
+  display: flex;
+  flex: 0 0 300px;
+  min-height: 0;
+  border-right: 1px solid var(--shell-border);
+  background: var(--shell-panel-muted);
+}
+
+.guide-widget__state {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 16px;
+  font-size: 0.8125rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--shell-border) transparent;
+}
+
+.guide-widget__state:empty {
+  display: none;
+}
+
+.guide-widget__chat {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.guide-widget__log {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-height: 120px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px 16px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--shell-border) transparent;
+}
+
+.guide-widget__log::-webkit-scrollbar {
+  width: 8px;
+}
+
+.guide-widget__log::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: var(--shell-border);
+}
+
+.guide-widget__log::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.guide-widget__hint {
+  margin: 0;
+  color: var(--shell-muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  text-align: justify;
+}
+
+.guide-widget__hint p {
+  margin: 0;
+}
+
+.guide-widget__composer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--shell-border);
+  background: var(--shell-panel);
+}
+
+.guide-widget__quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.guide-widget__chip {
+  padding: 4px 10px;
+  border: 1px solid var(--shell-border);
+  border-radius: 999px;
+  background: var(--shell-panel-muted);
+  color: var(--shell-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+
+.guide-widget__chip:hover {
+  border-color: var(--shell-accent);
+  background: var(--shell-accent-soft);
+  color: var(--shell-accent-strong);
+}
+
+.guide-widget__input {
+  width: 100%;
+  font-size: 0.875rem;
+  resize: none;
+}
+
+.guide-widget__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+@media (max-width: 640px) {
+  .guide-widget {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+  }
+
+  .guide-widget__panel {
+    width: 100%;
+    max-height: min(78vh, 620px);
+  }
+
+  .guide-widget__body {
+    flex-direction: column;
+  }
+
+  .guide-widget__path {
+    flex: 0 1 auto;
+    max-height: 38%;
+    border-right: none;
+    border-bottom: 1px solid var(--shell-border);
+  }
+
+  .guide-widget__state {
+    flex: 0 1 auto;
+  }
+}
+
+/* ---------- GUIDE WIDGET — PARTIAL CONTENT (guida-*) ---------- */
+/* Styles for the server-rendered partials core/partials/_guide_*.html.
+   New selectors only, all scoped under .guide-widget so they cannot leak
+   outside the guide widget. */
+.guide-widget .guida-state {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.guide-widget .guida-state-kicker {
+  margin: 0;
+  color: var(--shell-accent-strong);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.guide-widget .guida-state-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+}
+
+.guide-widget .guida-state-why {
+  margin: 0;
+  color: var(--shell-muted);
+}
+
+.guide-widget .guida-state-tips {
+  margin: 2px 0 0;
+  padding-left: 18px;
+  color: var(--shell-muted);
+}
+
+.guide-widget .guida-state-tips li {
+  margin: 2px 0;
+}
+
+.guide-widget .guida-state-cta {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--shell-accent);
+  border-radius: 999px;
+  color: var(--shell-accent-strong);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.guide-widget .guida-state-cta:hover {
+  background: var(--shell-accent-soft);
+}
+
+.guide-widget .guida-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 10px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--shell-border);
+  list-style: none;
+}
+
+.guide-widget .guida-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--shell-muted);
+  font-size: 0.75rem;
+}
+
+.guide-widget .guida-checklist-item--current {
+  color: var(--shell-text);
+  font-weight: 700;
+}
+
+.guide-widget .guida-checklist-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--shell-border);
+  border-radius: 50%;
+  font-size: 0.625rem;
+  line-height: 1;
+}
+
+.guide-widget .guida-checklist-item--done .guida-checklist-marker,
+.guide-widget .guida-checklist-item--current .guida-checklist-marker {
+  border-color: var(--shell-accent);
+  background: var(--shell-accent-soft);
+  color: var(--shell-accent-strong);
+}
+
+.guide-widget .guida-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 92%;
+}
+
+.guide-widget .guida-message--user {
+  align-self: flex-end;
+}
+
+.guide-widget .guida-message--assistant {
+  align-self: flex-start;
+}
+
+.guide-widget .guida-message--user .guida-message-stack {
+  align-items: flex-end;
+}
+
+.guide-widget .guida-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  margin-top: 2px;
+  border: 1px solid var(--shell-border);
+  border-radius: 50%;
+  background: var(--shell-panel-muted);
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.guide-widget .guida-avatar--user {
+  border-color: color-mix(in srgb, var(--shell-accent) 35%, var(--shell-border));
+  background: var(--shell-accent-soft);
+}
+
+.guide-widget .guida-message-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.guide-widget .guida-message-role {
+  margin: 0;
+  color: var(--shell-muted);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.guide-widget .guida-message-body {
+  padding: 8px 12px;
+  border: 1px solid var(--shell-border);
+  border-radius: 12px;
+  background: var(--shell-panel-muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  overflow-wrap: break-word;
+}
+
+.guide-widget .guida-message--user .guida-message-body {
+  border-color: color-mix(in srgb, var(--shell-accent) 30%, var(--shell-border));
+  background: var(--shell-accent-soft);
+}
+
+.guide-widget .guida-message-body p {
+  margin: 0 0 6px;
+}
+
+.guide-widget .guida-message-body p:last-child {
+  margin-bottom: 0;
+}
+
+.guide-widget .guida-message-body ul,
+.guide-widget .guida-message-body ol {
+  margin: 0 0 6px;
+  padding-left: 18px;
+}
+
+.guide-widget .guida-message-body h2,
+.guide-widget .guida-message-body h3 {
+  margin: 4px 0;
+  font-size: 0.85rem;
+}
+
+.guide-widget .guida-message-body a {
+  color: var(--shell-accent-strong);
+}
+
+.guide-widget .guida-chat-hint {
+  margin: 0;
+  color: var(--shell-muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  text-align: justify;
+}

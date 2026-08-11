@@ -1,0 +1,33 @@
+{% if current_phase %}
+<div class="guida-state" data-guide-state>
+    <p class="guida-state-kicker">Il tuo percorso · passo {{ done_count|add:"1" }} di {{ total_count }}</p>
+    <h3 class="guida-state-title">{{ current_phase.title }}</h3>
+    <p class="guida-state-why">{{ current_phase.why }}</p>
+    {% if current_phase.tips %}
+    <ul class="guida-state-tips">
+        {% for tip in current_phase.tips %}
+        <li>{{ tip }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    <a class="guida-state-cta" href="{{ current_phase.cta_url }}">{{ current_phase.cta_label }} →</a>
+</div>
+{% else %}
+<div class="guida-state guida-state--complete" data-guide-state>
+    <p class="guida-state-kicker">Il tuo percorso · completato</p>
+    <h3 class="guida-state-title">Il tuo agente è pronto</h3>
+    <p class="guida-state-why">
+        DNA Generale e Specialista approvati: l'agente risponde come il tuo
+        miglior tecnico-commerciale, usando solo la tua conoscenza.
+    </p>
+    <a class="guida-state-cta" href="{% url 'agent-chat' %}">Testa il tuo agente →</a>
+</div>
+{% endif %}
+<ol class="guida-checklist">
+    {% for phase in phases %}
+    <li class="guida-checklist-item guida-checklist-item--{{ phase.status }}">
+        <span class="guida-checklist-marker" aria-hidden="true">{% if phase.status == 'done' %}✓{% elif phase.status == 'current' %}→{% else %}○{% endif %}</span>
+        <span class="guida-checklist-title">{{ phase.title }}</span>
+    </li>
+    {% endfor %}
+</ol>

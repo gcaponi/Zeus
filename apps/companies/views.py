@@ -6336,3 +6336,123 @@ def agent_clear(request):
             {"chat_messages": []},
         )
     return redirect("agent-chat")
+
+
+# ---------------------------------------------------------------------------
+# ZEUS Guide — assistente-guida in-app (sempre attiva, nessun gate)
+# ---------------------------------------------------------------------------
+
+GUIDE_MESSAGE_MAX_CHARS = 4000
+
+
+def _guide_fallback_redirect(request):
+    """Fallback non-HTMX: torna alla pagina di provenienza (o alla root)."""
+    return redirect(request.META.get("HTTP_REFERER") or "/")
+
+
+@login_required
+@require_http_methods(["POST"])
+def guide_send(request):
+    """Invio messaggio alla guida (HTMX): storia in sessione (mai su DB),
+    percorso deterministico da compute_progress, LLM solo per spiegazioni,
+    registra LLMCall (audit costi), ritorna il partial dei 2 nuovi messaggi."""
+    from apps.companies import guide as guide_service
+
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+
+    data = _request_data(request)
+    action = str(data.get("action") or "").strip()
+    text = str(data.get("message") or "").strip()[:GUIDE_MESSAGE_MAX_CHARS]
+    if not text and action in guide_service.QUICK_ACTION_PROMPTS:
+        text = guide_service.QUICK_ACTION_PROMPTS[action]
+    if not text:
+        return JsonResponse({"error": "empty_message"}, status=400)
+
+    history = list(request.session.get(guide_service.SESSION_HISTORY_KEY, []))
+    user_message = {"role": ROLE_USER, "content": text}
+    history.append(user_message)
+    request.session[guide_service.SESSION_HISTORY_KEY] = history[-HISTORY_MAX_MESSAGES:]
+
+    system_prompt = guide_service.build_guide_system_prompt(company)
+    if action == "draft":
+        draft_block = guide_service.build_draft_block(company)
+        if draft_block:
+            system_prompt = f"{system_prompt}\n\n{draft_block}"
+    llm_messages = build_messages(history, system_prompt)
+
+    try:
+        result = get_llm_client().generate(messages=llm_messages, model=LLM_MODEL)
+    except Exception:
+        logger.exception("Guide chat LLM call failed for company %s", company.pk)
+        return JsonResponse(
+            {
+                "error": "llm_error",
+                "detail": "La guida non risponde al momento. Riprova tra poco.",
+            },
+            status=502,
+        )
+    LLMCall.objects.create(
+        company=company,
+        model_name=LLM_MODEL,
+        prompt_text=json.dumps(llm_messages, ensure_ascii=False),
+        response_text=result.text,
+        tokens_in=result.tokens_in,
+        tokens_out=result.tokens_out,
+        cost_usd=result.cost,
+        latency_ms=result.latency_ms,
+    )
+    assistant_message = {"role": ROLE_ASSISTANT, "content": result.text}
+    history.append(assistant_message)
+    request.session[guide_service.SESSION_HISTORY_KEY] = history[-HISTORY_MAX_MESSAGES:]
+
+    if request.headers.get("HX-Request") == "true":
+        return render(
+            request,
+            "core/partials/_guide_message_pair.html",
+            {"chat_messages": [user_message, assistant_message]},
+        )
+    return _guide_fallback_redirect(request)
+
+
+@login_required
+@require_http_methods(["POST"])
+def guide_clear(request):
+    """Svuota la storia di sessione della guida e ritorna il log vuoto."""
+    from apps.companies import guide as guide_service
+
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    request.session.pop(guide_service.SESSION_HISTORY_KEY, None)
+    if request.headers.get("HX-Request") == "true":
+        return render(
+            request,
+            "core/partials/_guide_chat_log.html",
+            {"chat_messages": []},
+        )
+    return _guide_fallback_redirect(request)
+
+
+@login_required
+def guide_state(request):
+    """Stato deterministico del percorso (partial HTML): fase corrente con
+    titolo/why/tips/CTA + checklist completa. Nessuna chiamata LLM."""
+    from apps.companies import guide as guide_service
+
+    company = _tenant_company(request)
+    if not company:
+        return HttpResponse("No tenant", status=400)
+    progress = guide_service.compute_progress(company)
+    return render(
+        request,
+        "core/partials/_guide_state.html",
+        {
+            "company": company,
+            "phases": progress["phases"],
+            "current_phase": progress["current"],
+            "done_count": progress["done_count"],
+            "total_count": progress["total_count"],
+        },
+    )

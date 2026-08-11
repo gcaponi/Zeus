@@ -1,0 +1,276 @@
+{% comment %}
+ZEUS Guide — floating guide chat widget, included on every app-shell page.
+The guide works at any stage (no DNA / anagrafica gate): path and next step
+are deterministic from DB state, the LLM only explains and helps.
+URL names resolve silently while the backend endpoints are not deployed yet:
+{% url ... as var %} does not raise NoReverseMatch, so the widget simply
+stays hidden until guide-send/guide-clear/guide-state are registered.
+The widget renders only for authenticated users: the guide endpoints are
+login_required, so for anonymous visitors every call would 302 to the login
+page and htmx would swap that HTML into the widget containers.
+{% endcomment %}
+{% url 'guide-send' as guide_send_url %}
+{% url 'guide-clear' as guide_clear_url %}
+{% url 'guide-state' as guide_state_url %}
+{% if user.is_authenticated and guide_send_url and guide_clear_url and guide_state_url %}
+<div class="guide-widget" data-guide-widget>
+    <button
+        type="button"
+        class="guide-widget__toggle"
+        data-guide-toggle
+        aria-expanded="false"
+        aria-controls="guide-widget-panel"
+        aria-label="Apri la guida ZEUS"
+        title="Guida ZEUS">
+        <span aria-hidden="true">?</span>
+    </button>
+
+    <section
+        id="guide-widget-panel"
+        class="guide-widget__panel"
+        data-guide-panel
+        role="dialog"
+        aria-modal="false"
+        aria-labelledby="guide-widget-title"
+        hidden>
+        <header class="guide-widget__header">
+            <div>
+                <p class="zeus-app-eyebrow">Guida ZEUS</p>
+                <h2 id="guide-widget-title">Come procedere</h2>
+            </div>
+            <div class="guide-widget__header-actions">
+                <button
+                    type="button"
+                    class="zeus-btn zeus-btn-ghost zeus-btn-sm"
+                    hx-post="{{ guide_clear_url }}"
+                    hx-target="#guide-chat-log"
+                    hx-swap="innerHTML"
+                    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                    data-guide-clear>Nuova chat</button>
+                <button
+                    type="button"
+                    class="zeus-app-icon-button"
+                    data-guide-close
+                    aria-label="Chiudi la guida">
+                    <span aria-hidden="true">×</span>
+                </button>
+            </div>
+        </header>
+
+        <div class="guide-widget__body">
+            <aside class="guide-widget__path" aria-label="Il tuo percorso">
+                <div id="guide-state" class="guide-widget__state" hx-get="{{ guide_state_url }}" hx-trigger="load" hx-swap="innerHTML" aria-live="polite"></div>
+            </aside>
+
+            <div class="guide-widget__chat">
+                <div id="guide-chat-log" class="guide-widget__log" data-guide-log aria-live="polite">
+                    <div class="guide-widget__hint" data-guide-hint>
+                        <p>
+                            Sono la guida di ZEUS: ti accompagno passo passo, dall'anagrafica
+                            fino al tuo agente. Chiedimi dove sei, cosa manca o come rispondere.
+                        </p>
+                    </div>
+                </div>
+
+                <form
+                    class="guide-widget__composer"
+                    method="post"
+                    action="{{ guide_send_url }}"
+                    hx-post="{{ guide_send_url }}"
+                    hx-target="#guide-chat-log"
+                    hx-swap="beforeend"
+                    hx-indicator="#guide-chat-spinner"
+                    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                    data-guide-composer>
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="" data-guide-action>
+                    <div class="guide-widget__quick-actions" aria-label="Azioni rapide">
+                        <button type="button" class="guide-widget__chip" data-guide-chip="missing" data-guide-chip-message="Cosa mi manca per andare avanti?">Cosa mi manca?</button>
+                        <button type="button" class="guide-widget__chip" data-guide-chip="why" data-guide-chip-message="Perché questo passo è importante?">Perché questo passo?</button>
+                        <button type="button" class="guide-widget__chip" data-guide-chip="draft" data-guide-chip-message="Aiutami a rispondere">Aiutami a rispondere</button>
+                    </div>
+                    <textarea
+                        class="zeus-textarea guide-widget__input"
+                        name="message"
+                        rows="2"
+                        required
+                        maxlength="4000"
+                        placeholder="Chiedi alla guida…"
+                        data-guide-input></textarea>
+                    <div class="guide-widget__actions">
+                        <span id="guide-chat-spinner" class="htmx-indicator zeus-app-chat-spinner" role="status" aria-label="La guida sta rispondendo"></span>
+                        <button type="button" class="zeus-btn zeus-btn-primary zeus-btn-sm" data-guide-send>Invia</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </section>
+</div>
+<script>
+(function () {
+    var widget = document.querySelector("[data-guide-widget]");
+    if (!widget) {
+        return;
+    }
+
+    var toggle = widget.querySelector("[data-guide-toggle]");
+    var panel = widget.querySelector("[data-guide-panel]");
+    var log = widget.querySelector("[data-guide-log]");
+    var composer = widget.querySelector("[data-guide-composer]");
+    var input = widget.querySelector("[data-guide-input]");
+    var actionField = widget.querySelector("[data-guide-action]");
+    var closeButton = widget.querySelector("[data-guide-close]");
+    var sendButton = widget.querySelector("[data-guide-send]");
+    var chips = Array.prototype.slice.call(widget.querySelectorAll("[data-guide-chip]"));
+
+    // No submit buttons inside the widget (they would collide with
+    // page-level submit-button selectors used by browser tests): submission
+    // goes through requestSubmit(), which keeps native validation, fires the
+    // submit event htmx listens to, and falls back to a plain POST when htmx
+    // is absent.
+    function submitComposer() {
+        if (composer) {
+            composer.requestSubmit();
+        }
+    }
+
+    // CSRF for HTMX requests: same cookie-based mechanism as
+    // partials/_app_shell_htmx.html, repeated here so the widget also works
+    // on shell pages that do not include that partial.
+    function getCsrfToken() {
+        var cookies = document.cookie.split(";");
+        for (var index = 0; index < cookies.length; index += 1) {
+            var cookie = cookies[index].trim();
+            if (cookie.indexOf("csrftoken=") === 0) {
+                return decodeURIComponent(cookie.substring(10));
+            }
+        }
+        return "";
+    }
+
+    document.body.addEventListener("htmx:configRequest", function (event) {
+        var token = getCsrfToken();
+        if (token) {
+            event.detail.headers["X-CSRFToken"] = token;
+        }
+    });
+
+    // Load htmx only if the page did not include it already. The check runs
+    // on window load: every synchronous <script> (including the ones from
+    // _app_shell_htmx.html) has executed by then, so htmx is never loaded
+    // twice on the same page.
+    function ensureHtmx() {
+        if (window.htmx) {
+            return;
+        }
+        var script = document.createElement("script");
+        script.src = "https://unpkg.com/htmx.org@1.9.12";
+        document.head.appendChild(script);
+    }
+
+    if (document.readyState === "complete") {
+        ensureHtmx();
+    } else {
+        window.addEventListener("load", ensureHtmx);
+    }
+
+    function scrollLogToBottom() {
+        if (log) {
+            log.scrollTop = log.scrollHeight;
+        }
+    }
+
+    function setPanelOpen(isOpen) {
+        if (!panel) {
+            return;
+        }
+        panel.hidden = !isOpen;
+        widget.classList.toggle("is-open", isOpen);
+        if (toggle) {
+            toggle.setAttribute("aria-expanded", String(isOpen));
+        }
+        if (isOpen) {
+            window.requestAnimationFrame(function () {
+                scrollLogToBottom();
+                if (input) {
+                    input.focus();
+                }
+            });
+        } else if (toggle) {
+            toggle.focus();
+        }
+    }
+
+    if (toggle) {
+        toggle.addEventListener("click", function () {
+            setPanelOpen(Boolean(panel && panel.hidden));
+        });
+    }
+
+    if (closeButton) {
+        closeButton.addEventListener("click", function () {
+            setPanelOpen(false);
+        });
+    }
+
+    document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape" && panel && !panel.hidden) {
+            setPanelOpen(false);
+        }
+    });
+
+    // Quick actions: fill the hidden `action` field and make sure the
+    // message is never empty (the backend rejects empty messages with 400).
+    chips.forEach(function (chip) {
+        chip.addEventListener("click", function () {
+            if (actionField) {
+                actionField.value = chip.getAttribute("data-guide-chip") || "";
+            }
+            if (input && !input.value.trim()) {
+                input.value =
+                    chip.getAttribute("data-guide-chip-message") ||
+                    chip.textContent.trim();
+            }
+            submitComposer();
+        });
+    });
+
+    if (sendButton) {
+        sendButton.addEventListener("click", submitComposer);
+    }
+
+    // Enter sends (Shift+Enter keeps the newline): textareas swallow Enter,
+    // so implicit form submission never applies here.
+    if (input) {
+        input.addEventListener("keydown", function (event) {
+            if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                submitComposer();
+            }
+        });
+    }
+
+    document.body.addEventListener("htmx:afterRequest", function (event) {
+        if (!event.detail || !event.detail.successful) {
+            return;
+        }
+        var element = event.detail.elt;
+        if (element === composer) {
+            composer.reset();
+            if (actionField) {
+                actionField.value = "";
+            }
+            // Drop both the initial widget hint and the hint re-rendered by
+            // the backend's _guide_chat_log.html after "Nuova chat".
+            var hints = widget.querySelectorAll("[data-guide-hint], [data-guide-chat-hint]");
+            Array.prototype.forEach.call(hints, function (hint) {
+                hint.remove();
+            });
+            scrollLogToBottom();
+        } else if (element && element.matches && element.matches("[data-guide-clear]")) {
+            scrollLogToBottom();
+        }
+    });
+})();
+</script>
+{% endif %}
