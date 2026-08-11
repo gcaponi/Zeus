@@ -26,8 +26,8 @@
 <ol class="guida-checklist">
     {% for phase in phases %}
     <li class="guida-checklist-item guida-checklist-item--{{ phase.status }}">
-        <span class="guida-checklist-marker" aria-hidden="true">{% if phase.status == 'done' %}✓{% elif phase.status == 'current' %}→{% else %}○{% endif %}</span>
-        <span class="guida-checklist-title">{{ phase.title }}</span>
+        <span class="guida-checklist-marker" aria-hidden="true">{% if phase.status == 'done' %}✓{% elif phase.status == 'current' %}→{% elif phase.status == 'recommended' %}+{% else %}○{% endif %}</span>
+        <span class="guida-checklist-title">{{ phase.title }}{% if phase.status == 'recommended' %} <em class="guida-checklist-optional">· consigliato</em>{% endif %}</span>
     </li>
     {% endfor %}
 </ol>

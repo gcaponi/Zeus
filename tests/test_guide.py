@@ -186,7 +186,9 @@ class TestComputeProgress:
         assert progress["current"]["id"] == "anagrafica"
         statuses = [phase["status"] for phase in progress["phases"]]
         assert statuses[0] == "current"
-        assert set(statuses[1:]) == {"todo"}
+        # Le fasi opzionali sono "recommended" anche prima del passo corrente.
+        assert set(statuses[1:]) == {"todo", "recommended"}
+        assert statuses[2] == "recommended"  # documenti_aziendali
 
     def test_phase_entries_expose_widget_contract(self):
         company = _company()
@@ -206,7 +208,8 @@ class TestComputeProgress:
         assert guide_service.compute_progress(company)["current"]["id"] == "sito_web"
 
         _scraped_source(company)
-        assert guide_service.compute_progress(company)["current"]["id"] == "documenti_aziendali"
+        # Documenti opzionali: non bloccano, il passo corrente e' gia' il pre-DNA.
+        assert guide_service.compute_progress(company)["current"]["id"] == "pre_dna"
 
         _company_file(company)
         assert guide_service.compute_progress(company)["current"]["id"] == "pre_dna"
@@ -231,6 +234,38 @@ class TestComputeProgress:
         assert progress["current"] is None
         assert progress["done_count"] == progress["total_count"] == 10
         assert {phase["status"] for phase in progress["phases"]} == {"done"}
+
+    def test_optional_documents_do_not_block_current_phase(self):
+        """Caso reale: sito scrapato + pre-DNA senza documenti caricati.
+
+        L'utente ha saltato l'upload (opzionale nel flusso onboarding) e sta
+        gia' rispondendo alle domande: la guida deve indicare le domande come
+        passo corrente e i documenti come consigliati, non come ostacolo.
+        """
+        company = _company()
+        _complete_anagrafica(company)
+        _scraped_source(company)
+        _pre_dna(company)
+
+        progress = guide_service.compute_progress(company)
+        statuses = {phase["id"]: phase["status"] for phase in progress["phases"]}
+        assert statuses["documenti_aziendali"] == "recommended"
+        assert progress["current"]["id"] == "domande_dna"
+
+        # Se poi carica un documento, la fase consigliata risulta completata.
+        _company_file(company)
+        statuses = {
+            phase["id"]: phase["status"]
+            for phase in guide_service.compute_progress(company)["phases"]
+        }
+        assert statuses["documenti_aziendali"] == "done"
+
+    def test_checklist_block_marks_recommended_phase(self):
+        company = _company()
+        _complete_anagrafica(company)
+        _scraped_source(company)
+        block = guide_service._checklist_block(guide_service.compute_progress(company))
+        assert "[+] Documenti aziendali  (consigliato, non obbligatorio)" in block
 
     def test_dna_questions_phase_requires_all_answered(self):
         company = _company()

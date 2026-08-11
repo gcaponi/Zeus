@@ -3539,6 +3539,21 @@ html,
   color: var(--shell-accent-strong);
 }
 
+.guide-widget .guida-checklist-item--recommended {
+  color: var(--shell-muted);
+  font-style: italic;
+}
+
+.guide-widget .guida-checklist-item--recommended .guida-checklist-marker {
+  border-style: dashed;
+}
+
+.guide-widget .guida-checklist-optional {
+  font-size: 0.6875rem;
+  font-style: normal;
+  opacity: 0.75;
+}
+
 .guide-widget .guida-message {
   display: flex;
   align-items: flex-start;

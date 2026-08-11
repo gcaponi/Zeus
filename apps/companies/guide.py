@@ -146,6 +146,9 @@ PHASES = [
         "cta_url_name": "onboarding-index",
         "cta_label": "Carica un documento",
         "is_done": _has_company_files,
+        # I documenti sono OPZIONALI nel flusso reale di onboarding: la fase
+        # non blocca il "passo corrente", resta un consiglio (recommended).
+        "optional": True,
     },
     {
         "id": "pre_dna",
@@ -263,7 +266,7 @@ PHASES = [
 
 GUIDE_RULES = """## Regole di comportamento
 - Non inventare mai il percorso: le fasi e il loro ordine sono SOLO quelli della checklist qui sopra. Non aggiungere, rinominare o riordinare passi.
-- Il prossimo passo e' sempre quello marcato come "in corso": indicalo in modo concreto, dicendo cosa fare e dove (usa la CTA indicata).
+- Il prossimo passo e' sempre quello marcato come "in corso": indicalo in modo concreto, dicendo cosa fare e dove (usa la CTA indicata). I passi marcati "(consigliato, non obbligatorio)" arricchiscono la conoscenza ma non bloccano il percorso: proponili solo se pertinenti, mai come ostacolo.
 - Rispondi sempre nella lingua in cui l'utente scrive.
 - Tono: professionale, diretto, concreto. Frasi brevi, niente frasi di circostanza.
 - Non sei l'agente dell'azienda: non rispondere a domande sui prodotti come farebbe un tecnico. Se l'utente esce dal percorso, riportalo al prossimo passo.
@@ -285,7 +288,9 @@ QUICK_ACTION_PROMPTS = {
 def compute_progress(company):
     """Checklist delle fasi con stato done/current/todo, calcolato dal DB.
 
-    "current" e' la prima fase non completata; tutte le successive sono "todo".
+    "current" e' la prima fase obbligatoria non completata; le fasi opzionali
+    non completate sono "recommended" (consigliate, non bloccanti) e tutte le
+    successive sono "todo".
     Ritorna {"phases": [...], "current": dict|None, "done_count", "total_count"}.
     Ogni fase esposta contiene: id, title, why, tips, cta_url, cta_label, status.
     """
@@ -295,6 +300,8 @@ def compute_progress(company):
         done = phase["is_done"](company)
         if done:
             status = "done"
+        elif phase.get("optional"):
+            status = "recommended"
         elif not current_found:
             status = "current"
             current_found = True
@@ -324,14 +331,19 @@ def compute_progress(company):
 # System prompt
 # ---------------------------------------------------------------------------
 
-_STATUS_MARKERS = {"done": "[x]", "current": "[>]", "todo": "[ ]"}
+_STATUS_MARKERS = {"done": "[x]", "current": "[>]", "recommended": "[+]", "todo": "[ ]"}
 
 
 def _checklist_block(progress):
     lines = ["## Checklist del percorso (stato reale, calcolato dal database)"]
     for phase in progress["phases"]:
         marker = _STATUS_MARKERS[phase["status"]]
-        suffix = "  <- passo corrente" if phase["status"] == "current" else ""
+        if phase["status"] == "current":
+            suffix = "  <- passo corrente"
+        elif phase["status"] == "recommended":
+            suffix = "  (consigliato, non obbligatorio)"
+        else:
+            suffix = ""
         lines.append(f"- {marker} {phase['title']}{suffix}")
     return "\n".join(lines)
 
