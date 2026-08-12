@@ -1,12 +1,23 @@
 from django.contrib import admin
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import redirect, render
 from django.urls import path, reverse
 from django_tenants.utils import schema_context
 
-from apps.core.models import Client, Domain, Plan, WorkspaceAccess, WorkspaceSubscription
+from apps.core.models import (
+    Client,
+    Domain,
+    Plan,
+    SignupProvisioning,
+    WorkspaceAccess,
+    WorkspaceSubscription,
+)
 
 User = get_user_model()
+MANAGE_TENANT_BILLING_PERMISSION = "core.manage_tenant_billing"
+RESET_TENANT_PASSWORD_PERMISSION = "core.reset_tenant_owner_password"
 
 
 class DomainInline(admin.TabularInline):
@@ -63,7 +74,10 @@ class ClientAdmin(admin.ModelAdmin):
         WorkspaceAccess.objects.filter(tenant_domain__in=domains).delete()
         super().delete_queryset(request, queryset)
 
-    @admin.action(description="Attiva subscription (active)")
+    @admin.action(
+        description="Attiva subscription (active)",
+        permissions=["manage_tenant_billing"],
+    )
     def activate_subscriptions(self, request, queryset):
         updated = 0
         for client in queryset:
@@ -73,7 +87,10 @@ class ClientAdmin(admin.ModelAdmin):
                 updated += 1
         self.message_user(request, f"{updated} subscription attivate.")
 
-    @admin.action(description="Sospendi subscription (suspended)")
+    @admin.action(
+        description="Sospendi subscription (suspended)",
+        permissions=["manage_tenant_billing"],
+    )
     def suspend_subscriptions(self, request, queryset):
         updated = 0
         for client in queryset:
@@ -82,6 +99,9 @@ class ClientAdmin(admin.ModelAdmin):
                 client.subscription.save(update_fields=["status"])
                 updated += 1
         self.message_user(request, f"{updated} subscription sospese.")
+
+    def has_manage_tenant_billing_permission(self, request):
+        return request.user.has_perm(MANAGE_TENANT_BILLING_PERMISSION)
 
     @admin.display(description="Domain")
     def primary_domain(self, obj):
@@ -116,6 +136,12 @@ class ClientAdmin(admin.ModelAdmin):
             reverse("admin:core_client_change_password", args=[obj.pk]),
         )
 
+    def get_list_display(self, request):
+        fields = list(super().get_list_display(request))
+        if not request.user.has_perm(RESET_TENANT_PASSWORD_PERMISSION):
+            fields.remove("change_password_link")
+        return fields
+
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
@@ -128,6 +154,8 @@ class ClientAdmin(admin.ModelAdmin):
         return custom_urls + urls
 
     def change_password_view(self, request, client_id):
+        if not request.user.has_perm(RESET_TENANT_PASSWORD_PERMISSION):
+            raise PermissionDenied
         client = Client.objects.get(pk=client_id)
         domain = next((d.domain for d in client.domains.all() if d.is_primary), None)
         if not domain:
@@ -156,13 +184,6 @@ class ClientAdmin(admin.ModelAdmin):
                     "error": "Le password non coincidono.",
                 })
 
-            if len(new_password) < 8:
-                return render(request, "admin/change_password.html", {
-                    "client": client,
-                    "email": email,
-                    "error": "Password troppo corta (minimo 8 caratteri).",
-                })
-
             tenant_schema = client.schema_name
             with schema_context(tenant_schema):
                 user = User.objects.filter(email__iexact=email).first()
@@ -172,9 +193,18 @@ class ClientAdmin(admin.ModelAdmin):
                         "email": email,
                         "error": "Utente non trovato nel tenant.",
                     })
+                try:
+                    validate_password(new_password, user=user)
+                except ValidationError as exc:
+                    return render(request, "admin/change_password.html", {
+                        "client": client,
+                        "email": email,
+                        "error": " ".join(exc.messages),
+                    })
                 user.set_password(new_password)
                 user.save()
 
+            self.log_change(request, client, f"Password owner reimpostata per {email}")
             self.message_user(request, f"Password cambiata per {email}.")
             return redirect("admin:core_client_changelist")
 
@@ -196,6 +226,37 @@ class WorkspaceAccessAdmin(admin.ModelAdmin):
     list_display = ["email", "tenant_domain", "created_at"]
     search_fields = ["email", "tenant_domain"]
     readonly_fields = ["created_at"]
+
+
+@admin.register(SignupProvisioning)
+class SignupProvisioningAdmin(admin.ModelAdmin):
+    list_display = [
+        "slug",
+        "email",
+        "status",
+        "cleanup_required",
+        "created_at",
+        "updated_at",
+    ]
+    list_filter = ["status", "cleanup_required"]
+    search_fields = ["slug", "email"]
+    readonly_fields = [
+        "slug",
+        "email",
+        "client_ip_hash",
+        "status",
+        "error_code",
+        "cleanup_required",
+        "created_at",
+        "updated_at",
+        "completed_at",
+    ]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Plan)
@@ -241,13 +302,21 @@ class WorkspaceSubscriptionAdmin(admin.ModelAdmin):
 
     @admin.display(description="Company files")
     def company_files_usage(self, obj):
-        limit = "illimitati" if obj.plan.unlimited_company_files else f"{obj.plan.max_company_files_mb} MB"
+        limit = (
+            "illimitati"
+            if obj.plan.unlimited_company_files
+            else f"{obj.plan.max_company_files_mb} MB"
+        )
         used_mb = obj.company_files_bytes_used / (1024 * 1024)
         return f"{used_mb:.1f}/{limit}"
 
     @admin.display(description="Product files")
     def product_files_usage(self, obj):
-        limit = "illimitati" if obj.plan.unlimited_product_files else f"{obj.plan.max_product_files_mb} MB"
+        limit = (
+            "illimitati"
+            if obj.plan.unlimited_product_files
+            else f"{obj.plan.max_product_files_mb} MB"
+        )
         used_mb = obj.product_files_bytes_used / (1024 * 1024)
         return f"{used_mb:.1f}/{limit}"
 

@@ -39,7 +39,7 @@ class TestZeusAdminDashboard:
         # admin alla sessione app per i test (vedi TenantAwareSessionMiddleware).
         client.cookies[settings.ADMIN_SESSION_COOKIE_NAME] = client.cookies[
             settings.SESSION_COOKIE_NAME
-        ]
+        ].value
 
         response = client.get(reverse("zeus-admin-dashboard"))
 
@@ -53,6 +53,33 @@ class TestZeusAdminDashboard:
 
         assert response.status_code == 302
 
+    @pytest.mark.parametrize(
+        ("method", "route"),
+        [
+            ("get", reverse("zeus-admin-dashboard")),
+            ("get", reverse("zeus-admin-clients")),
+            ("get", reverse("zeus-admin-client-detail", args=[1])),
+            ("get", reverse("zeus-admin-company-file-open", args=[1, 1])),
+            ("post", reverse("zeus-admin-company-file-delete", args=[1, 1])),
+        ],
+    )
+    def test_staff_without_explicit_global_permissions_gets_403(self, method, route):
+        staff = User.objects.create_user(
+            username="limited-staff",
+            email="limited@example.com",
+            password="pw",
+            is_staff=True,
+        )
+        client = TestClient()
+        client.force_login(staff)
+        client.cookies[settings.ADMIN_SESSION_COOKIE_NAME] = client.cookies[
+            settings.SESSION_COOKIE_NAME
+        ].value
+
+        response = getattr(client, method)(route)
+
+        assert response.status_code == 403
+
     def test_staff_user_sees_real_dashboard_data(self, monkeypatch):
         monkeypatch.setattr(TenantClient, "auto_create_schema", False)
         staff = User.objects.create_user(
@@ -60,6 +87,7 @@ class TestZeusAdminDashboard:
             email="staff@example.com",
             password="pw",
             is_staff=True,
+            is_superuser=True,
         )
         tenant = TenantClient.objects.create(
             schema_name="rossi-metalli",
@@ -138,6 +166,7 @@ class TestZeusAdminDashboard:
             email="health@example.com",
             password="pw",
             is_staff=True,
+            is_superuser=True,
         )
         request = RequestFactory().get(reverse("zeus-admin-dashboard"))
         request.user = staff
@@ -159,6 +188,7 @@ class TestZeusAdminDashboard:
             email="clients@example.com",
             password="pw",
             is_staff=True,
+            is_superuser=True,
         )
         plan, _ = Plan.objects.update_or_create(
             slug=Plan.SLUG_STARTER,
@@ -223,6 +253,7 @@ class TestZeusAdminDashboard:
             email="htmx@example.com",
             password="pw",
             is_staff=True,
+            is_superuser=True,
         )
         request = RequestFactory().get(
             reverse("zeus-admin-clients"),
@@ -245,6 +276,7 @@ class TestZeusAdminDashboard:
             email="detail@example.com",
             password="pw",
             is_staff=True,
+            is_superuser=True,
         )
         tenant = TenantClient.objects.create(
             schema_name="rossi-metalli",
@@ -339,6 +371,7 @@ class TestZeusAdminDashboard:
             email="config@example.com",
             password="pw",
             is_staff=True,
+            is_superuser=True,
         )
         foundation, _ = Plan.objects.update_or_create(
             slug=Plan.SLUG_STARTER,
@@ -388,6 +421,7 @@ class TestZeusAdminDashboard:
             email="exclude@example.com",
             password="pw",
             is_staff=True,
+            is_superuser=True,
         )
         app_tenant = TenantClient.objects.create(
             schema_name="zeus",
@@ -448,6 +482,7 @@ class TestZeusAdminDashboard:
             email="file@example.com",
             password="pw",
             is_staff=True,
+            is_superuser=True,
         )
         tenant = TenantClient.objects.create(
             schema_name="file-client",
@@ -551,6 +586,7 @@ class TestZeusAdminDashboard:
             email="dna@example.com",
             password="pw",
             is_staff=True,
+            is_superuser=True,
         )
         tenant = TenantClient.objects.create(
             schema_name="dna-client",

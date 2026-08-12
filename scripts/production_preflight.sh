@@ -32,7 +32,8 @@ for variable in \
     POSTGRES_USER \
     POSTGRES_PASSWORD \
     POSTGRES_HOST \
-    REDIS_URL; do
+    REDIS_URL \
+    METRICS_TOKEN; do
     if ! grep -q "^${variable}=" .env; then
         printf 'missing_env=%s\n' "$variable" >&2
         exit 1

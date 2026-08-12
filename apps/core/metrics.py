@@ -1,12 +1,16 @@
+import secrets
 from collections import defaultdict
 from contextlib import nullcontext
 
 from django.conf import settings
+from django.core.cache import cache
 from django.db.models import Sum
 from django.http import HttpResponse
+from django.views.decorators.http import require_GET
 
 PROMETHEUS_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
 DNA_GENERATION_BUCKETS = (1, 5, 10, 30, 60, 120, 300, 600)
+METRICS_CACHE_KEY = "prometheus-metrics-v1"
 
 
 def _escape_label(value) -> str:
@@ -110,5 +114,26 @@ def prometheus_metrics_text():
     return "\n".join(lines) + "\n"
 
 
-def metrics_view(_request):
-    return HttpResponse(prometheus_metrics_text(), content_type=PROMETHEUS_CONTENT_TYPE)
+def _metrics_authorized(request):
+    expected = settings.METRICS_TOKEN
+    scheme, separator, supplied = request.headers.get("Authorization", "").partition(" ")
+    return bool(
+        expected
+        and separator
+        and scheme.lower() == "bearer"
+        and secrets.compare_digest(supplied, expected)
+    )
+
+
+@require_GET
+def metrics_view(request):
+    if not _metrics_authorized(request):
+        return HttpResponse(status=404)
+
+    body = cache.get(METRICS_CACHE_KEY)
+    if body is None:
+        body = prometheus_metrics_text()
+        cache.set(METRICS_CACHE_KEY, body, settings.METRICS_CACHE_SECONDS)
+    response = HttpResponse(body, content_type=PROMETHEUS_CONTENT_TYPE)
+    response["Cache-Control"] = "no-store"
+    return response

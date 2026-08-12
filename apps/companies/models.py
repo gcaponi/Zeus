@@ -469,6 +469,76 @@ class LLMCall(models.Model):
         return f"{self.model_name} @ {self.created_at:%H:%M}"
 
 
+class PaidOperation(models.Model):
+    STATUS_QUEUED = "queued"
+    STATUS_RUNNING = "running"
+    STATUS_COMPLETED = "completed"
+    STATUS_FAILED = "failed"
+    STATUS_REJECTED = "rejected"
+    STATUS_CHOICES = [
+        (STATUS_QUEUED, "Queued"),
+        (STATUS_RUNNING, "Running"),
+        (STATUS_COMPLETED, "Completed"),
+        (STATUS_FAILED, "Failed"),
+        (STATUS_REJECTED, "Rejected"),
+    ]
+    ACTIVE_STATUSES = (STATUS_QUEUED, STATUS_RUNNING)
+
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name="paid_operations",
+    )
+    kind = models.CharField(max_length=50)
+    idempotency_key = models.CharField(max_length=64)
+    resource_key = models.CharField(max_length=120, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_QUEUED,
+    )
+    payload = models.JSONField(default=dict)
+    result = models.JSONField(default=dict)
+    reserved_units = models.PositiveIntegerField(default=1)
+    actual_cost_usd = models.DecimalField(max_digits=12, decimal_places=6, default=0)
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    error_code = models.CharField(max_length=100, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "kind", "idempotency_key"],
+                name="unique_paid_operation_idempotency",
+            ),
+            models.UniqueConstraint(
+                fields=["company", "resource_key"],
+                condition=(
+                    models.Q(status__in=["queued", "running"])
+                    & ~models.Q(resource_key="")
+                ),
+                name="unique_active_paid_operation_resource",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["company", "status", "created_at"],
+                name="paidop_company_status_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.kind} #{self.pk} ({self.status})"
+
+
 class Specialista(models.Model):
     STATUS_BOZZA = "bozza"
     STATUS_IN_COSTRUZIONE = "in_costruzione"

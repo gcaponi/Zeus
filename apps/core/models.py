@@ -66,7 +66,10 @@ class Plan(models.Model):
         return plan
 
     def allows_company_file_bytes(self, current_bytes):
-        return self.unlimited_company_files or current_bytes < self.max_company_files_mb * 1024 * 1024
+        return (
+            self.unlimited_company_files
+            or current_bytes < self.max_company_files_mb * 1024 * 1024
+        )
 
     def allows_product_dna_count(self, current_count):
         return self.unlimited_product_dnas or current_count < self.max_product_dnas
@@ -75,7 +78,10 @@ class Plan(models.Model):
         return self.unlimited_files_per_product or current_count < self.max_files_per_product
 
     def allows_product_file_bytes(self, current_bytes):
-        return self.unlimited_product_files or current_bytes < self.max_product_files_mb * 1024 * 1024
+        return (
+            self.unlimited_product_files
+            or current_bytes < self.max_product_files_mb * 1024 * 1024
+        )
 
 
 class Client(TenantMixin):
@@ -87,6 +93,12 @@ class Client(TenantMixin):
 
     class Meta:
         ordering = ["name"]
+        permissions = [
+            ("view_all_tenant_data", "Can view global tenant data"),
+            ("manage_tenant_billing", "Can manage tenant billing and status"),
+            ("delete_tenant_data", "Can delete tenant data"),
+            ("reset_tenant_owner_password", "Can reset a tenant owner password"),
+        ]
 
     def __str__(self):
         return self.name
@@ -166,3 +178,48 @@ class WorkspaceAccess(models.Model):
 
     def __str__(self):
         return f"{self.email} → {self.tenant_domain}"
+
+
+class LoginHandoff(models.Model):
+    """Token monouso per portare il login dal public host al tenant host.
+
+    Nato con la rimozione di SESSION_COOKIE_DOMAIN (sessioni host-only,
+    Codex Security finding 1): public_login autentica sul public host e
+    redirige al tenant con un token usa-e-getta (60s); la view login_handoff
+    lo consuma e apre la sessione sull'host del tenant. In tabella solo
+    l'hash del token, mai il token in chiaro.
+    """
+
+    token_hash = models.CharField(max_length=64, unique=True)
+    tenant_schema = models.CharField(max_length=63)
+    user_id = models.BigIntegerField()
+    expires_at = models.DateTimeField(db_index=True)
+    consumed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"handoff user {self.user_id} → {self.tenant_schema}"
+
+
+class SignupProvisioning(models.Model):
+    STATUS_PENDING = "pending"
+    STATUS_COMPLETED = "completed"
+    STATUS_FAILED = "failed"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_COMPLETED, "Completed"),
+        (STATUS_FAILED, "Failed"),
+    ]
+
+    slug = models.SlugField(max_length=63, unique=True)
+    email = models.EmailField()
+    client_ip_hash = models.CharField(max_length=64)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    error_code = models.CharField(max_length=100, blank=True)
+    cleanup_required = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"signup {self.slug} ({self.status})"

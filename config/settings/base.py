@@ -13,6 +13,11 @@ ZEUS_APP_SHELL_ENABLED = os.environ.get("ZEUS_APP_SHELL_ENABLED", "").lower() in
     "yes",
 }
 
+# Nomi distinti e ruotati per le sessioni app e admin. Il rename dell'app
+# rende innocuo il vecchio cookie `sessionid` con Domain=.zeus.cais.uno che
+# puo' restare nei browser dopo il passaggio ai cookie host-only.
+SESSION_COOKIE_NAME = "zeus_app_sessionid"
+
 # Cookie di sessione dedicato alla zona admin (/admin/, /zeus-admin/):
 # separa le sessioni admin (public schema) da quelle app (tenant schema),
 # che altrimenti si invaliderebbero a vicenda (rotazione chiave + utente di
@@ -129,6 +134,36 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "zeus-local",
+    },
+}
+
+METRICS_TOKEN = os.environ.get("METRICS_TOKEN", "")
+METRICS_CACHE_SECONDS = int(os.environ.get("METRICS_CACHE_SECONDS", "60"))
+SIGNUP_RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("SIGNUP_RATE_LIMIT_WINDOW_SECONDS", "3600"))
+SIGNUP_RATE_LIMIT_GLOBAL = int(os.environ.get("SIGNUP_RATE_LIMIT_GLOBAL", "20"))
+SIGNUP_RATE_LIMIT_IP = int(os.environ.get("SIGNUP_RATE_LIMIT_IP", "5"))
+SIGNUP_RATE_LIMIT_EMAIL = int(os.environ.get("SIGNUP_RATE_LIMIT_EMAIL", "3"))
+SIGNUP_TRUST_X_REAL_IP = False
+
+# Unita' astratte di lavoro pagato (una chat = 1; una generazione multi-call
+# riserva piu' unita'). Limiti volutamente larghi per uso legittimo, ma finiti
+# per impedire spesa e fan-out illimitati da un singolo tenant.
+PAID_OPERATION_DAILY_UNIT_LIMITS = {
+    "starter": 500,
+    "professional": 2500,
+    "enterprise": 10000,
+}
+PAID_OPERATION_CONCURRENCY_LIMITS = {
+    "starter": 2,
+    "professional": 4,
+    "enterprise": 8,
+}
+PAID_OPERATION_STALE_SECONDS = int(os.environ.get("PAID_OPERATION_STALE_SECONDS", "1800"))
 
 CELERY_BROKER_URL = REDIS_URL
 CELERY_RESULT_BACKEND = REDIS_URL

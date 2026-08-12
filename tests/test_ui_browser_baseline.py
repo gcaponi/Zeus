@@ -1307,6 +1307,7 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
             email="browser-zeus-admin@example.com",
             password="test-password",
             is_staff=True,
+            is_superuser=True,
         )
         self.client.force_login(staff)
         session_cookie = self.client.cookies[settings.SESSION_COOKIE_NAME].value
@@ -1405,6 +1406,7 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
             email="browser-zeus-admin-detail@example.com",
             password="test-password",
             is_staff=True,
+            is_superuser=True,
         )
         original_auto_create_schema = TenantClient.auto_create_schema
         TenantClient.auto_create_schema = False

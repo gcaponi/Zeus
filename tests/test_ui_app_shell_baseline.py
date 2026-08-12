@@ -90,7 +90,9 @@ def test_app_shell_flag_does_not_change_public_pages():
 
 
 @override_settings(ROOT_URLCONF="config.urls", LOGIN_REDIRECT_URL="/dashboard/")
-def test_login_redirects_to_tenant_dashboard(monkeypatch):
+def test_login_redirects_to_tenant_handoff(monkeypatch):
+    """Sessioni host-only: il login pubblico redirige al tenant con un token
+    handoff monouso; la sessione nasce sull'host del tenant (login_handoff)."""
     access = SimpleNamespace(tenant_domain="ui-baseline.zeus.cais.uno")
     authenticated_user = SimpleNamespace()
     monkeypatch.setattr(
@@ -108,7 +110,8 @@ def test_login_redirects_to_tenant_dashboard(monkeypatch):
         "authenticate",
         Mock(return_value=authenticated_user),
     )
-    monkeypatch.setattr(core_views, "auth_login", Mock())
+    create_handoff = Mock(return_value="fake-token")
+    monkeypatch.setattr(core_views, "_create_login_handoff", create_handoff)
     request = RequestFactory().post(
         reverse("account_login"),
         {"login": "ui-baseline@example.com", "password": "test-password"},
@@ -117,7 +120,8 @@ def test_login_redirects_to_tenant_dashboard(monkeypatch):
     response = public_login(request)
 
     assert response.status_code == 302
-    assert response.url == "https://ui-baseline.zeus.cais.uno/dashboard/"
+    assert response.url == "https://ui-baseline.zeus.cais.uno/accounts/handoff/?t=fake-token"
+    create_handoff.assert_called_once_with("ui-baseline", authenticated_user)
 
 
 @override_settings(ROOT_URLCONF="config.urls", ZEUS_APP_SHELL_ENABLED=True)

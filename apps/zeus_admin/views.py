@@ -2,11 +2,13 @@ import json
 import os
 from contextlib import nullcontext
 from dataclasses import dataclass
+from functools import wraps
 from pathlib import Path
 from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
+from django.core.exceptions import PermissionDenied
 from django.db import connection
 from django.db.models import Sum
 from django.http import Http404, JsonResponse
@@ -30,6 +32,25 @@ from apps.companies.models import (
 from apps.core.models import Client, Plan, WorkspaceAccess, WorkspaceSubscription
 
 DEFAULT_EXCLUDED_DOMAINS = {"zeus.cais.uno"}
+VIEW_TENANT_DATA_PERMISSION = "core.view_all_tenant_data"
+MANAGE_TENANT_BILLING_PERMISSION = "core.manage_tenant_billing"
+DELETE_TENANT_DATA_PERMISSION = "core.delete_tenant_data"
+
+
+def staff_permission_required(permission):
+    """Ammette staff autenticati solo con il permesso globale esplicito."""
+
+    def decorator(view_func):
+        @staff_member_required
+        @wraps(view_func)
+        def wrapped(request, *args, **kwargs):
+            if not request.user.has_perm(permission):
+                raise PermissionDenied
+            return view_func(request, *args, **kwargs)
+
+        return wrapped
+
+    return decorator
 
 
 def _check_database():
@@ -681,7 +702,7 @@ def _client_detail_redirect(client, flag):
     return redirect(f"{reverse('zeus-admin-client-detail', args=[client.pk])}?{flag}=1")
 
 
-@staff_member_required
+@staff_permission_required(VIEW_TENANT_DATA_PERMISSION)
 def dashboard(request):
     clients = list(_clients_queryset())
     rows = _client_rows(clients)
@@ -779,7 +800,7 @@ def dashboard(request):
     return render(request, "zeus_admin/dashboard.html", context)
 
 
-@staff_member_required
+@staff_permission_required(VIEW_TENANT_DATA_PERMISSION)
 def clients(request):
     context = _client_rows_context(request)
     context["admin_section"] = "clients"
@@ -789,10 +810,12 @@ def clients(request):
     return render(request, template, context)
 
 
-@staff_member_required
+@staff_permission_required(VIEW_TENANT_DATA_PERMISSION)
 def client_detail(request, client_id):
     client = get_object_or_404(_clients_queryset(), pk=client_id)
     if request.method == "POST":
+        if not request.user.has_perm(MANAGE_TENANT_BILLING_PERMISSION):
+            raise PermissionDenied
         _update_client_config(request, client)
         return redirect(f"{reverse('zeus-admin-client-detail', args=[client.pk])}?saved=1")
     context = _client_detail_context(request, client)
@@ -800,7 +823,7 @@ def client_detail(request, client_id):
     return render(request, "zeus_admin/client_detail.html", context)
 
 
-@staff_member_required
+@staff_permission_required(VIEW_TENANT_DATA_PERMISSION)
 def open_company_file(request, client_id, file_id):
     client = get_object_or_404(_clients_queryset(), pk=client_id)
     with _tenant_context(client.schema_name):
@@ -814,7 +837,7 @@ def open_company_file(request, client_id, file_id):
         )
 
 
-@staff_member_required
+@staff_permission_required(DELETE_TENANT_DATA_PERMISSION)
 def delete_company_file(request, client_id, file_id):
     client = get_object_or_404(_clients_queryset(), pk=client_id)
     if request.method != "POST":
@@ -832,7 +855,7 @@ def delete_company_file(request, client_id, file_id):
     return _client_detail_redirect(client, "deleted")
 
 
-@staff_member_required
+@staff_permission_required(VIEW_TENANT_DATA_PERMISSION)
 def open_product_file(request, client_id, file_id):
     client = get_object_or_404(_clients_queryset(), pk=client_id)
     with _tenant_context(client.schema_name):
@@ -850,7 +873,7 @@ def open_product_file(request, client_id, file_id):
         )
 
 
-@staff_member_required
+@staff_permission_required(DELETE_TENANT_DATA_PERMISSION)
 def delete_product_file(request, client_id, file_id):
     client = get_object_or_404(_clients_queryset(), pk=client_id)
     if request.method != "POST":
@@ -866,7 +889,7 @@ def delete_product_file(request, client_id, file_id):
     return _client_detail_redirect(client, "deleted")
 
 
-@staff_member_required
+@staff_permission_required(VIEW_TENANT_DATA_PERMISSION)
 def open_company_dna(request, client_id, dna_id):
     client = get_object_or_404(_clients_queryset(), pk=client_id)
     with _tenant_context(client.schema_name):
@@ -880,7 +903,7 @@ def open_company_dna(request, client_id, dna_id):
         )
 
 
-@staff_member_required
+@staff_permission_required(DELETE_TENANT_DATA_PERMISSION)
 def delete_company_dna(request, client_id, dna_id):
     client = get_object_or_404(_clients_queryset(), pk=client_id)
     if request.method != "POST":
@@ -898,7 +921,7 @@ def delete_company_dna(request, client_id, dna_id):
     return _client_detail_redirect(client, "deleted")
 
 
-@staff_member_required
+@staff_permission_required(VIEW_TENANT_DATA_PERMISSION)
 def open_product_dna(request, client_id, dna_id):
     client = get_object_or_404(_clients_queryset(), pk=client_id)
     with _tenant_context(client.schema_name):
@@ -912,7 +935,7 @@ def open_product_dna(request, client_id, dna_id):
         )
 
 
-@staff_member_required
+@staff_permission_required(DELETE_TENANT_DATA_PERMISSION)
 def delete_product_dna(request, client_id, dna_id):
     client = get_object_or_404(_clients_queryset(), pk=client_id)
     if request.method != "POST":

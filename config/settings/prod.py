@@ -13,7 +13,9 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # forgiare richieste cross-tenant/admin (Codex Security finding 3). I form
 # e le chiamate HTMX sono same-origin: non serve alcuna trusted origin extra.
 CSRF_TRUSTED_ORIGINS = ["https://zeus.cais.uno"]
-SESSION_COOKIE_DOMAIN = ".zeus.cais.uno"
+# Nessun SESSION_COOKIE_DOMAIN: cookie di sessione host-only su ogni host
+# (public, tenant, admin). Il login attraversa gli host via LoginHandoff
+# monouso (Codex Security finding 1 — chiusura completa).
 SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_AGE = 28800
 CSRF_COOKIE_SECURE = True
@@ -30,6 +32,17 @@ DATABASES = {
         "PORT": os.environ.get("POSTGRES_PORT", "5432"),
     }
 }
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,  # noqa: F405
+        "KEY_PREFIX": "zeus",
+    },
+}
+
+# Nginx sovrascrive X-Real-IP con l'indirizzo della connessione client.
+SIGNUP_TRUST_X_REAL_IP = True
 
 STORAGES = {
     "staticfiles": {

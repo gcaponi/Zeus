@@ -28,6 +28,16 @@
             <p class="mt-3 text-sm leading-6 text-content-secondary">Configura il primo workspace ZEUS per la tua azienda.</p>
         </div>
 
+        {% if signup_rate_limited %}
+            <div class="zeus-alert zeus-alert-error" role="alert">
+                Troppe richieste di registrazione. Riprova tra un'ora.
+            </div>
+        {% elif signup_unavailable %}
+            <div class="zeus-alert zeus-alert-error" role="alert">
+                Registrazione temporaneamente non disponibile. Riprova più tardi.
+            </div>
+        {% endif %}
+
         <form method="post" action="{% url 'account_signup' %}">
             {% csrf_token %}
             {{ form.non_field_errors }}

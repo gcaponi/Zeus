@@ -68,6 +68,7 @@ from apps.companies.models import (
     ConsistencyIssue,
     DNAFeedback,
     LLMCall,
+    PaidOperation,
     PipelineRun,
     Specialista,
     ProductDNA,
@@ -77,6 +78,14 @@ from apps.companies.models import (
     ProductSectionApproval,
     SectionApproval,
     Source,
+)
+from apps.companies.operations import (
+    OperationRejectedError,
+    claim_operation,
+    complete_operation,
+    fail_operation,
+    operation_key,
+    reserve_operation,
 )
 from apps.companies.tasks import _generate_dna, run_pipeline, scrape_source
 from apps.companies.agent import (
@@ -220,6 +229,42 @@ def _workspace_block_reason(company):
     if subscription and not subscription.can_use_workspace():
         return "Workspace sospeso. Contatta l'amministratore ZEUS."
     return None
+
+
+def _operation_rejection_response(exc, *, json_response=False):
+    rejection = exc.rejection
+    if json_response:
+        return JsonResponse(
+            {"error": rejection.code, "detail": rejection.detail},
+            status=rejection.status_code,
+        )
+    return HttpResponse(rejection.detail, status=rejection.status_code)
+
+
+def _duplicate_operation_response(operation):
+    active = operation.status in PaidOperation.ACTIVE_STATUSES
+    return JsonResponse(
+        {
+            "error": "operation_in_progress" if active else "duplicate_operation",
+            "operation_id": operation.pk,
+            "status": operation.status,
+        },
+        status=202 if active else 409,
+    )
+
+
+def _chat_operation_key(request, kind, text, history_length, action=""):
+    supplied = request.headers.get("Idempotency-Key", "").strip()
+    if supplied:
+        return operation_key(kind, request.user.pk, supplied[:200])
+    return operation_key(
+        kind,
+        request.user.pk,
+        getattr(request.session, "session_key", None),
+        history_length,
+        text,
+        action,
+    )
 
 
 def _normalize_source_url(raw_url):
@@ -1040,14 +1085,47 @@ def _latest_unanswered_company_round(pre_dna, after_round=0):
     )
 
 
+def _serialized_answer_snapshot(questions):
+    return [
+        [question_id, answer, answered_at.isoformat() if answered_at else None]
+        for question_id, answer, answered_at in questions.order_by("id").values_list(
+            "id", "answer", "answered_at"
+        )
+    ]
+
+
 def _start_company_gap_processing(request, company, pre_dna, current_round):
+    block_reason = _workspace_block_reason(company)
+    if block_reason:
+        return HttpResponse(block_reason, status=403)
+
+    answer_snapshot = _serialized_answer_snapshot(
+        pre_dna.questions.filter(question_round__lte=current_round)
+    )
+    try:
+        operation, created = reserve_operation(
+            company,
+            "company_gap",
+            operation_key("company_gap", pre_dna.pk, current_round, answer_snapshot),
+            payload={
+                "company_id": company.pk,
+                "pre_dna_id": pre_dna.pk,
+                "round": current_round,
+                "answer_snapshot": answer_snapshot,
+            },
+            resource_key=f"company-gap:{pre_dna.pk}",
+            requested_by=request.user if request.user.is_authenticated else None,
+        )
+    except OperationRejectedError as exc:
+        return _operation_rejection_response(exc)
+
     state = _company_async_processing_state(pre_dna)
     already_running = (
         state.get("operation") == "gap"
         and state.get("round") == current_round
         and state.get("status") in {"queued", "evaluating"}
     )
-    if not already_running:
+    if created and not already_running:
         _set_company_async_processing(
             pre_dna,
             operation="gap",
@@ -1067,6 +1145,7 @@ def _start_company_gap_processing(request, company, pre_dna, current_round):
             current_round,
             request.user.id if request.user.is_authenticated else None,
             tenant_schema=tenant.schema_name if tenant else None,
+            operation_id=operation.pk,
         )
     return redirect("dna-processing", operation="gap", round_number=current_round)
 
@@ -1280,6 +1359,37 @@ def _latest_unanswered_product_round(pre_dna, after_round=0):
 
 
 def _start_product_gap_processing(request, product, pre_dna, current_round):
+    block_reason = _workspace_block_reason(product.company)
+    if block_reason:
+        return HttpResponse(block_reason, status=403)
+
+    answer_snapshot = _serialized_answer_snapshot(
+        pre_dna.questions.filter(question_round__lte=current_round)
+    )
+    try:
+        operation, created = reserve_operation(
+            product.company,
+            "product_gap",
+            operation_key("product_gap", pre_dna.pk, current_round, answer_snapshot),
+            payload={
+                "product_id": product.pk,
+                "pre_dna_id": pre_dna.pk,
+                "round": current_round,
+                "answer_snapshot": answer_snapshot,
+            },
+            resource_key=f"product-gap:{pre_dna.pk}",
+            requested_by=request.user if request.user.is_authenticated else None,
+        )
+    except OperationRejectedError as exc:
+        return _operation_rejection_response(exc)
+
+    if not created:
+        return redirect(
+            "specialista-gap-processing",
+            pk=product.id,
+            round_number=current_round,
+        )
+
     latest_complete = product.dna_versions.filter(
         dna_type=ProductDNA.TYPE_COMPLETE,
     ).order_by("-version").first()
@@ -1303,6 +1413,7 @@ def _start_product_gap_processing(request, product, pre_dna, current_round):
         current_round,
         request.user.id if request.user.is_authenticated else None,
         tenant_schema=tenant_schema.schema_name if tenant_schema else None,
+        operation_id=operation.pk,
     )
     return redirect(
         "specialista-gap-processing",
@@ -3038,10 +3149,22 @@ def dna_gap_questions(request, round_number):
     if not pre_dna:
         return HttpResponse("Pre-DNA not found", status=404)
 
+    block_reason = _workspace_block_reason(company)
+    if block_reason:
+        return HttpResponse(block_reason, status=403)
+
+    limits = _gap_engine_limits(_plan_slug_for_company(company))
+    expected_round = _latest_unanswered_company_round(pre_dna, after_round=1)
+    if (
+        round_number < 2
+        or round_number > limits["max_rounds"] + 1
+        or expected_round != round_number
+    ):
+        return HttpResponse("Round di approfondimento non corrente", status=409)
+
     questions = _round_questions(pre_dna, round_number)
     if not questions:
-        # No follow-ups for this round; proceed to synthesis.
-        return _process_answers_after_round(request, company, pre_dna, current_round=round_number)
+        return HttpResponse("Round di approfondimento inesistente", status=409)
 
     complete_dna = company.dna_versions.filter(
         dna_type=DNAGenerale.TYPE_COMPLETE,
@@ -5106,14 +5229,65 @@ def product_dna_generate(request, pk):
             )
         return JsonResponse({"error": error}, status=400)
 
+    source_files = list(
+        product.product_files.order_by("id").values_list("id", "file_size")
+    )
+    latest_dna = product.dna_versions.order_by("-version").first()
+    idempotency_key = operation_key(
+        "product_generate",
+        product.pk,
+        source_files,
+        latest_dna.pk if latest_dna else None,
+        latest_dna.version if latest_dna else None,
+    )
+    try:
+        operation, created = reserve_operation(
+            company,
+            "product_generate",
+            idempotency_key,
+            payload={
+                "product_id": product.pk,
+                "source_files": source_files,
+                "source_status": product.status,
+            },
+            resource_key=f"product-generate:{product.pk}",
+            requested_by=request.user,
+        )
+    except OperationRejectedError as exc:
+        return _operation_rejection_response(exc, json_response=_wants_json(request))
+    if not created:
+        target = f"{reverse('specialista-detail', args=[product.pk])}?generating=1"
+        if not _wants_json(request):
+            return redirect(target)
+        return JsonResponse(
+            {
+                "status": operation.status,
+                "operation_id": operation.pk,
+                "product_id": product.pk,
+            },
+            status=202,
+        )
+
     from apps.companies.tasks import generate_product_dna_task
     tenant_schema = getattr(request, "tenant", None)
-    product.status = Specialista.STATUS_IN_COSTRUZIONE
-    product.generation_step = "1/5: Concept Map"
-    product.save(update_fields=["status", "generation_step", "updated_at"])
+    claimed = Specialista.objects.filter(
+        pk=product.pk,
+        status=product.status,
+    ).exclude(status=Specialista.STATUS_IN_COSTRUZIONE).update(
+        status=Specialista.STATUS_IN_COSTRUZIONE,
+        generation_step="1/5: Concept Map",
+        updated_at=timezone.now(),
+    )
+    if claimed != 1:
+        fail_operation(operation.pk, "product_state_changed")
+        target = f"{reverse('specialista-detail', args=[product.pk])}?generating=1"
+        if not _wants_json(request):
+            return redirect(target)
+        return JsonResponse({"status": "generating", "product_id": product.pk}, status=202)
     generate_product_dna_task.delay(
         product.id,
         tenant_schema=tenant_schema.schema_name if tenant_schema else None,
+        operation_id=operation.pk,
     )
 
     if not _wants_json(request):
@@ -5121,6 +5295,7 @@ def product_dna_generate(request, pk):
     return JsonResponse({
         "status": "generating",
         "product_id": product.pk,
+        "operation_id": operation.pk,
     }, status=202)
 
 
@@ -5217,6 +5392,7 @@ def product_questions(request, pk):
 
 
 @login_required
+@require_http_methods(["GET", "POST"])
 def product_gap_questions(request, pk, round_number):
     """Round 2+ follow-up questions for specialist DNA (Gap Engine)."""
     company = _tenant_company(request)
@@ -5230,11 +5406,22 @@ def product_gap_questions(request, pk, round_number):
     if not pre_dna:
         return HttpResponse("Pre-DNA prodotto non trovato", status=404)
 
+    block_reason = _workspace_block_reason(company)
+    if block_reason:
+        return HttpResponse(block_reason, status=403)
+
+    limits = _gap_engine_product_limits(_plan_slug_for_company(company))
+    expected_round = _latest_unanswered_product_round(pre_dna, after_round=1)
+    if (
+        round_number < 2
+        or round_number > limits["max_rounds"] + 1
+        or expected_round != round_number
+    ):
+        return HttpResponse("Round di approfondimento non corrente", status=409)
+
     questions = _round_questions(pre_dna, round_number)
     if not questions:
-        return _start_product_gap_processing(
-            request, product, pre_dna, current_round=round_number
-        )
+        return HttpResponse("Round di approfondimento inesistente", status=409)
 
     complete_dna = product.dna_versions.filter(
         dna_type=ProductDNA.TYPE_COMPLETE,
@@ -6264,6 +6451,9 @@ def agent_send(request):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
+    block_reason = _workspace_block_reason(company)
+    if block_reason:
+        return JsonResponse({"error": "workspace_suspended", "detail": block_reason}, status=403)
     if get_approved_company_dna(company) is None:
         return JsonResponse(
             {
@@ -6279,6 +6469,22 @@ def agent_send(request):
         return JsonResponse({"error": "empty_message"}, status=400)
 
     history = list(request.session.get(SESSION_HISTORY_KEY, []))
+    try:
+        operation, created = reserve_operation(
+            company,
+            "agent_chat",
+            _chat_operation_key(request, "agent_chat", text, len(history)),
+            payload={"message_hash": operation_key(text), "history_length": len(history)},
+            resource_key=f"agent-chat:{request.user.pk}",
+            requested_by=request.user,
+        )
+    except OperationRejectedError as exc:
+        return _operation_rejection_response(exc, json_response=True)
+    if not created:
+        return _duplicate_operation_response(operation)
+    if claim_operation(operation.pk, "agent_chat") is None:
+        return JsonResponse({"error": "operation_rejected"}, status=409)
+
     user_message = {"role": ROLE_USER, "content": text}
     history.append(user_message)
     request.session[SESSION_HISTORY_KEY] = history[-HISTORY_MAX_MESSAGES:]
@@ -6291,7 +6497,8 @@ def agent_send(request):
 
     try:
         result = get_llm_client().generate(messages=llm_messages, model=LLM_MODEL)
-    except Exception:
+    except Exception as exc:
+        fail_operation(operation.pk, exc.__class__.__name__)
         logger.exception("Agent chat LLM call failed for company %s", company.pk)
         return JsonResponse(
             {
@@ -6300,7 +6507,7 @@ def agent_send(request):
             },
             status=502,
         )
-    LLMCall.objects.create(
+    llm_call = LLMCall.objects.create(
         company=company,
         model_name=LLM_MODEL,
         prompt_text=json.dumps(llm_messages, ensure_ascii=False),
@@ -6309,6 +6516,11 @@ def agent_send(request):
         tokens_out=result.tokens_out,
         cost_usd=result.cost,
         latency_ms=result.latency_ms,
+    )
+    complete_operation(
+        operation.pk,
+        result={"llm_call_id": llm_call.pk},
+        actual_cost_usd=result.cost,
     )
     assistant_message = {"role": ROLE_ASSISTANT, "content": result.text}
     history.append(assistant_message)
@@ -6374,6 +6586,9 @@ def guide_send(request):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
+    block_reason = _workspace_block_reason(company)
+    if block_reason:
+        return JsonResponse({"error": "workspace_suspended", "detail": block_reason}, status=403)
 
     data = _request_data(request)
     action = str(data.get("action") or "").strip()
@@ -6384,6 +6599,26 @@ def guide_send(request):
         return JsonResponse({"error": "empty_message"}, status=400)
 
     history = list(request.session.get(guide_service.SESSION_HISTORY_KEY, []))
+    try:
+        operation, created = reserve_operation(
+            company,
+            "guide_chat",
+            _chat_operation_key(request, "guide_chat", text, len(history), action),
+            payload={
+                "message_hash": operation_key(text),
+                "history_length": len(history),
+                "action": action,
+            },
+            resource_key=f"guide-chat:{request.user.pk}",
+            requested_by=request.user,
+        )
+    except OperationRejectedError as exc:
+        return _operation_rejection_response(exc, json_response=True)
+    if not created:
+        return _duplicate_operation_response(operation)
+    if claim_operation(operation.pk, "guide_chat") is None:
+        return JsonResponse({"error": "operation_rejected"}, status=409)
+
     user_message = {"role": ROLE_USER, "content": text}
     history.append(user_message)
     request.session[guide_service.SESSION_HISTORY_KEY] = history[-HISTORY_MAX_MESSAGES:]
@@ -6397,7 +6632,8 @@ def guide_send(request):
 
     try:
         result = get_llm_client().generate(messages=llm_messages, model=LLM_MODEL)
-    except Exception:
+    except Exception as exc:
+        fail_operation(operation.pk, exc.__class__.__name__)
         logger.exception("Guide chat LLM call failed for company %s", company.pk)
         return JsonResponse(
             {
@@ -6406,7 +6642,7 @@ def guide_send(request):
             },
             status=502,
         )
-    LLMCall.objects.create(
+    llm_call = LLMCall.objects.create(
         company=company,
         model_name=LLM_MODEL,
         prompt_text=json.dumps(llm_messages, ensure_ascii=False),
@@ -6415,6 +6651,11 @@ def guide_send(request):
         tokens_out=result.tokens_out,
         cost_usd=result.cost,
         latency_ms=result.latency_ms,
+    )
+    complete_operation(
+        operation.pk,
+        result={"llm_call_id": llm_call.pk},
+        actual_cost_usd=result.cost,
     )
     assistant_message = {"role": ROLE_ASSISTANT, "content": result.text}
     history.append(assistant_message)

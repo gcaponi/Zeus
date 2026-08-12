@@ -9,9 +9,14 @@ import pytest
 from django.conf import settings
 from django.test import Client, RequestFactory, override_settings
 
-from apps.core.middleware import _session_cookie_name
+from apps.core.middleware import _session_cookie_domain, _session_cookie_name
 
 pytestmark = pytest.mark.django_db
+
+
+def test_app_session_cookie_name_was_rotated():
+    """Il vecchio `sessionid` parent-domain non deve essere piu' letto."""
+    assert settings.SESSION_COOKIE_NAME == "zeus_app_sessionid"
 
 
 # --- Selezione del nome cookie per zona -------------------------------------------------
@@ -63,7 +68,21 @@ def _create_app_user():
     return user
 
 
-def test_app_login_creates_default_session_cookie():
+@override_settings(ROOT_URLCONF="config.urls")
+def test_app_login_issues_handoff_not_session_cookie(monkeypatch):
+    """Sessioni host-only: il login pubblico NON crea piu' la sessione app —
+    emette un LoginHandoff monouso; la sessione nasce sul tenant host."""
+    from contextlib import nullcontext
+    from unittest.mock import Mock
+
+    from apps.core import views as core_views
+    from apps.core.models import LoginHandoff
+
+    # sqlite di test non ha gli schema tenant: schema_context e' no-op.
+    monkeypatch.setattr(
+        core_views, "schema_context", Mock(return_value=nullcontext()),
+    )
+
     user = _create_app_user()
     client = Client()
 
@@ -73,22 +92,26 @@ def test_app_login_creates_default_session_cookie():
     )
 
     assert response.status_code == 302
-    assert settings.SESSION_COOKIE_NAME in client.cookies
+    assert response.url.startswith("https://app.zeus.cais.uno/accounts/handoff/?t=")
+    assert settings.SESSION_COOKIE_NAME not in client.cookies
     assert settings.ADMIN_SESSION_COOKIE_NAME not in client.cookies
-    # l'utente risulta autenticato (la vista dashboard senza tenant rende 404,
-    # quindi l'autenticazione si verifica sulla sessione)
-    assert client.session["_auth_user_id"] == str(user.pk)
+    handoff = LoginHandoff.objects.get()
+    assert handoff.tenant_schema == "app"
+    assert handoff.user_id == user.pk
+    assert handoff.consumed_at is None
 
 
 def test_admin_login_does_not_logout_app():
-    """Il login admin ruota solo admin_sessionid: la sessione app resta viva."""
+    """Il login admin ruota solo il cookie admin: la sessione app resta viva."""
     user = _create_app_user()
     from django.contrib.auth import get_user_model
 
     get_user_model().objects.create_superuser("root", "root@x.it", "pw")
     client = Client()
 
-    client.post("/accounts/login/", {"login": "app@x.it", "password": "pw"})
+    # Il login app completo e' coperto dai test handoff: qui basta una
+    # sessione app valida (force_login) per verificare la separazione.
+    client.force_login(user)
     app_session = client.cookies[settings.SESSION_COOKIE_NAME].value
     assert client.session["_auth_user_id"] == str(user.pk)
 
@@ -111,13 +134,15 @@ def test_app_login_does_not_invalidate_admin_session():
     _create_app_user()
     from django.contrib.auth import get_user_model
 
-    get_user_model().objects.create_superuser("root", "root@x.it", "pw")
+    user_model = get_user_model()
+    user_model.objects.create_superuser("root", "root@x.it", "pw")
+    app_user = user_model.objects.get(username="app@x.it")
     client = Client()
 
     client.post("/admin/login/", {"username": "root", "password": "pw"})
     admin_session = client.cookies[settings.ADMIN_SESSION_COOKIE_NAME].value
 
-    client.post("/accounts/login/", {"login": "app@x.it", "password": "pw"})
+    client.force_login(app_user)
 
     assert (
         client.cookies[settings.ADMIN_SESSION_COOKIE_NAME].value
@@ -145,20 +170,14 @@ def test_admin_session_cookie_is_host_only():
     assert client.cookies[settings.ADMIN_SESSION_COOKIE_NAME]["domain"] == ""
 
 
-@override_settings(SESSION_COOKIE_DOMAIN=".zeus.cais.uno")
-def test_app_session_cookie_keeps_shared_domain():
-    """La sessione app resta Domain-condivisa finche' il login avviene sul
-    public host (fase 1): il fix host-only riguarda solo la zona admin."""
-    _create_app_user()
-    client = Client()
-
-    response = client.post("/accounts/login/", {"login": "app@x.it", "password": "pw"})
-
-    assert response.status_code == 302
-    assert (
-        client.cookies[settings.SESSION_COOKIE_NAME]["domain"]
-        == ".zeus.cais.uno"
-    )
+@override_settings(SESSION_COOKIE_DOMAIN=None)
+def test_all_session_cookies_are_host_only():
+    """Fase 2: SESSION_COOKIE_DOMAIN rimossa — sia il cookie app sia quello
+    admin sono host-only; il login attraversa gli host via LoginHandoff."""
+    assert _session_cookie_domain(RequestFactory().get("/dashboard/")) is None
+    assert _session_cookie_domain(RequestFactory().get("/accounts/login/")) is None
+    assert _session_cookie_domain(RequestFactory().get("/admin/login/")) is None
+    assert _session_cookie_domain(RequestFactory().get("/zeus-admin/clients/")) is None
 
 
 @override_settings(ROOT_URLCONF="config.urls")

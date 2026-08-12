@@ -1161,10 +1161,17 @@ def process_company_gap_round_task(
     current_round,
     user_id=None,
     tenant_schema=None,
+    operation_id=None,
 ):
     """Evaluate Company answers outside the HTTP request to avoid 504s."""
     def _run():
         from apps.companies.models import Company
+        from apps.companies.operations import (
+            claim_operation,
+            complete_operation,
+            fail_operation,
+            requeue_operation,
+        )
         from apps.companies.views import (
             _create_gap_followups,
             _evaluate_answer_sufficiency,
@@ -1174,10 +1181,25 @@ def process_company_gap_round_task(
             _set_company_generation_progress,
         )
 
+        operation = None
+        if operation_id is not None:
+            operation = claim_operation(operation_id, "company_gap")
+            if operation is None:
+                return
+            if (
+                operation.payload.get("company_id") != company_id
+                or operation.payload.get("pre_dna_id") != pre_dna_id
+                or operation.payload.get("round") != current_round
+            ):
+                fail_operation(operation_id, "gap_binding_mismatch")
+                return
+
         try:
             company = Company.objects.get(pk=company_id)
             pre_dna = DNAGenerale.objects.get(pk=pre_dna_id)
         except (Company.DoesNotExist, DNAGenerale.DoesNotExist):
+            if operation_id is not None:
+                fail_operation(operation_id, "company_or_dna_not_found")
             logger.error("process_company_gap_round: company or pre_dna not found")
             return
 
@@ -1209,12 +1231,13 @@ def process_company_gap_round_task(
                 status="running",
                 flow="company_complete_dna",
             )
-            generate_complete_dna.delay(
-                company.id,
-                pre_dna.id,
-                user_id,
-                tenant_schema=tenant_schema,
-            )
+            task_kwargs = {"tenant_schema": tenant_schema}
+            if operation_id is not None:
+                if not requeue_operation(operation_id, "company_complete_dna"):
+                    fail_operation(operation_id, "operation_handoff_failed")
+                    return
+                task_kwargs["operation_id"] = operation_id
+            generate_complete_dna.delay(company.id, pre_dna.id, user_id, **task_kwargs)
 
         try:
             _set_company_async_processing(
@@ -1263,6 +1286,11 @@ def process_company_gap_round_task(
                 step_label="Approfondimenti pronti",
                 error="",
             )
+            if operation_id is not None:
+                complete_operation(
+                    operation_id,
+                    result={"target_round": current_round + 1},
+                )
             logger.info(
                 "Company gap follow-ups created for company %s round %s",
                 company.schema_name,
@@ -1284,16 +1312,36 @@ def process_company_gap_round_task(
 
 
 @shared_task(soft_time_limit=600, time_limit=660)
-def generate_complete_dna(company_id, pre_dna_id, user_id, tenant_schema=None):
+def generate_complete_dna(
+    company_id,
+    pre_dna_id,
+    user_id,
+    tenant_schema=None,
+    operation_id=None,
+):
     def _run():
         from django.contrib.auth import get_user_model
         from apps.companies.models import Company
+        from apps.companies.operations import claim_operation, complete_operation, fail_operation
         from apps.companies.views import _create_complete_dna, _set_company_generation_progress
+
+        if operation_id is not None:
+            operation = claim_operation(operation_id, "company_gap")
+            if operation is None:
+                return
+            if (
+                operation.payload.get("company_id") != company_id
+                or operation.payload.get("pre_dna_id") != pre_dna_id
+            ):
+                fail_operation(operation_id, "complete_dna_binding_mismatch")
+                return
 
         try:
             company = Company.objects.get(pk=company_id)
             pre_dna = DNAGenerale.objects.get(pk=pre_dna_id)
         except (Company.DoesNotExist, DNAGenerale.DoesNotExist):
+            if operation_id is not None:
+                fail_operation(operation_id, "company_or_dna_not_found")
             logger.error("generate_complete_dna: company or pre_dna not found")
             return
 
@@ -1316,8 +1364,12 @@ def generate_complete_dna(company_id, pre_dna_id, user_id, tenant_schema=None):
                 "Revisione pronta",
                 status="completed",
             )
+            if operation_id is not None:
+                complete_operation(operation_id, result={"pre_dna_id": pre_dna.pk})
             logger.info("Complete DNA generated for company %s", company.schema_name)
         except Exception as exc:
+            if operation_id is not None:
+                fail_operation(operation_id, exc.__class__.__name__)
             _set_company_generation_progress(
                 pre_dna,
                 3,
@@ -1338,16 +1390,36 @@ def generate_complete_dna(company_id, pre_dna_id, user_id, tenant_schema=None):
 
 
 @shared_task
-def generate_complete_product_dna(product_id, pre_dna_id, user_id, tenant_schema=None):
+def generate_complete_product_dna(
+    product_id,
+    pre_dna_id,
+    user_id,
+    tenant_schema=None,
+    operation_id=None,
+):
     def _run():
         from django.contrib.auth import get_user_model
         from apps.companies.models import Specialista
+        from apps.companies.operations import claim_operation, complete_operation, fail_operation
         from apps.companies.views import _create_complete_product_dna, _set_product_gap_processing
+
+        if operation_id is not None:
+            operation = claim_operation(operation_id, "product_gap")
+            if operation is None:
+                return
+            if (
+                operation.payload.get("product_id") != product_id
+                or operation.payload.get("pre_dna_id") != pre_dna_id
+            ):
+                fail_operation(operation_id, "complete_product_binding_mismatch")
+                return
 
         try:
             product = Specialista.objects.get(pk=product_id)
             pre_dna = ProductDNA.objects.get(pk=pre_dna_id)
         except (Specialista.DoesNotExist, ProductDNA.DoesNotExist):
+            if operation_id is not None:
+                fail_operation(operation_id, "product_or_dna_not_found")
             logger.error(
                 "generate_complete_product_dna: product or pre_dna not found"
             )
@@ -1372,8 +1444,12 @@ def generate_complete_product_dna(product_id, pre_dna_id, user_id, tenant_schema
                 steps_total=4,
                 step_label="Revisione pronta",
             )
+            if operation_id is not None:
+                complete_operation(operation_id, result={"pre_dna_id": pre_dna.pk})
             logger.info("Complete product DNA generated for product %s", product.pk)
         except Exception as exc:
+            if operation_id is not None:
+                fail_operation(operation_id, exc.__class__.__name__)
             _set_product_gap_processing(
                 pre_dna,
                 status="failed",
@@ -1394,15 +1470,31 @@ def generate_complete_product_dna(product_id, pre_dna_id, user_id, tenant_schema
 
 
 @shared_task
-def generate_product_questions_task(product_id, pre_dna_id, tenant_schema=None):
+def generate_product_questions_task(
+    product_id,
+    pre_dna_id,
+    tenant_schema=None,
+    operation_id=None,
+):
     def _run():
         from apps.companies.models import Specialista, ProductDNA
+        from apps.companies.operations import claim_operation, complete_operation, fail_operation
         from apps.companies.views import _generate_product_questions
+
+        if operation_id is not None:
+            operation = claim_operation(operation_id, "product_generate")
+            if operation is None:
+                return
+            if operation.payload.get("product_id") != product_id:
+                fail_operation(operation_id, "product_binding_mismatch")
+                return
 
         try:
             product = Specialista.objects.get(pk=product_id)
             pre_dna = ProductDNA.objects.get(pk=pre_dna_id)
         except (Specialista.DoesNotExist, ProductDNA.DoesNotExist):
+            if operation_id is not None:
+                fail_operation(operation_id, "product_or_dna_not_found")
             logger.error("generate_product_questions: product or pre_dna not found")
             return
 
@@ -1411,8 +1503,15 @@ def generate_product_questions_task(product_id, pre_dna_id, tenant_schema=None):
             _generate_product_questions(product, pre_dna)
             product.generation_step = "5/5: Domande pronte"
             product.save(update_fields=["generation_step", "updated_at"])
+            if operation_id is not None:
+                complete_operation(
+                    operation_id,
+                    result={"product_dna_id": pre_dna.pk},
+                )
             logger.info("Specialista questions generated for product %s", product.pk)
-        except Exception:
+        except Exception as exc:
+            if operation_id is not None:
+                fail_operation(operation_id, exc.__class__.__name__)
             product.generation_step = "5/5: Domande non completate"
             product.save(update_fields=["generation_step", "updated_at"])
             logger.exception(
@@ -1433,9 +1532,16 @@ def process_product_gap_round_task(
     current_round,
     user_id=None,
     tenant_schema=None,
+    operation_id=None,
 ):
     """Evaluate specialist answers outside the HTTP request to avoid 504s."""
     def _run():
+        from apps.companies.operations import (
+            claim_operation,
+            complete_operation,
+            fail_operation,
+            requeue_operation,
+        )
         from apps.companies.views import (
             _create_product_gap_followups,
             _evaluate_product_answer_sufficiency,
@@ -1444,10 +1550,25 @@ def process_product_gap_round_task(
             _set_product_gap_processing,
         )
 
+        operation = None
+        if operation_id is not None:
+            operation = claim_operation(operation_id, "product_gap")
+            if operation is None:
+                return
+            if (
+                operation.payload.get("product_id") != product_id
+                or operation.payload.get("pre_dna_id") != pre_dna_id
+                or operation.payload.get("round") != current_round
+            ):
+                fail_operation(operation_id, "gap_binding_mismatch")
+                return
+
         try:
             product = Specialista.objects.get(pk=product_id)
             pre_dna = ProductDNA.objects.get(pk=pre_dna_id)
         except (Specialista.DoesNotExist, ProductDNA.DoesNotExist):
+            if operation_id is not None:
+                fail_operation(operation_id, "product_or_dna_not_found")
             logger.error("process_product_gap_round: product or pre_dna not found")
             return
 
@@ -1464,11 +1585,17 @@ def process_product_gap_round_task(
                 steps_total=4,
                 step_label="Avvio DNA Specialista completo",
             )
+            task_kwargs = {"tenant_schema": tenant_schema}
+            if operation_id is not None:
+                if not requeue_operation(operation_id, "product_complete_dna"):
+                    fail_operation(operation_id, "operation_handoff_failed")
+                    return
+                task_kwargs["operation_id"] = operation_id
             generate_complete_product_dna.delay(
                 product.id,
                 pre_dna.id,
                 user_id,
-                tenant_schema=tenant_schema,
+                **task_kwargs,
             )
 
         try:
@@ -1510,6 +1637,11 @@ def process_product_gap_round_task(
                 steps_total=4,
                 step_label="Follow-up pronti",
             )
+            if operation_id is not None:
+                complete_operation(
+                    operation_id,
+                    result={"target_round": current_round + 1},
+                )
             logger.info(
                 "Specialista gap follow-ups created for product %s round %s",
                 product.pk,
@@ -1531,11 +1663,17 @@ def process_product_gap_round_task(
                 steps_total=4,
                 step_label="Avvio DNA Specialista completo",
             )
+            task_kwargs = {"tenant_schema": tenant_schema}
+            if operation_id is not None:
+                if not requeue_operation(operation_id, "product_complete_dna"):
+                    fail_operation(operation_id, "operation_handoff_failed")
+                    return
+                task_kwargs["operation_id"] = operation_id
             generate_complete_product_dna.delay(
                 product.id,
                 pre_dna.id,
                 user_id,
-                tenant_schema=tenant_schema,
+                **task_kwargs,
             )
 
     if tenant_schema and hasattr(connection, "tenant"):
@@ -1637,24 +1775,74 @@ def apply_specialist_feedback_task(company_id, company_dna_id, tenant_schema=Non
 
 
 @shared_task(soft_time_limit=600, time_limit=660)
-def generate_product_dna_task(product_id, tenant_schema=None):
+def generate_product_dna_task(product_id, tenant_schema=None, operation_id=None):
     """Generate pre-DNA (concept map → seeds → merge → refinement) + dispatch questions."""
     def _run():
+        operation = None
+        if operation_id is not None:
+            from apps.companies.operations import (
+                claim_operation,
+                fail_operation,
+                requeue_operation,
+            )
+
+            operation = claim_operation(operation_id, "product_generate")
+            if operation is None:
+                return
+            product_id_from_operation = operation.payload.get("product_id")
+            if product_id_from_operation != product_id:
+                fail_operation(operation_id, "product_binding_mismatch")
+                return
+
         try:
             product = Specialista.objects.get(pk=product_id)
         except Specialista.DoesNotExist:
+            if operation_id is not None:
+                fail_operation(operation_id, "product_not_found")
             logger.error("generate_product_dna_task: product %d not found", product_id)
             return
 
         company = product.company
+        if operation is not None:
+            expected_files = [list(item) for item in operation.payload.get("source_files", [])]
+            current_files = [
+                list(item)
+                for item in product.product_files.order_by("id").values_list("id", "file_size")
+            ]
+            if current_files != expected_files:
+                fail_operation(operation_id, "product_sources_changed")
+                product.status = (
+                    Specialista.STATUS_UPDATING
+                    if product.dna_versions.exists()
+                    else Specialista.STATUS_BOZZA
+                )
+                product.generation_step = ""
+                product.save(update_fields=["status", "generation_step", "updated_at"])
+                return
         try:
             _set_product_generation_progress(product.pk, 1, 5, "Concept Map")
             dna, _ = _generate_product_dna(product, company, tenant_schema=tenant_schema)
             logger.info("Pre-DNA generated for product %s, dispatching questions", product.pk)
-            generate_product_questions_task.delay(
-                product.id, dna.id, tenant_schema=tenant_schema,
+            if operation_id is not None and not requeue_operation(
+                operation_id,
+                "product_questions",
+            ):
+                fail_operation(operation_id, "operation_handoff_failed")
+                return
+            task_kwargs = {"tenant_schema": tenant_schema}
+            if operation_id is not None:
+                task_kwargs["operation_id"] = operation_id
+            generate_product_questions_task.delay(product.id, dna.id, **task_kwargs)
+        except Exception as exc:
+            if operation_id is not None:
+                fail_operation(operation_id, exc.__class__.__name__)
+            product.status = (
+                Specialista.STATUS_UPDATING
+                if product.dna_versions.exists()
+                else Specialista.STATUS_BOZZA
             )
-        except Exception:
+            product.generation_step = "Generazione non completata"
+            product.save(update_fields=["status", "generation_step", "updated_at"])
             logger.exception("Pre-DNA generation failed for product %s", product.pk)
 
     if tenant_schema and hasattr(connection, "tenant"):

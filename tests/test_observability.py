@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 import pytest
+from django.core.cache import cache
 from django.http import HttpResponse
 from django.test import Client as DjangoClient
 from django.test import RequestFactory
@@ -13,7 +14,16 @@ from apps.core.middleware import RequestContextLoggingMiddleware
 
 @pytest.mark.django_db
 class TestMetricsEndpoint:
-    def test_metrics_endpoint_returns_prometheus_format(self):
+    def test_metrics_endpoint_rejects_anonymous_scrapes(self, settings):
+        settings.METRICS_TOKEN = "metrics-test-token"
+
+        response = DjangoClient().get("/metrics/")
+
+        assert response.status_code == 404
+
+    def test_metrics_endpoint_returns_prometheus_format(self, settings):
+        settings.METRICS_TOKEN = "metrics-test-token"
+        cache.clear()
         company = Company.objects.create(schema_name="metrics", name="Metrics")
         now = timezone.now()
         completed = PipelineRun.objects.create(
@@ -37,7 +47,10 @@ class TestMetricsEndpoint:
             latency_ms=100,
         )
 
-        response = DjangoClient().get("/metrics/")
+        response = DjangoClient().get(
+            "/metrics/",
+            HTTP_AUTHORIZATION="Bearer metrics-test-token",
+        )
 
         body = response.content.decode()
         assert response.status_code == 200
