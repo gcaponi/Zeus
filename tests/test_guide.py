@@ -355,6 +355,23 @@ class TestComputeProgress:
         )
         assert guide_service.compute_progress(company)["current"]["id"] == "dna_generale"
 
+    def test_step_reflects_real_position_not_done_count(self):
+        """Fasi completate fuori ordine: il numero di passo mostrato e' la
+        posizione reale della fase corrente, non done_count + 1.
+        Caso: sito noto (fase 2 done) ma anagrafica incompleta (fase 1
+        current) — il widget deve mostrare "passo 1 di 10", non 2."""
+        company = _company()
+        company.sito_web = "https://guidaco.it"
+        company.save()
+
+        progress = guide_service.compute_progress(company)
+        statuses = {phase["id"]: phase["status"] for phase in progress["phases"]}
+        assert statuses["sito_web"] == "done"
+        assert progress["done_count"] == 1  # il vecchio rendering mostrava "passo 2"
+        assert progress["current"]["id"] == "anagrafica"
+        assert progress["current"]["step"] == 1
+        assert [phase["step"] for phase in progress["phases"]] == list(range(1, 11))
+
 
 # ---------------------------------------------------------------------------
 # build_guide_system_prompt
@@ -571,6 +588,19 @@ class TestGuideSend:
         assert response.status_code == 302
         assert response.url == "/"
 
+    def test_non_htmx_external_referer_is_not_an_open_redirect(self, rf_with_tenant):
+        """HTTP_REFERER e' client-controlled: un referer verso un host esterno
+        non deve essere onorato — si ricade sulla root (no open redirect)."""
+        _company()
+        session = SessionStore()
+        request = rf_with_tenant(
+            "post", reverse("guide-send"), data={"message": "ciao"}, session=session,
+        )
+        request.META["HTTP_REFERER"] = "https://evil.example.com/phishing"
+        response = views.guide_send(request)
+        assert response.status_code == 302
+        assert response.url == "/"
+
 
 @pytest.mark.django_db
 class TestGuideQuickActions:
@@ -694,6 +724,17 @@ class TestGuideState:
         request.tenant.schema_name = "public"
         response = views.guide_state(request)
         assert response.status_code == 400
+
+    def test_state_partial_step_uses_real_position(self, rf_with_tenant):
+        """Con una fase completata fuori ordine (sito noto, anagrafica no) il
+        kicker mostra la posizione reale della fase corrente, non done_count+1."""
+        company = _company()
+        company.sito_web = "https://guidaco.it"
+        company.save()
+        request = rf_with_tenant("get", reverse("guide-state"))
+        response = views.guide_state(request)
+        assert response.status_code == 200
+        assert "passo 1 di 10" in response.content.decode()
 
 
 # ---------------------------------------------------------------------------

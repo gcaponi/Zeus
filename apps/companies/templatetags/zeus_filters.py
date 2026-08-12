@@ -89,11 +89,22 @@ def _inline_markdown(text: str) -> str:
 
     # Inline code (already handled above)
 
-    # Links
-    text = re.sub(
-        r"\[([^\]]+)\]\(([^)]+)\)",
-        r'<a href="\2" rel="noopener noreferrer">\1</a>',
-        text,
-    )
+    # Links — only safe URL schemes become <a> tags: the input can be LLM
+    # output, so javascript:/data: URLs (and attribute break-out via quotes)
+    # must be neutralised, not copied verbatim into href.
+    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", _render_link, text)
 
     return text
+
+
+_SAFE_LINK_PREFIXES = ("http://", "https://", "mailto:", "/", "#")
+
+
+def _render_link(match: re.Match) -> str:
+    """Render a markdown link, or fall back to the plain label when unsafe."""
+    label, url = match.group(1), match.group(2).strip()
+    if any(char in url for char in ('"', "'", "<", ">")) or any(c.isspace() for c in url):
+        return label
+    if not url.lower().startswith(_SAFE_LINK_PREFIXES):
+        return label
+    return f'<a href="{url}" rel="noopener noreferrer">{label}</a>'

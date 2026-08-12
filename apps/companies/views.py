@@ -6346,8 +6346,19 @@ GUIDE_MESSAGE_MAX_CHARS = 4000
 
 
 def _guide_fallback_redirect(request):
-    """Fallback non-HTMX: torna alla pagina di provenienza (o alla root)."""
-    return redirect(request.META.get("HTTP_REFERER") or "/")
+    """Fallback non-HTMX: torna alla pagina di provenienza (o alla root).
+
+    HTTP_REFERER e' controllato dal client: senza validazione sarebbe un
+    open redirect. Solo URL same-host (e https se la richiesta e' https).
+    """
+    referer = request.META.get("HTTP_REFERER") or "/"
+    if not url_has_allowed_host_and_scheme(
+        referer,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        referer = "/"
+    return redirect(referer)
 
 
 @login_required

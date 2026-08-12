@@ -129,9 +129,32 @@ page and htmx would swap that HTML into the widget containers.
     // goes through requestSubmit(), which keeps native validation, fires the
     // submit event htmx listens to, and falls back to a plain POST when htmx
     // is absent.
+    var submitting = false;
+    // The composer stays disabled until htmx is ready: without htmx the
+    // submit would be a native full-page POST (redirect + reload) instead of
+    // an in-widget swap.
+    var htmxReady = Boolean(window.htmx);
+
+    function updateControls() {
+        var enabled = htmxReady && !submitting;
+        if (sendButton) {
+            sendButton.disabled = !enabled;
+        }
+        chips.forEach(function (chip) {
+            chip.disabled = !enabled;
+        });
+    }
+
     function submitComposer() {
-        if (composer) {
+        if (!composer || !htmxReady || submitting) {
+            return;
+        }
+        if (composer.requestSubmit) {
             composer.requestSubmit();
+        } else {
+            // Safari < 16 / Chrome < 76 have no requestSubmit: plain POST
+            // fallback (the server redirects back to the referring page).
+            composer.submit();
         }
     }
 
@@ -157,23 +180,33 @@ page and htmx would swap that HTML into the widget containers.
     });
 
     // Load htmx only if the page did not include it already. The check runs
-    // on window load: every synchronous <script> (including the ones from
-    // _app_shell_htmx.html) has executed by then, so htmx is never loaded
-    // twice on the same page.
+    // at DOMContentLoaded: every synchronous <script> in the document —
+    // including the ones from _app_shell_htmx.html, which sit AFTER the
+    // widget (shell_scripts block) — has executed by then, so htmx is never
+    // loaded twice on the same page.
+    function onHtmxReady() {
+        htmxReady = true;
+        updateControls();
+    }
+
     function ensureHtmx() {
         if (window.htmx) {
+            onHtmxReady();
             return;
         }
         var script = document.createElement("script");
         script.src = "https://unpkg.com/htmx.org@1.9.12";
+        script.onload = onHtmxReady;
         document.head.appendChild(script);
     }
 
-    if (document.readyState === "complete") {
-        ensureHtmx();
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", ensureHtmx);
     } else {
-        window.addEventListener("load", ensureHtmx);
+        ensureHtmx();
     }
+
+    updateControls();
 
     function scrollLogToBottom() {
         if (log) {
@@ -236,6 +269,65 @@ page and htmx would swap that HTML into the widget containers.
             scheduleStateRefresh();
         }
     });
+
+    // In-flight guard: while a guide request is pending, chips/Enter/send are
+    // disabled — rapid clicks would otherwise fire concurrent POSTs (duplicate
+    // LLM calls = real cost, duplicated message pairs in the log).
+    document.body.addEventListener("htmx:beforeRequest", function (event) {
+        if (event.detail && event.detail.elt === composer) {
+            submitting = true;
+            updateControls();
+        }
+    });
+
+    function endSubmit(event) {
+        if (event.detail && event.detail.elt === composer) {
+            submitting = false;
+            updateControls();
+        }
+    }
+    document.body.addEventListener("htmx:afterRequest", endSubmit);
+    document.body.addEventListener("htmx:sendError", endSubmit);
+
+    // htmx 1.9 swaps error response bodies by default: without this guard a
+    // failed guide_send (400/502 JSON) would be appended verbatim into the
+    // chat log. Block the swap and show a friendly bubble instead.
+    document.body.addEventListener("htmx:beforeSwap", function (event) {
+        var detail = event.detail;
+        if (!detail || !detail.target || detail.target.id !== "guide-chat-log") {
+            return;
+        }
+        if (detail.xhr && detail.xhr.status >= 400) {
+            detail.shouldSwap = false;
+            appendGuideErrorBubble();
+        }
+    });
+
+    function appendGuideErrorBubble() {
+        if (!log) {
+            return;
+        }
+        var row = document.createElement("div");
+        row.className = "guida-message guida-message--assistant";
+        var avatar = document.createElement("span");
+        avatar.className = "guida-avatar guida-avatar--assistant";
+        avatar.setAttribute("aria-hidden", "true");
+        avatar.textContent = "\uD83E\uDDED";
+        var stack = document.createElement("div");
+        stack.className = "guida-message-stack";
+        var role = document.createElement("p");
+        role.className = "guida-message-role";
+        role.textContent = "ZEUS Guide";
+        var body = document.createElement("div");
+        body.className = "guida-message-body";
+        body.textContent = "La guida non risponde al momento. Il tuo messaggio e' ancora qui: riprova tra poco.";
+        stack.appendChild(role);
+        stack.appendChild(body);
+        row.appendChild(avatar);
+        row.appendChild(stack);
+        log.appendChild(row);
+        scrollLogToBottom();
+    }
 
     if (closeButton) {
         closeButton.addEventListener("click", function () {

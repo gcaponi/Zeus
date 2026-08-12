@@ -1,6 +1,6 @@
 {% if current_phase %}
 <div class="guida-state" data-guide-state>
-    <p class="guida-state-kicker">Il tuo percorso · passo {{ done_count|add:"1" }} di {{ total_count }}</p>
+    <p class="guida-state-kicker">Il tuo percorso · passo {{ current_phase.step }} di {{ total_count }}</p>
     <h3 class="guida-state-title">{{ current_phase.title }}</h3>
     <p class="guida-state-why">{{ current_phase.why }}</p>
     {% if current_phase.tips %}
@@ -27,6 +27,7 @@
     {% for phase in phases %}
     <li class="guida-checklist-item guida-checklist-item--{{ phase.status }}">
         <span class="guida-checklist-marker" aria-hidden="true">{% if phase.status == 'done' %}✓{% elif phase.status == 'current' %}→{% elif phase.status == 'recommended' %}+{% else %}○{% endif %}</span>
+        <span class="zeus-visually-hidden">{% if phase.status == 'done' %}Completato:{% elif phase.status == 'current' %}In corso:{% elif phase.status == 'recommended' %}Consigliato:{% else %}Da fare:{% endif %}</span>
         <span class="guida-checklist-title">{{ phase.title }}{% if phase.status == 'recommended' %} <em class="guida-checklist-optional">· consigliato</em>{% endif %}</span>
     </li>
     {% endfor %}

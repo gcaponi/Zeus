@@ -16,8 +16,6 @@ NON ha gate: funziona sempre, anche prima dell'anagrafica e senza DNA.
 La conversazione vive nella Django session (chiave SESSION_HISTORY_KEY).
 """
 
-import logging
-
 from django.urls import reverse
 
 from apps.companies.agent import (
@@ -27,8 +25,6 @@ from apps.companies.agent import (
 )
 from apps.companies.llm_client import GUIDE_CHAT_MARKER
 from apps.companies.models import DNAGenerale, ProductDNA, ProductQuestion
-
-logger = logging.getLogger(__name__)
 
 # Chiave di sessione che contiene la storia chat della guida:
 # lista di dict {role, content}. Mai persistita su DB (solo LLMCall per audit).
@@ -79,14 +75,20 @@ def _has_product(company):
 
 
 def _specialist_questions_answered(company):
-    """Almeno uno Specialista con documenti caricati e domande tutte risposte."""
-    for product in company.products.all():
-        if not product.product_files.exists():
-            continue
-        questions = product.product_questions.all()
-        if questions.exists() and not questions.filter(answered_at__isnull=True).exists():
-            return True
-    return False
+    """Almeno uno Specialista con documenti caricati e domande tutte risposte.
+
+    Query unica (no loop per-prodotto): compute_progress gira a ogni refresh
+    del widget e a ogni turno di chat, un N+1 qui amplificherebbe il costo
+    di ogni richiesta.
+    """
+    return (
+        company.products.filter(
+            product_files__isnull=False,
+            product_questions__isnull=False,
+        )
+        .exclude(product_questions__answered_at__isnull=True)
+        .exists()
+    )
 
 
 def _has_approved_product_dna(company):
@@ -301,11 +303,13 @@ def compute_progress(company):
     non completate sono "recommended" (consigliate, non bloccanti) e tutte le
     successive sono "todo".
     Ritorna {"phases": [...], "current": dict|None, "done_count", "total_count"}.
-    Ogni fase esposta contiene: id, title, why, tips, cta_url, cta_label, status.
+    Ogni fase esposta contiene: id, title, why, tips, cta_url, cta_label,
+    status, step (posizione 1-based nel percorso — NON derivare il numero di
+    passo da done_count: le fasi possono completarsi fuori ordine).
     """
     phases = []
     current_found = False
-    for phase in PHASES:
+    for index, phase in enumerate(PHASES, start=1):
         done = phase["is_done"](company)
         if done:
             status = "done"
@@ -325,6 +329,7 @@ def compute_progress(company):
                 "cta_url": reverse(phase["cta_url_name"]),
                 "cta_label": phase["cta_label"],
                 "status": status,
+                "step": index,
             }
         )
     current = next((p for p in phases if p["status"] == "current"), None)
