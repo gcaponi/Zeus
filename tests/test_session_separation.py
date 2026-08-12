@@ -125,6 +125,42 @@ def test_app_login_does_not_invalidate_admin_session():
     )
 
 
+# --- Codex Security finding 1: il cookie admin e' host-only -----------------
+
+
+@override_settings(SESSION_COOKIE_DOMAIN=".zeus.cais.uno")
+def test_admin_session_cookie_is_host_only():
+    """Anche con Domain condiviso per la sessione app, il cookie della zona
+    admin non deve avere attributo Domain: il browser non lo inviera' mai ai
+    tenant sibling."""
+    from django.contrib.auth import get_user_model
+
+    get_user_model().objects.create_superuser("root", "root@x.it", "pw")
+    client = Client()
+
+    response = client.post("/admin/login/", {"username": "root", "password": "pw"})
+
+    assert response.status_code == 302
+    assert settings.ADMIN_SESSION_COOKIE_NAME in client.cookies
+    assert client.cookies[settings.ADMIN_SESSION_COOKIE_NAME]["domain"] == ""
+
+
+@override_settings(SESSION_COOKIE_DOMAIN=".zeus.cais.uno")
+def test_app_session_cookie_keeps_shared_domain():
+    """La sessione app resta Domain-condivisa finche' il login avviene sul
+    public host (fase 1): il fix host-only riguarda solo la zona admin."""
+    _create_app_user()
+    client = Client()
+
+    response = client.post("/accounts/login/", {"login": "app@x.it", "password": "pw"})
+
+    assert response.status_code == 302
+    assert (
+        client.cookies[settings.SESSION_COOKIE_NAME]["domain"]
+        == ".zeus.cais.uno"
+    )
+
+
 @override_settings(ROOT_URLCONF="config.urls")
 def test_logout_clears_both_session_cookies():
     user = _create_app_user()

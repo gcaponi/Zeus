@@ -17,7 +17,11 @@ ZEUS_APP_SHELL_ENABLED = os.environ.get("ZEUS_APP_SHELL_ENABLED", "").lower() in
 # separa le sessioni admin (public schema) da quelle app (tenant schema),
 # che altrimenti si invaliderebbero a vicenda (rotazione chiave + utente di
 # schema diverso) con logout a cascata. Usato da TenantAwareSessionMiddleware.
-ADMIN_SESSION_COOKIE_NAME = "admin_sessionid"
+# Cookie di sessione dedicato alla zona admin (vedi TenantAwareSessionMiddleware).
+# Rinominato (era "admin_sessionid") in occasione del passaggio a cookie
+# host-only: il vecchio cookie con Domain=.zeus.cais.uno resta orfano nei
+# browser e non viene piu' letto, niente collisioni nome/dominio.
+ADMIN_SESSION_COOKIE_NAME = "zeus_admin_sessionid"
 
 SHARED_APPS = [
     "django_tenants",

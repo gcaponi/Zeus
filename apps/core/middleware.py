@@ -192,6 +192,19 @@ def _session_cookie_name(request):
     return settings.SESSION_COOKIE_NAME
 
 
+def _session_cookie_domain(request):
+    """Dominio del cookie di sessione: la zona admin e' HOST-ONLY.
+
+    Con un Domain condiviso (.zeus.cais.uno) il browser invierebbe il cookie
+    admin a OGNI tenant sibling: un tenant ostile potrebbe catturare la
+    sessione del control-plane. Nessun attributo Domain = il browser lo
+    limita all'host che lo ha emesso (Codex Security finding 1).
+    """
+    if request.path.startswith(ADMIN_SESSION_PATHS):
+        return None
+    return settings.SESSION_COOKIE_DOMAIN
+
+
 class TenantAwareSessionMiddleware(SessionMiddleware):
     """SessionMiddleware con cookie di sessione separato per la zona admin.
 
@@ -216,7 +229,7 @@ class TenantAwareSessionMiddleware(SessionMiddleware):
             response.delete_cookie(
                 cookie_name,
                 path=settings.SESSION_COOKIE_PATH,
-                domain=settings.SESSION_COOKIE_DOMAIN,
+                domain=_session_cookie_domain(request),
                 samesite=settings.SESSION_COOKIE_SAMESITE,
             )
             patch_vary_headers(response, ("Cookie",))
@@ -247,7 +260,7 @@ class TenantAwareSessionMiddleware(SessionMiddleware):
                         request.session.session_key,
                         max_age=max_age,
                         expires=expires,
-                        domain=settings.SESSION_COOKIE_DOMAIN,
+                        domain=_session_cookie_domain(request),
                         path=settings.SESSION_COOKIE_PATH,
                         secure=settings.SESSION_COOKIE_SECURE or None,
                         httponly=settings.SESSION_COOKIE_HTTPONLY or None,

@@ -174,6 +174,8 @@ def public_logout(request):
     response = redirect("https://zeus.cais.uno/accounts/login/")
     # Svuota entrambi i cookie di sessione: la zona admin usa un cookie
     # separato (ADMIN_SESSION_COOKIE_NAME) gestito da TenantAwareSessionMiddleware.
-    for cookie_name in (settings.SESSION_COOKIE_NAME, settings.ADMIN_SESSION_COOKIE_NAME):
-        response.delete_cookie(cookie_name, domain=settings.SESSION_COOKIE_DOMAIN)
+    # Il cookie app ha Domain condiviso, quello admin e' host-only: vanno
+    # cancellati ciascuno con il proprio dominio o il browser li ignora.
+    response.delete_cookie(settings.SESSION_COOKIE_NAME, domain=settings.SESSION_COOKIE_DOMAIN)
+    response.delete_cookie(settings.ADMIN_SESSION_COOKIE_NAME)
     return _clear_workspace_cookie(response)

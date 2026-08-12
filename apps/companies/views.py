@@ -2641,6 +2641,8 @@ def onboarding_file_upload(request):
     return _company_files_response(request, company)
 
 
+@login_required
+@require_http_methods(["POST"])
 def onboarding_file_delete(request, pk):
     company = _tenant_company(request)
     if not company:
