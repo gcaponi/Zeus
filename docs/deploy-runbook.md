@@ -97,7 +97,7 @@ export DJANGO_SETTINGS_MODULE=config.settings.prod
 systemctl restart zeus zeus-celery
 systemctl is-active zeus zeus-celery
 .venv/bin/celery -A config inspect registered --timeout=10 | grep -E 'generate_company_questions_task|process_company_gap_round_task'
-curl -fsS -H 'Host: zeus.cais.uno' http://127.0.0.1:8000/health/
+curl -fsS -H 'Host: zeus.cais.uno' http://127.0.0.1:8002/health/
 curl -fsS https://zeus.cais.uno/health/
 ```
 

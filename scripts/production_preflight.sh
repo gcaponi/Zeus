@@ -49,7 +49,7 @@ else
     printf 'app_shell_flag=missing-default-disabled\n'
 fi
 
-local_health="$(curl -fsS -H 'Host: zeus.cais.uno' http://127.0.0.1:8000/health/)"
+local_health="$(curl -fsS -H 'Host: zeus.cais.uno' http://127.0.0.1:8002/health/)"
 public_health="$(curl -fsS https://zeus.cais.uno/health/)"
 expected_health='{"status": "ok"}'
 if [[ "$local_health" != "$expected_health" ]]; then
