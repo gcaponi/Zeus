@@ -1,10 +1,14 @@
+from datetime import timedelta
+
 import pytest
+from django.utils import timezone
 
 from apps.companies.models import Company, PaidOperation
 from apps.companies.operations import (
     OperationRejectedError,
     claim_operation,
     complete_operation,
+    fail_operation,
     operation_key,
     reserve_operation,
 )
@@ -113,3 +117,141 @@ def test_worker_claim_rechecks_suspended_subscription(paid_company):
     operation.refresh_from_db()
     assert operation.status == PaidOperation.STATUS_REJECTED
     assert operation.error_code == "workspace_suspended"
+
+
+def test_failed_operation_can_retry_with_the_same_immutable_payload(paid_company):
+    payload = {"product_id": 7, "source_files": [[3, 128]]}
+    operation, _ = reserve_operation(
+        paid_company,
+        "product_generate",
+        operation_key("product", 7, payload["source_files"]),
+        payload=payload,
+        resource_key="product-generate:7",
+    )
+    claim_operation(operation.pk, "product_generate")
+    fail_operation(operation.pk, "temporary_failure")
+
+    retried, created = reserve_operation(
+        paid_company,
+        "product_generate",
+        operation.idempotency_key,
+        payload=payload,
+        resource_key="product-generate:7",
+    )
+
+    retried.refresh_from_db()
+    assert created is True
+    assert retried.pk == operation.pk
+    assert retried.status == PaidOperation.STATUS_QUEUED
+    assert retried.payload == payload
+    assert retried.error_code == ""
+    assert retried.started_at is None
+    assert retried.finished_at is None
+
+
+def test_retry_counts_the_reservation_once_against_daily_budget(
+    paid_company,
+    settings,
+):
+    settings.PAID_OPERATION_DAILY_UNIT_LIMITS = {Plan.SLUG_STARTER: 2}
+    payload = {"source_id": 1}
+    operation, _ = reserve_operation(
+        paid_company,
+        "source_scrape",
+        operation_key("source", 1),
+        payload=payload,
+    )
+    claim_operation(operation.pk, "source_scrape")
+    fail_operation(operation.pk, "temporary_failure")
+
+    retried, created = reserve_operation(
+        paid_company,
+        "source_scrape",
+        operation.idempotency_key,
+        payload=payload,
+    )
+
+    assert created is True
+    assert retried.pk == operation.pk
+
+
+def test_retry_never_overwrites_the_immutable_payload(paid_company):
+    operation, _ = reserve_operation(
+        paid_company,
+        "source_scrape",
+        operation_key("source", 1),
+        payload={"source_id": 1, "url": "https://original.example"},
+        resource_key="source-scrape:1",
+    )
+    claim_operation(operation.pk, "source_scrape")
+    fail_operation(operation.pk, "temporary_failure")
+
+    existing, created = reserve_operation(
+        paid_company,
+        "source_scrape",
+        operation.idempotency_key,
+        payload={"source_id": 1, "url": "https://changed.example"},
+        resource_key="source-scrape:1",
+    )
+
+    existing.refresh_from_db()
+    assert created is False
+    assert existing.status == PaidOperation.STATUS_FAILED
+    assert existing.payload["url"] == "https://original.example"
+
+
+def test_stale_duplicate_is_requeued_instead_of_blocking_forever(
+    paid_company,
+    settings,
+):
+    settings.PAID_OPERATION_STALE_SECONDS = 60
+    payload = {"source_id": 1, "url": "https://example.com"}
+    operation, _ = reserve_operation(
+        paid_company,
+        "source_scrape",
+        operation_key("source", 1),
+        payload=payload,
+        resource_key="source-scrape:1",
+    )
+    stale_created_at = timezone.now() - timedelta(minutes=5)
+    PaidOperation.objects.filter(pk=operation.pk).update(created_at=stale_created_at)
+
+    retried, created = reserve_operation(
+        paid_company,
+        "source_scrape",
+        operation.idempotency_key,
+        payload=payload,
+        resource_key="source-scrape:1",
+    )
+
+    retried.refresh_from_db()
+    assert created is True
+    assert retried.pk == operation.pk
+    assert retried.status == PaidOperation.STATUS_QUEUED
+    assert retried.created_at > stale_created_at
+
+
+def test_stale_resource_lock_does_not_block_a_new_operation(paid_company, settings):
+    settings.PAID_OPERATION_STALE_SECONDS = 60
+    stale, _ = reserve_operation(
+        paid_company,
+        "consistency_audit",
+        operation_key("audit", "old"),
+        resource_key="company-dna:1",
+    )
+    PaidOperation.objects.filter(pk=stale.pk).update(
+        created_at=timezone.now() - timedelta(minutes=5)
+    )
+
+    fresh, created = reserve_operation(
+        paid_company,
+        "specialist_feedback_apply",
+        operation_key("feedback", "new"),
+        resource_key="company-dna:1",
+    )
+
+    stale.refresh_from_db()
+    assert created is True
+    assert fresh.pk != stale.pk
+    assert stale.status == PaidOperation.STATUS_FAILED
+    assert stale.error_code == "stale_operation"

@@ -2264,6 +2264,7 @@ def _complete_generation_progress_context(source_dna):
         "current_step_num": step_num,
         "step_label": step_label,
         "progress_pct": min(int(step_num / steps_total * 100), 95),
+        "flow": state.get("flow", ""),
     }
 
 
@@ -2551,10 +2552,35 @@ def onboarding_source_create(request):
         source=source,
         status=PipelineRun.STATUS_PENDING,
     )
+    try:
+        operation, _ = reserve_operation(
+            company,
+            "company_pipeline",
+            operation_key("company_pipeline", run.id),
+            payload={
+                "pipeline_run_id": run.id,
+                "company_id": company.pk,
+                "source_id": source.id,
+            },
+            resource_key=f"pipeline-run:{run.id}",
+            requested_by=request.user,
+        )
+    except OperationRejectedError as exc:
+        run.delete()
+        source.delete()
+        return _source_form_response(
+            _source_form_context(
+                company,
+                error=exc.rejection.detail,
+                review_mode=has_existing_dna,
+            ),
+            status=exc.rejection.status_code,
+        )
     tenant_schema = getattr(request, "tenant", None)
     run_pipeline.delay(
         run.id,
         tenant_schema=tenant_schema.schema_name if tenant_schema else None,
+        operation_id=operation.pk,
     )
     run.refresh_from_db()
     source.refresh_from_db()
@@ -2838,10 +2864,24 @@ def source_list_create(request):
         status=Source.STATUS_PENDING,
     )
 
+    try:
+        operation, _ = reserve_operation(
+            company,
+            "source_scrape",
+            operation_key("source_scrape", source.id),
+            payload={"source_id": source.id, "url": source.url},
+            resource_key=f"source-scrape:{source.id}",
+            requested_by=request.user,
+        )
+    except OperationRejectedError as exc:
+        source.delete()
+        return _operation_rejection_response(exc, json_response=True)
+
     tenant_schema = getattr(request, "tenant", None)
     scrape_source.delay(
         source.id,
         tenant_schema=tenant_schema.schema_name if tenant_schema else None,
+        operation_id=operation.pk,
     )
 
     return JsonResponse({
@@ -2896,7 +2936,44 @@ def dna_generate(request):
     if source.status != Source.STATUS_SCRAPED or not source.scraped_data:
         return JsonResponse({"error": "source not scraped yet"}, status=400)
 
-    dna, llm_call = _generate_dna(source, company)
+    try:
+        operation, created = reserve_operation(
+            company,
+            "company_dna_generate",
+            operation_key(
+                "company_dna_generate",
+                company.pk,
+                source.pk,
+                source.updated_at.isoformat(),
+            ),
+            payload={"company_id": company.pk, "source_id": source.pk},
+            resource_key=f"company-dna:{company.pk}",
+            requested_by=request.user,
+        )
+    except OperationRejectedError as exc:
+        return _operation_rejection_response(exc, json_response=True)
+    if not created:
+        return _duplicate_operation_response(operation)
+    if claim_operation(operation.pk, "company_dna_generate") is None:
+        return JsonResponse(
+            {"error": "operation_not_claimable", "operation_id": operation.pk},
+            status=409,
+        )
+
+    try:
+        dna, llm_call = _generate_dna(source, company)
+    except Exception as exc:
+        fail_operation(operation.pk, exc.__class__.__name__)
+        return JsonResponse(
+            {"error": "dna_generation_failed", "detail": "Generazione DNA non riuscita."},
+            status=502,
+        )
+
+    complete_operation(
+        operation.pk,
+        result={"dna_id": dna.id, "version": dna.version, "llm_call_id": llm_call.id},
+        actual_cost_usd=llm_call.cost_usd,
+    )
 
     return JsonResponse({
         "dna_id": dna.id,
@@ -2938,10 +3015,28 @@ def pipeline_run_create(request):
         source=source,
         status=PipelineRun.STATUS_PENDING,
     )
+    try:
+        operation, _ = reserve_operation(
+            company,
+            "company_pipeline",
+            operation_key("company_pipeline", run.id),
+            payload={
+                "pipeline_run_id": run.id,
+                "company_id": company.pk,
+                "source_id": source.id,
+            },
+            resource_key=f"pipeline-run:{run.id}",
+            requested_by=request.user,
+        )
+    except OperationRejectedError as exc:
+        run.delete()
+        return _operation_rejection_response(exc, json_response=True)
+
     tenant_schema = getattr(request, "tenant", None)
     run_pipeline.delay(
         run.id,
         tenant_schema=tenant_schema.schema_name if tenant_schema else None,
+        operation_id=operation.pk,
     )
 
     return JsonResponse({
@@ -3155,10 +3250,16 @@ def dna_gap_questions(request, round_number):
 
     limits = _gap_engine_limits(_plan_slug_for_company(company))
     expected_round = _latest_unanswered_company_round(pre_dna, after_round=1)
+    processing_state = _company_async_processing_state(pre_dna)
+    retrying_failed_round = (
+        processing_state.get("operation") == "gap"
+        and processing_state.get("round") == round_number
+        and processing_state.get("status") == "failed"
+    )
     if (
         round_number < 2
         or round_number > limits["max_rounds"] + 1
-        or expected_round != round_number
+        or (expected_round != round_number and not retrying_failed_round)
     ):
         return HttpResponse("Round di approfondimento non corrente", status=409)
 
@@ -3273,6 +3374,11 @@ def dna_processing(request, operation, round_number):
         "round_number": round_number,
         "state": state,
         "step": 2,
+        "retry_url": (
+            reverse("dna-gap-questions", args=[round_number])
+            if operation == "gap"
+            else reverse("dna-questions")
+        ),
         **progress_context,
     })
 
@@ -3289,6 +3395,17 @@ def dna_generating(request):
     ).first()
     min_complete_version = _pending_complete_min_version(request)
     source_dna = _pending_complete_source_dna(request)
+    return_product = _specialist_feedback_return_product(request, company)
+    retry_url = reverse("onboarding-index")
+    if return_product:
+        retry_url = reverse("specialista-dna-feedback", args=[return_product.pk])
+    elif source_dna:
+        async_state = _company_async_processing_state(source_dna)
+        if async_state.get("operation") == "gap" and async_state.get("round"):
+            retry_url = reverse(
+                "dna-gap-questions",
+                args=[async_state["round"]],
+            )
     poll_seconds = getattr(settings, "DNA_GENERATION_POLL_SECONDS", 4)
     if min_complete_version:
         complete_dna = company.dna_versions.filter(
@@ -3306,6 +3423,7 @@ def dna_generating(request):
             **_complete_generation_progress_context(source_dna),
             "review_url": reverse("dna-review"),
             "back_url": reverse("onboarding-index"),
+            "retry_url": retry_url,
             "poll_seconds": poll_seconds,
         })
     if complete_dna:
@@ -3320,6 +3438,7 @@ def dna_generating(request):
         **_complete_generation_progress_context(source_dna),
         "review_url": reverse("dna-review"),
         "back_url": reverse("onboarding-index"),
+        "retry_url": retry_url,
         "poll_seconds": poll_seconds,
     })
 
@@ -3534,14 +3653,22 @@ def _consistency_periodic_threshold(company):
     }.get(plan_slug, 3)
 
 
-def _dispatch_specialist_consistency_audit(request, company, product):
+def _dispatch_consistency_audit(request, company, *, scope, product=None, trigger=""):
+    """Reserve a PaidOperation and queue the consistency audit task.
+
+    Ritorna True se l'audit è stato accodato, False se i prerequisiti mancano
+    o se un'operazione equivalente/attiva esiste già. Solleva
+    OperationRejectedError quando i limiti piano bloccano l'operazione: i
+    chiamanti manuali la convertono in risposta HTTP, quelli automatici la
+    ignorano (l'azione principale non deve fallire).
+    """
     company_dna = company.dna_versions.filter(
         dna_type=DNAGenerale.TYPE_COMPLETE,
         is_current=True,
     ).first()
     if not company_dna:
         return False
-    if not product.dna_versions.filter(
+    if product is not None and not product.dna_versions.filter(
         dna_type=ProductDNA.TYPE_COMPLETE,
         is_current=True,
     ).exists():
@@ -3549,18 +3676,54 @@ def _dispatch_specialist_consistency_audit(request, company, product):
 
     from apps.companies.tasks import run_consistency_audit
 
-    _mark_consistency_audit_pending(company_dna, ConsistencyIssue.SCOPE_SPECIALIST, product)
-    tenant = getattr(request, "tenant", None)
     profile = _consistency_audit_profile(company)
-    run_consistency_audit.delay(
-        company.pk,
-        scope=ConsistencyIssue.SCOPE_SPECIALIST,
-        product_id=product.pk,
-        tenant_schema=tenant.schema_name if tenant else None,
-        max_issues=profile["max_issues"],
-        depth_instruction=profile["depth_instruction"],
+    operation, created = reserve_operation(
+        company,
+        "consistency_audit",
+        operation_key(
+            "consistency_audit",
+            scope,
+            company_dna.pk,
+            company_dna.version,
+            product.pk if product else None,
+            trigger or timezone.now().isoformat(),
+        ),
+        payload={
+            "company_id": company.pk,
+            "scope": scope,
+            "product_id": product.pk if product else None,
+            "company_dna_id": company_dna.pk,
+            "company_dna_version": company_dna.version,
+        },
+        resource_key=f"company-dna:{company.pk}",
+        requested_by=request.user if request is not None else None,
     )
+    if not created:
+        return False
+
+    _mark_consistency_audit_pending(company_dna, scope, product)
+    tenant = getattr(request, "tenant", None) if request is not None else None
+    task_kwargs = {
+        "scope": scope,
+        "tenant_schema": tenant.schema_name if tenant else None,
+        "max_issues": profile["max_issues"],
+        "depth_instruction": profile["depth_instruction"],
+        "operation_id": operation.pk,
+    }
+    if product is not None:
+        task_kwargs["product_id"] = product.pk
+    run_consistency_audit.delay(company.pk, **task_kwargs)
     return True
+
+
+def _dispatch_specialist_consistency_audit(request, company, product, trigger=""):
+    return _dispatch_consistency_audit(
+        request,
+        company,
+        scope=ConsistencyIssue.SCOPE_SPECIALIST,
+        product=product,
+        trigger=trigger,
+    )
 
 
 def _maybe_trigger_product_upload_consistency_audit(request, company, product):
@@ -3569,10 +3732,16 @@ def _maybe_trigger_product_upload_consistency_audit(request, company, product):
     product.status = Specialista.STATUS_UPDATING
     product.save(update_fields=["status"])
     try:
-        return _dispatch_specialist_consistency_audit(request, company, product)
+        dispatched = _dispatch_specialist_consistency_audit(request, company, product)
     except Exception:
         logger.exception("T2 consistency audit dispatch failed for product %s", product.pk)
-        return False
+        dispatched = False
+    if not dispatched:
+        # Nessun audit in coda (limiti piano, duplicato o prerequisiti mancanti):
+        # il prodotto non deve restare bloccato in updating.
+        product.status = Specialista.STATUS_ATTIVO
+        product.save(update_fields=["status"])
+    return dispatched
 
 
 def _normalize_cross_specialist_analysis(raw, company_dna, records):
@@ -4038,18 +4207,15 @@ def consistency_audit_run(request):
     company_dna = company.dna_versions.filter(dna_type=DNAGenerale.TYPE_COMPLETE, is_current=True).first()
     if not company_dna:
         return HttpResponse("DNA Generale non trovato", status=404)
-    from apps.companies.tasks import run_consistency_audit
 
-    _mark_consistency_audit_pending(company_dna, ConsistencyIssue.SCOPE_PERIODIC)
-    tenant = getattr(request, "tenant", None)
-    profile = _consistency_audit_profile(company)
-    run_consistency_audit.delay(
-        company.pk,
-        scope=ConsistencyIssue.SCOPE_PERIODIC,
-        tenant_schema=tenant.schema_name if tenant else None,
-        max_issues=profile["max_issues"],
-        depth_instruction=profile["depth_instruction"],
-    )
+    try:
+        _dispatch_consistency_audit(
+            request,
+            company,
+            scope=ConsistencyIssue.SCOPE_PERIODIC,
+        )
+    except OperationRejectedError as exc:
+        return _operation_rejection_response(exc)
     return redirect("consistency-report")
 
 
@@ -4084,7 +4250,13 @@ def product_consistency_check(request, pk):
         return HttpResponse("Prodotto non trovato", status=404)
     if not product.dna_versions.filter(dna_type=ProductDNA.TYPE_COMPLETE, is_current=True).exists():
         return HttpResponse("DNA specialista non trovato", status=404)
-    if not _dispatch_specialist_consistency_audit(request, company, product):
+    try:
+        dispatched = _dispatch_specialist_consistency_audit(request, company, product)
+    except OperationRejectedError as exc:
+        return _operation_rejection_response(exc)
+    if not dispatched and not company.dna_versions.filter(
+        dna_type=DNAGenerale.TYPE_COMPLETE, is_current=True,
+    ).exists():
         return HttpResponse("DNA Generale non trovato", status=404)
     return redirect("consistency-report")
 
@@ -5412,10 +5584,15 @@ def product_gap_questions(request, pk, round_number):
 
     limits = _gap_engine_product_limits(_plan_slug_for_company(company))
     expected_round = _latest_unanswered_product_round(pre_dna, after_round=1)
+    processing_state = _product_gap_processing_state(pre_dna)
+    retrying_failed_round = (
+        processing_state.get("round") == round_number
+        and processing_state.get("status") == "failed"
+    )
     if (
         round_number < 2
         or round_number > limits["max_rounds"] + 1
-        or expected_round != round_number
+        or (expected_round != round_number and not retrying_failed_round)
     ):
         return HttpResponse("Round di approfondimento non corrente", status=409)
 
@@ -5527,6 +5704,10 @@ def product_gap_processing(request, pk, round_number):
         "product_step": 2,
         "task_status": "failed" if state.get("status") == "failed" else "running",
         "task_error": state.get("error"),
+        "retry_url": reverse(
+            "specialista-gap-questions",
+            args=[product.pk, round_number],
+        ),
         **progress_context,
     })
 
@@ -5588,23 +5769,18 @@ def product_promote(request, pk):
     active_count = company.products.filter(status=Specialista.STATUS_ATTIVO).count()
     threshold = _consistency_periodic_threshold(company)
     if active_count and active_count % threshold == 0:
-        from apps.companies.tasks import run_consistency_audit
-
-        company_dna = company.dna_versions.filter(
-            dna_type=DNAGenerale.TYPE_COMPLETE,
-            is_current=True,
-        ).first()
-        if company_dna:
-            _mark_consistency_audit_pending(company_dna, ConsistencyIssue.SCOPE_PERIODIC)
-        tenant = getattr(request, "tenant", None)
-        profile = _consistency_audit_profile(company)
-        run_consistency_audit.delay(
-            company.pk,
-            scope=ConsistencyIssue.SCOPE_PERIODIC,
-            tenant_schema=tenant.schema_name if tenant else None,
-            max_issues=profile["max_issues"],
-            depth_instruction=profile["depth_instruction"],
-        )
+        try:
+            _dispatch_consistency_audit(
+                request,
+                company,
+                scope=ConsistencyIssue.SCOPE_PERIODIC,
+                trigger=f"promote:{product.pk}:{active_count}",
+            )
+        except OperationRejectedError:
+            logger.info(
+                "Periodic consistency audit skipped for company %s: plan limits",
+                company.pk,
+            )
     return redirect("specialista-detail", pk=product.pk)
 
 
@@ -6299,6 +6475,30 @@ def product_dna_feedback(request, pk):
 
     # Explicit POST: dispatch the Celery task and mark the slot as pending.
     from apps.companies.tasks import generate_specialist_feedback_task
+    try:
+        operation, created = reserve_operation(
+            company,
+            "specialist_feedback_generate",
+            operation_key(
+                "specialist_feedback_generate",
+                specialist_dna.pk,
+                timezone.now().isoformat(),
+            ),
+            payload={
+                "company_id": company.pk,
+                "product_id": product.pk,
+                "specialist_dna_id": specialist_dna.pk,
+                "company_dna_id": company_dna.pk,
+            },
+            resource_key=f"specialist-feedback:{specialist_dna.pk}",
+            requested_by=request.user,
+        )
+    except OperationRejectedError as exc:
+        return _operation_rejection_response(exc)
+    if not created:
+        return redirect(
+            f"{reverse('specialista-dna-feedback', args=[product.pk])}?generating=1"
+        )
     content = dict(specialist_dna.content) if isinstance(specialist_dna.content, dict) else {}
     content["_feedback_proposals"] = None
     content["_feedback_generation"] = {
@@ -6314,6 +6514,7 @@ def product_dna_feedback(request, pk):
     generate_specialist_feedback_task.delay(
         product.id, specialist_dna.id, company_dna.id,
         tenant_schema=tenant_schema.schema_name if tenant_schema else None,
+        operation_id=operation.pk,
     )
     return redirect(
         f"{reverse('specialista-dna-feedback', args=[product.pk])}?generating=1"
@@ -6365,14 +6566,36 @@ def product_dna_feedback_apply(request, pk):
     if not selected_proposals:
         return redirect("specialista-dna-feedback", pk=product.pk)
 
-    content = dict(company_dna.content) if isinstance(company_dna.content, dict) else {}
-    content["_pending_specialist_feedback"] = {
-        "product_id": product.pk,
-        "specialist_dna_id": specialist_dna.pk,
-        "selected_proposals": selected_proposals,
-    }
-    company_dna.content = content
-    company_dna.save(update_fields=["content"])
+    try:
+        operation, created = reserve_operation(
+            company,
+            "specialist_feedback_apply",
+            operation_key(
+                "specialist_feedback_apply",
+                company_dna.pk,
+                company_dna.version,
+                specialist_dna.pk,
+                selected_proposals,
+            ),
+            payload={
+                "company_id": company.pk,
+                "company_dna_id": company_dna.pk,
+                "company_dna_version": company_dna.version,
+                "company_dna_hash": company_dna.audit_hash or "",
+                "product_id": product.pk,
+                "specialist_dna_id": specialist_dna.pk,
+                "specialist_dna_version": specialist_dna.version,
+                "selected_proposals": selected_proposals,
+            },
+            resource_key=f"company-dna:{company.pk}",
+            requested_by=request.user,
+        )
+    except OperationRejectedError as exc:
+        return _operation_rejection_response(exc)
+    if not created:
+        if operation.status in PaidOperation.ACTIVE_STATUSES:
+            return redirect("dna-generating")
+        return redirect("specialista-dna-feedback", pk=product.pk)
 
     last_version = company.dna_versions.order_by("-version").first()
     expected_version = (last_version.version + 1) if last_version else 1
@@ -6399,6 +6622,7 @@ def product_dna_feedback_apply(request, pk):
         company.pk,
         company_dna.pk,
         tenant_schema=tenant_schema.schema_name if tenant_schema else None,
+        operation_id=operation.pk,
     )
 
     # Clean up legacy session proposals and the processed proposal slot. A new

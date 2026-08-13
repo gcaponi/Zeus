@@ -100,26 +100,14 @@ def reserve_operation(
     units = units or OPERATION_UNITS[kind]
     now = timezone.now()
     stale_before = now - timedelta(seconds=settings.PAID_OPERATION_STALE_SECONDS)
+    immutable_payload = payload or {}
 
     with transaction.atomic():
         locked_company = Company.objects.select_for_update().get(pk=company.pk)
-        existing = PaidOperation.objects.filter(
-            company=locked_company,
-            kind=kind,
-            idempotency_key=idempotency_key,
-        ).first()
-        if existing:
-            return existing, False
 
-        if resource_key:
-            active_resource = PaidOperation.objects.filter(
-                company=locked_company,
-                resource_key=resource_key,
-                status__in=PaidOperation.ACTIVE_STATUSES,
-            ).first()
-            if active_resource:
-                return active_resource, False
-
+        # Expire abandoned reservations before checking either the exact
+        # idempotency key or the protected resource. Otherwise a stale row can
+        # keep returning as an active duplicate forever.
         PaidOperation.objects.filter(
             company=locked_company,
             status__in=PaidOperation.ACTIVE_STATUSES,
@@ -129,6 +117,39 @@ def reserve_operation(
             error_code="stale_operation",
             finished_at=now,
         )
+
+        existing = PaidOperation.objects.filter(
+            company=locked_company,
+            kind=kind,
+            idempotency_key=idempotency_key,
+        ).first()
+        retry_operation = None
+        if existing and existing.status in (
+            PaidOperation.STATUS_FAILED,
+            PaidOperation.STATUS_REJECTED,
+        ):
+            # The row may be reused only for the exact immutable request that
+            # originally reserved it. A colliding key must never replace its
+            # payload or accounting metadata.
+            if (
+                existing.payload == immutable_payload
+                and existing.resource_key == resource_key
+                and existing.reserved_units == units
+            ):
+                retry_operation = existing
+            else:
+                return existing, False
+        elif existing:
+            return existing, False
+
+        if resource_key:
+            active_resource = PaidOperation.objects.filter(
+                company=locked_company,
+                resource_key=resource_key,
+                status__in=PaidOperation.ACTIVE_STATUSES,
+            ).exclude(pk=getattr(retry_operation, "pk", None)).first()
+            if active_resource:
+                return active_resource, False
 
         daily_limit, concurrency_limit = _limits(locked_company)
         active = PaidOperation.objects.filter(
@@ -145,10 +166,13 @@ def reserve_operation(
             )
 
         since = now - timedelta(hours=24)
-        used = PaidOperation.objects.filter(
+        billed_operations = PaidOperation.objects.filter(
             company=locked_company,
             created_at__gte=since,
-        ).aggregate(total=Sum("reserved_units"))["total"] or 0
+        )
+        if retry_operation is not None:
+            billed_operations = billed_operations.exclude(pk=retry_operation.pk)
+        used = billed_operations.aggregate(total=Sum("reserved_units"))["total"] or 0
         if used + units > daily_limit:
             raise OperationRejectedError(
                 OperationRejection(
@@ -158,15 +182,28 @@ def reserve_operation(
                 )
             )
 
-        operation = PaidOperation.objects.create(
-            company=locked_company,
-            kind=kind,
-            idempotency_key=idempotency_key,
-            resource_key=resource_key,
-            payload=payload or {},
-            reserved_units=units,
-            requested_by=requested_by,
-        )
+        if retry_operation is not None:
+            PaidOperation.objects.filter(pk=retry_operation.pk).update(
+                status=PaidOperation.STATUS_QUEUED,
+                result={},
+                actual_cost_usd=0,
+                error_code="",
+                created_at=now,
+                started_at=None,
+                finished_at=None,
+            )
+            retry_operation.refresh_from_db()
+            operation = retry_operation
+        else:
+            operation = PaidOperation.objects.create(
+                company=locked_company,
+                kind=kind,
+                idempotency_key=idempotency_key,
+                resource_key=resource_key,
+                payload=immutable_payload,
+                reserved_units=units,
+                requested_by=requested_by,
+            )
     return operation, True
 
 

@@ -27,6 +27,7 @@ from apps.companies.models import (
     DNAGenerale,
     ConsistencyIssue,
     LLMCall,
+    PaidOperation,
     PipelineRun,
     Specialista,
     ProductDNA,
@@ -72,6 +73,201 @@ def _set_product_generation_progress(product_id, step_num, steps_total, label):
         generation_step=f"{step_num}/{steps_total}: {label}",
         updated_at=timezone.now(),
     )
+
+
+def _cleanup_suspended_operation(operation_id, expected_kind):
+    """Move pre-dispatch UI state to a recoverable failure state.
+
+    Views persist progress before queueing so polling starts immediately. If an
+    administrator suspends the workspace before the worker claims the task,
+    ``claim_operation`` rejects the paid work. Compensate those earlier writes
+    so reactivation does not leave the workspace stuck in a loading state.
+    """
+    if operation_id is None:
+        return False
+    operation = (
+        PaidOperation.objects.select_related("company")
+        .filter(
+            pk=operation_id,
+            kind=expected_kind,
+            status=PaidOperation.STATUS_REJECTED,
+            error_code="workspace_suspended",
+        )
+        .first()
+    )
+    if operation is None:
+        return False
+
+    payload = operation.payload if isinstance(operation.payload, dict) else {}
+    error = "Workspace suspended before the operation started."
+
+    if expected_kind == "source_scrape":
+        Source.objects.filter(
+            pk=payload.get("source_id"),
+            company=operation.company,
+            status__in=[Source.STATUS_PENDING, Source.STATUS_SCRAPING],
+        ).update(status=Source.STATUS_FAILED, error_msg=error)
+    elif expected_kind == "company_pipeline":
+        PipelineRun.objects.filter(
+            pk=payload.get("pipeline_run_id"),
+            company=operation.company,
+            status__in=[PipelineRun.STATUS_PENDING, PipelineRun.STATUS_RUNNING],
+        ).update(status=PipelineRun.STATUS_FAILED, error_msg=error)
+    elif expected_kind == "product_generate":
+        product = Specialista.objects.filter(
+            pk=payload.get("product_id"),
+            company=operation.company,
+        ).first()
+        if product and product.status == Specialista.STATUS_IN_COSTRUZIONE:
+            valid_statuses = {choice[0] for choice in Specialista.STATUS_CHOICES}
+            restored_status = payload.get("source_status")
+            if restored_status not in valid_statuses:
+                restored_status = (
+                    Specialista.STATUS_UPDATING
+                    if product.dna_versions.exists()
+                    else Specialista.STATUS_BOZZA
+                )
+            product.status = restored_status
+            product.generation_step = "Generation paused: workspace suspended"
+            product.save(update_fields=["status", "generation_step", "updated_at"])
+    elif expected_kind == "company_gap":
+        pre_dna = DNAGenerale.objects.filter(
+            pk=payload.get("pre_dna_id"),
+            company=operation.company,
+        ).first()
+        if pre_dna:
+            from apps.companies.views import (
+                _set_company_async_processing,
+                _set_company_generation_progress,
+            )
+
+            _set_company_async_processing(
+                pre_dna,
+                operation="gap",
+                round=payload.get("round"),
+                status="failed",
+                error=error,
+            )
+            if (operation.result or {}).get("stage") == "company_complete_dna":
+                _set_company_generation_progress(
+                    pre_dna,
+                    1,
+                    4,
+                    "Generation paused",
+                    status="failed",
+                    error=error,
+                )
+    elif expected_kind == "product_gap":
+        product = Specialista.objects.filter(
+            pk=payload.get("product_id"),
+            company=operation.company,
+        ).first()
+        pre_dna = (
+            ProductDNA.objects.filter(pk=payload.get("pre_dna_id"), product=product).first()
+            if product
+            else None
+        )
+        if pre_dna:
+            from apps.companies.views import _set_product_gap_processing
+
+            _set_product_gap_processing(
+                pre_dna,
+                round=payload.get("round"),
+                status="failed",
+                error=error,
+            )
+    elif expected_kind == "specialist_feedback_generate":
+        product = Specialista.objects.filter(
+            pk=payload.get("product_id"),
+            company=operation.company,
+        ).first()
+        specialist_dna = (
+            ProductDNA.objects.filter(
+                pk=payload.get("specialist_dna_id"),
+                product=product,
+            ).first()
+            if product
+            else None
+        )
+        if specialist_dna:
+            content = dict(specialist_dna.content or {})
+            if content.get("_feedback_proposals") is None:
+                content.pop("_feedback_proposals", None)
+            content["_feedback_generation"] = {
+                "status": "failed",
+                "step_num": 1,
+                "steps_total": 4,
+                "step_label": "Analysis paused",
+                "error": error,
+                "updated_at": timezone.now().isoformat(),
+            }
+            specialist_dna.content = content
+            specialist_dna.save(update_fields=["content"])
+    elif expected_kind == "specialist_feedback_apply":
+        product = Specialista.objects.filter(
+            pk=payload.get("product_id"),
+            company=operation.company,
+        ).first()
+        specialist_dna = (
+            ProductDNA.objects.filter(
+                pk=payload.get("specialist_dna_id"),
+                product=product,
+            ).first()
+            if product
+            else None
+        )
+        if specialist_dna:
+            content = dict(specialist_dna.content or {})
+            content["_feedback_proposals"] = payload.get("selected_proposals") or []
+            specialist_dna.content = content
+            specialist_dna.save(update_fields=["content"])
+        company_dna = DNAGenerale.objects.filter(
+            pk=payload.get("company_dna_id"),
+            company=operation.company,
+        ).first()
+        if company_dna:
+            from apps.companies.views import _set_company_generation_progress
+
+            _set_company_generation_progress(
+                company_dna,
+                1,
+                4,
+                "Feedback paused",
+                status="failed",
+                error=error,
+                flow="specialist_feedback",
+                product_id=payload.get("product_id"),
+            )
+    elif expected_kind == "consistency_audit":
+        product = Specialista.objects.filter(
+            pk=payload.get("product_id"),
+            company=operation.company,
+            status=Specialista.STATUS_UPDATING,
+        ).first()
+        if product:
+            product.status = Specialista.STATUS_ATTIVO
+            product.save(update_fields=["status", "updated_at"])
+        company_dna = DNAGenerale.objects.filter(
+            pk=payload.get("company_dna_id"),
+            company=operation.company,
+        ).first()
+        if company_dna:
+            content = dict(company_dna.content or {})
+            pending = content.get("_consistency_audit_pending")
+            if isinstance(pending, dict) and (
+                pending.get("scope") == payload.get("scope")
+                and pending.get("product_id") == payload.get("product_id")
+            ):
+                content.pop("_consistency_audit_pending", None)
+                company_dna.content = content
+                company_dna.save(update_fields=["content"])
+
+    logger.info(
+        "Cleaned up suspended paid operation %s (%s)",
+        operation.pk,
+        expected_kind,
+    )
+    return True
 
 
 def _available_sources(source, company) -> dict:
@@ -1011,11 +1207,29 @@ applicazione, vincoli, configurazione. Rispondi SOLO JSON.
 
 
 @shared_task
-def scrape_source(source_id: int, tenant_schema: str | None = None):
+def scrape_source(source_id: int, tenant_schema: str | None = None, operation_id: int | None = None):
     def _run():
+        operation = None
+        if operation_id is not None:
+            from apps.companies.operations import (
+                claim_operation,
+                complete_operation,
+                fail_operation,
+            )
+
+            operation = claim_operation(operation_id, "source_scrape")
+            if operation is None:
+                _cleanup_suspended_operation(operation_id, "source_scrape")
+                return
+            if operation.payload.get("source_id") != source_id:
+                fail_operation(operation_id, "source_binding_mismatch")
+                return
+
         try:
             source = Source.objects.get(pk=source_id)
         except Source.DoesNotExist:
+            if operation_id is not None:
+                fail_operation(operation_id, "source_not_found")
             logger.error("scrape_source: source %d not found", source_id)
             return
 
@@ -1029,11 +1243,15 @@ def scrape_source(source_id: int, tenant_schema: str | None = None):
             source.scraped_data = result
             source.status = Source.STATUS_SCRAPED
             source.save(update_fields=["scraped_data", "status"])
-        except Exception:
+            if operation_id is not None:
+                complete_operation(operation_id, result={"source_id": source.id})
+        except Exception as exc:
             logger.exception("Scrape failed for source %d (%s)", source_id, source.url)
             source.status = Source.STATUS_FAILED
             source.error_msg = "scrape failed"
             source.save(update_fields=["status", "error_msg"])
+            if operation_id is not None:
+                fail_operation(operation_id, exc.__class__.__name__)
 
     if tenant_schema and hasattr(connection, "tenant"):
         with schema_context(tenant_schema):
@@ -1043,11 +1261,29 @@ def scrape_source(source_id: int, tenant_schema: str | None = None):
 
 
 @shared_task(soft_time_limit=300, time_limit=360)
-def run_pipeline(pipeline_run_id: int, tenant_schema: str | None = None):
+def run_pipeline(pipeline_run_id: int, tenant_schema: str | None = None, operation_id: int | None = None):
     def _run():
+        operation = None
+        if operation_id is not None:
+            from apps.companies.operations import (
+                claim_operation,
+                complete_operation,
+                fail_operation,
+            )
+
+            operation = claim_operation(operation_id, "company_pipeline")
+            if operation is None:
+                _cleanup_suspended_operation(operation_id, "company_pipeline")
+                return
+            if operation.payload.get("pipeline_run_id") != pipeline_run_id:
+                fail_operation(operation_id, "pipeline_binding_mismatch")
+                return
+
         try:
             run = PipelineRun.objects.select_related("company", "source").get(pk=pipeline_run_id)
         except PipelineRun.DoesNotExist:
+            if operation_id is not None:
+                fail_operation(operation_id, "pipeline_run_not_found")
             logger.error("run_pipeline: pipeline run %d not found", pipeline_run_id)
             return
 
@@ -1074,15 +1310,23 @@ def run_pipeline(pipeline_run_id: int, tenant_schema: str | None = None):
             run.current_step = "4/4: Completamento"
             run.completed_at = timezone.now()
             run.save(update_fields=["current_step", "status", "completed_at"])
+            if operation_id is not None:
+                complete_operation(
+                    operation_id,
+                    result={"pipeline_run_id": run.id, "dna_id": dna.id},
+                    actual_cost_usd=llm_call.cost_usd,
+                )
             logger.info(
                 "Pipeline %d completed: DNA v%d, cost $%.4f",
                 pipeline_run_id, dna.version, llm_call.cost_usd,
             )
-        except Exception:
+        except Exception as exc:
             logger.exception("Pipeline %d failed", pipeline_run_id)
             run.status = PipelineRun.STATUS_FAILED
             run.error_msg = "pipeline failed"
             run.save(update_fields=["status", "error_msg"])
+            if operation_id is not None:
+                fail_operation(operation_id, exc.__class__.__name__)
 
     if tenant_schema and hasattr(connection, "tenant"):
         with schema_context(tenant_schema):
@@ -1185,6 +1429,7 @@ def process_company_gap_round_task(
         if operation_id is not None:
             operation = claim_operation(operation_id, "company_gap")
             if operation is None:
+                _cleanup_suspended_operation(operation_id, "company_gap")
                 return
             if (
                 operation.payload.get("company_id") != company_id
@@ -1328,6 +1573,7 @@ def generate_complete_dna(
         if operation_id is not None:
             operation = claim_operation(operation_id, "company_gap")
             if operation is None:
+                _cleanup_suspended_operation(operation_id, "company_gap")
                 return
             if (
                 operation.payload.get("company_id") != company_id
@@ -1406,6 +1652,7 @@ def generate_complete_product_dna(
         if operation_id is not None:
             operation = claim_operation(operation_id, "product_gap")
             if operation is None:
+                _cleanup_suspended_operation(operation_id, "product_gap")
                 return
             if (
                 operation.payload.get("product_id") != product_id
@@ -1484,6 +1731,7 @@ def generate_product_questions_task(
         if operation_id is not None:
             operation = claim_operation(operation_id, "product_generate")
             if operation is None:
+                _cleanup_suspended_operation(operation_id, "product_generate")
                 return
             if operation.payload.get("product_id") != product_id:
                 fail_operation(operation_id, "product_binding_mismatch")
@@ -1554,6 +1802,7 @@ def process_product_gap_round_task(
         if operation_id is not None:
             operation = claim_operation(operation_id, "product_gap")
             if operation is None:
+                _cleanup_suspended_operation(operation_id, "product_gap")
                 return
             if (
                 operation.payload.get("product_id") != product_id
@@ -1684,33 +1933,94 @@ def process_product_gap_round_task(
 
 
 @shared_task(soft_time_limit=600, time_limit=660)
-def apply_specialist_feedback_task(company_id, company_dna_id, tenant_schema=None):
-    """Regenerate Company DNA from approved specialist feedback (async to avoid 504)."""
+def apply_specialist_feedback_task(company_id, company_dna_id, tenant_schema=None, operation_id=None):
+    """Regenerate Company DNA from approved specialist feedback (async to avoid 504).
+
+    The selected proposals travel in the immutable ``PaidOperation`` payload
+    (finding #11): the task publishes only if the current Company DNA is still
+    the one reserved by the view (claim once + version check).
+    """
     def _run():
         from apps.companies.models import Company, DNAGenerale, Specialista, ProductDNA
         from apps.companies.audit import compute_audit_hash
+        from apps.companies.operations import (
+            claim_operation,
+            complete_operation,
+            fail_operation,
+        )
+
+        if operation_id is None:
+            logger.error("apply_specialist_feedback_task: missing operation_id")
+            return
+
+        operation = claim_operation(operation_id, "specialist_feedback_apply")
+        if operation is None:
+            _cleanup_suspended_operation(operation_id, "specialist_feedback_apply")
+            return
+        payload = operation.payload
+        if (
+            payload.get("company_id") != company_id
+            or payload.get("company_dna_id") != company_dna_id
+        ):
+            fail_operation(operation_id, "feedback_binding_mismatch")
+            return
 
         try:
             company = Company.objects.get(pk=company_id)
             company_dna = DNAGenerale.objects.get(pk=company_dna_id)
         except (Company.DoesNotExist, DNAGenerale.DoesNotExist):
+            fail_operation(operation_id, "feedback_target_not_found")
             logger.error("apply_specialist_feedback_task: company or dna not found")
             return
 
-        pending = (company_dna.content or {}).get("_pending_specialist_feedback") or {}
-        product_id = pending.get("product_id")
-        specialist_dna_id = pending.get("specialist_dna_id")
-        selected_proposals = pending.get("selected_proposals") or []
-
+        product_id = payload.get("product_id")
+        specialist_dna_id = payload.get("specialist_dna_id")
+        selected_proposals = payload.get("selected_proposals") or []
         if not selected_proposals or not product_id or not specialist_dna_id:
-            logger.error("apply_specialist_feedback_task: incomplete pending data")
+            fail_operation(operation_id, "feedback_payload_incomplete")
+            logger.error("apply_specialist_feedback_task: incomplete operation payload")
+            return
+
+        # Finding #11 — lock/version check before publishing: the current
+        # Company DNA must still be the one reserved by the view.
+        current_dna = company.dna_versions.filter(
+            dna_type=DNAGenerale.TYPE_COMPLETE,
+            is_current=True,
+        ).first()
+        expected_hash = payload.get("company_dna_hash") or ""
+        if (
+            current_dna is None
+            or current_dna.pk != company_dna_id
+            or (expected_hash and current_dna.audit_hash != expected_hash)
+        ):
+            fail_operation(operation_id, "company_dna_version_changed")
+            logger.warning(
+                "apply_specialist_feedback_task: company DNA changed for %s, "
+                "refusing to publish stale feedback",
+                company.schema_name,
+            )
             return
 
         try:
             product = Specialista.objects.get(pk=product_id)
             specialist_dna = ProductDNA.objects.get(pk=specialist_dna_id)
         except (Specialista.DoesNotExist, ProductDNA.DoesNotExist):
+            fail_operation(operation_id, "feedback_target_not_found")
             logger.error("apply_specialist_feedback_task: product or specialist_dna not found")
+            return
+
+        if (
+            company_dna.company_id != company.pk
+            or company_dna.version != payload.get("company_dna_version")
+            or product.company_id != company.pk
+            or specialist_dna.product_id != product.pk
+            or specialist_dna.version != payload.get("specialist_dna_version")
+        ):
+            fail_operation(operation_id, "feedback_binding_mismatch")
+            logger.warning(
+                "apply_specialist_feedback_task: immutable target binding changed for %s",
+                company.schema_name,
+            )
             return
 
         from apps.companies.views import (
@@ -1728,29 +2038,63 @@ def apply_specialist_feedback_task(company_id, company_dna_id, tenant_schema=Non
             product_id=product.pk,
             product_name=product.name,
         )
-        new_content = _regenerate_company_dna_from_specialist_feedback(
-            company, product, company_dna, specialist_dna, selected_proposals,
-        )
-        new_content.pop("_pending_specialist_feedback", None)
+        try:
+            new_content = _regenerate_company_dna_from_specialist_feedback(
+                company, product, company_dna, specialist_dna, selected_proposals,
+            )
+        except Exception as exc:
+            fail_operation(operation_id, exc.__class__.__name__)
+            raise
+        new_content.pop("_pending_specialist_feedback", None)  # legacy marker cleanup
 
         # A2 — normalize punctuation before save
         from apps.companies.dna_validator import normalize_dna_punctuation
         new_content = normalize_dna_punctuation(new_content)
 
-        last_version = company.dna_versions.order_by("-version").first()
-        next_version = (last_version.version + 1) if last_version else 1
-        company.dna_versions.filter(is_current=True).update(is_current=False)
+        # Recheck the immutable source after the paid LLM call and hold its row
+        # lock through publication. This closes the window in which another
+        # writer could publish a newer Company DNA while feedback is running.
+        with transaction.atomic():
+            current_dna = (
+                DNAGenerale.objects.select_for_update()
+                .filter(
+                    company=company,
+                    dna_type=DNAGenerale.TYPE_COMPLETE,
+                    is_current=True,
+                )
+                .first()
+            )
+            if (
+                current_dna is None
+                or current_dna.pk != company_dna_id
+                or current_dna.version != payload.get("company_dna_version")
+                or (expected_hash and current_dna.audit_hash != expected_hash)
+            ):
+                fail_operation(operation_id, "company_dna_version_changed")
+                logger.warning(
+                    "apply_specialist_feedback_task: company DNA changed for %s "
+                    "during regeneration; refusing to publish stale feedback",
+                    company.schema_name,
+                )
+                return
 
-        new_dna = DNAGenerale.objects.create(
-            company=company,
-            version=next_version,
-            dna_type=DNAGenerale.TYPE_COMPLETE,
-            content=new_content,
-            is_current=True,
-            previous_hash=company_dna.audit_hash or "",
-        )
-        new_dna.audit_hash = compute_audit_hash(new_content, new_dna.previous_hash or "")
-        new_dna.save(update_fields=["audit_hash"])
+            last_version = company.dna_versions.order_by("-version").first()
+            next_version = (last_version.version + 1) if last_version else 1
+            company.dna_versions.filter(is_current=True).update(is_current=False)
+
+            new_dna = DNAGenerale.objects.create(
+                company=company,
+                version=next_version,
+                dna_type=DNAGenerale.TYPE_COMPLETE,
+                content=new_content,
+                is_current=True,
+                previous_hash=company_dna.audit_hash or "",
+            )
+            new_dna.audit_hash = compute_audit_hash(
+                new_content,
+                new_dna.previous_hash or "",
+            )
+            new_dna.save(update_fields=["audit_hash"])
         _set_company_generation_progress(
             company_dna,
             4,
@@ -1760,6 +2104,10 @@ def apply_specialist_feedback_task(company_id, company_dna_id, tenant_schema=Non
             flow="specialist_feedback",
             product_id=product.pk,
             product_name=product.name,
+        )
+        complete_operation(
+            operation_id,
+            result={"new_dna_id": new_dna.pk, "version": next_version},
         )
 
         logger.info(
@@ -1788,6 +2136,7 @@ def generate_product_dna_task(product_id, tenant_schema=None, operation_id=None)
 
             operation = claim_operation(operation_id, "product_generate")
             if operation is None:
+                _cleanup_suspended_operation(operation_id, "product_generate")
                 return
             product_id_from_operation = operation.payload.get("product_id")
             if product_id_from_operation != product_id:
@@ -1853,7 +2202,7 @@ def generate_product_dna_task(product_id, tenant_schema=None, operation_id=None)
 
 
 @shared_task(soft_time_limit=600, time_limit=660)
-def generate_specialist_feedback_task(product_id, specialist_dna_id, company_dna_id, tenant_schema=None):
+def generate_specialist_feedback_task(product_id, specialist_dna_id, company_dna_id, tenant_schema=None, operation_id=None):
     """Generate Specialist→General feedback proposals asynchronously.
 
     The LLM call that compares the Specialist DNA with the Company DNA can take
@@ -1864,11 +2213,34 @@ def generate_specialist_feedback_task(product_id, specialist_dna_id, company_dna
     call and the POST apply view can read them from the DB instead of session.
     """
     def _run():
+        operation = None
+        if operation_id is not None:
+            from apps.companies.operations import (
+                claim_operation,
+                complete_operation,
+                fail_operation,
+            )
+
+            operation = claim_operation(operation_id, "specialist_feedback_generate")
+            if operation is None:
+                _cleanup_suspended_operation(operation_id, "specialist_feedback_generate")
+                return
+            payload = operation.payload
+            if (
+                payload.get("product_id") != product_id
+                or payload.get("specialist_dna_id") != specialist_dna_id
+                or payload.get("company_dna_id") != company_dna_id
+            ):
+                fail_operation(operation_id, "feedback_binding_mismatch")
+                return
+
         try:
             product = Specialista.objects.get(pk=product_id)
             specialist_dna = ProductDNA.objects.get(pk=specialist_dna_id)
             company_dna = DNAGenerale.objects.get(pk=company_dna_id)
         except (Specialista.DoesNotExist, ProductDNA.DoesNotExist, DNAGenerale.DoesNotExist):
+            if operation_id is not None:
+                fail_operation(operation_id, "feedback_target_not_found")
             logger.error(
                 "generate_specialist_feedback_task: missing product/specialist/company DNA "
                 "(product=%s specialist=%s company=%s)",
@@ -1912,6 +2284,8 @@ def generate_specialist_feedback_task(product_id, specialist_dna_id, company_dna
             logger.exception(
                 "Specialist feedback generation failed for product %s", product_id,
             )
+            if operation_id is not None:
+                fail_operation(operation_id, exc.__class__.__name__)
             proposals = []
             final_status = "completed"
 
@@ -1926,6 +2300,11 @@ def generate_specialist_feedback_task(product_id, specialist_dna_id, company_dna
             "updated_at": timezone.now().isoformat(),
         }
         specialist_dna.save(update_fields=["content"])
+        if operation_id is not None:
+            complete_operation(
+                operation_id,
+                result={"proposals_count": len(proposals) if isinstance(proposals, list) else 0},
+            )
         logger.info(
             "Specialist feedback generated for product %s: %d proposals",
             product_id, len(proposals) if isinstance(proposals, list) else 0,
@@ -1946,6 +2325,7 @@ def run_consistency_audit(
     tenant_schema=None,
     max_issues=12,
     depth_instruction="",
+    operation_id=None,
 ):
     """Run Motore C coherence audit for Company DNA and active specialists.
 
@@ -1955,13 +2335,42 @@ def run_consistency_audit(
     """
 
     def _run():
-        return _run_consistency_audit(
-            company_id,
-            scope=scope,
-            product_id=product_id,
-            max_issues=max_issues,
-            depth_instruction=depth_instruction,
-        )
+        operation = None
+        if operation_id is not None:
+            from apps.companies.operations import (
+                claim_operation,
+                complete_operation,
+                fail_operation,
+            )
+
+            operation = claim_operation(operation_id, "consistency_audit")
+            if operation is None:
+                _cleanup_suspended_operation(operation_id, "consistency_audit")
+                return 0
+            payload = operation.payload
+            if (
+                payload.get("company_id") != company_id
+                or payload.get("scope") != scope
+                or payload.get("product_id") != product_id
+            ):
+                fail_operation(operation_id, "audit_binding_mismatch")
+                return 0
+
+        try:
+            issues_count = _run_consistency_audit(
+                company_id,
+                scope=scope,
+                product_id=product_id,
+                max_issues=max_issues,
+                depth_instruction=depth_instruction,
+            )
+        except Exception as exc:
+            if operation_id is not None:
+                fail_operation(operation_id, exc.__class__.__name__)
+            raise
+        if operation_id is not None:
+            complete_operation(operation_id, result={"issues_count": issues_count})
+        return issues_count
 
     if tenant_schema and hasattr(connection, "tenant"):
         with schema_context(tenant_schema):

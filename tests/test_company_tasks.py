@@ -14,6 +14,7 @@ from apps.companies.models import (
     DNAGenerale,
     ConsistencyIssue,
     LLMCall,
+    PaidOperation,
     PipelineRun,
     Specialista,
     ProductDNA,
@@ -496,16 +497,25 @@ class TestAsyncCompanyTasks:
             content=_specialist_content("complete"),
         )
         current_dna = company.dna_versions.get(dna_type=DNAGenerale.TYPE_COMPLETE)
-        current_dna.content = {
-            "identita": "base",
-            "_pending_specialist_feedback": {
-                "product_id": product.id,
-                "specialist_dna_id": specialist_dna.id,
-                "selected_proposals": [{"target_layer": "nucleo_tecnico"}],
-            },
-        }
+        current_dna.content = {"identita": "base"}
         current_dna.audit_hash = "abc123"
         current_dna.save(update_fields=["content", "audit_hash"])
+
+        operation = PaidOperation.objects.create(
+            company=company,
+            kind="specialist_feedback_apply",
+            idempotency_key="test-apply-key",
+            payload={
+                "company_id": company.id,
+                "company_dna_id": current_dna.id,
+                "company_dna_version": current_dna.version,
+                "company_dna_hash": "abc123",
+                "product_id": product.id,
+                "specialist_dna_id": specialist_dna.id,
+                "specialist_dna_version": specialist_dna.version,
+                "selected_proposals": [{"target_layer": "nucleo_tecnico"}],
+            },
+        )
 
         def fake_regenerate(
             company_arg, product_arg, company_dna_arg, specialist_dna_arg, proposals,
@@ -522,13 +532,76 @@ class TestAsyncCompanyTasks:
             fake_regenerate,
         )
 
-        tasks.apply_specialist_feedback_task(company.id, current_dna.id)
+        tasks.apply_specialist_feedback_task(company.id, current_dna.id, operation_id=operation.id)
 
+        operation.refresh_from_db()
+        assert operation.status == PaidOperation.STATUS_COMPLETED
         new_dna = company.dna_versions.get(version=2)
         assert new_dna.is_current is True
         assert new_dna.previous_hash == "abc123"
         assert "_pending_specialist_feedback" not in new_dna.content
         assert new_dna.audit_hash
+
+    def test_apply_specialist_feedback_refuses_publish_after_concurrent_dna_change(
+        self,
+        monkeypatch,
+    ):
+        company = _make_company()
+        product = _make_product(company)
+        specialist_dna = ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_COMPLETE,
+            content=_specialist_content("complete"),
+        )
+        original_dna = company.dna_versions.get(dna_type=DNAGenerale.TYPE_COMPLETE)
+        original_dna.audit_hash = "original-hash"
+        original_dna.save(update_fields=["audit_hash"])
+        operation = PaidOperation.objects.create(
+            company=company,
+            kind="specialist_feedback_apply",
+            idempotency_key="concurrent-apply-key",
+            resource_key=f"company-dna:{company.pk}",
+            payload={
+                "company_id": company.pk,
+                "company_dna_id": original_dna.pk,
+                "company_dna_version": original_dna.version,
+                "company_dna_hash": original_dna.audit_hash,
+                "product_id": product.pk,
+                "specialist_dna_id": specialist_dna.pk,
+                "specialist_dna_version": specialist_dna.version,
+                "selected_proposals": [{"target_layer": "nucleo_tecnico"}],
+            },
+        )
+
+        def fake_regenerate(*args, **kwargs):
+            company.dna_versions.filter(is_current=True).update(is_current=False)
+            DNAGenerale.objects.create(
+                company=company,
+                version=2,
+                dna_type=DNAGenerale.TYPE_COMPLETE,
+                content={"identita": "Aggiornamento concorrente"},
+                audit_hash="concurrent-hash",
+                is_current=True,
+            )
+            return {"identita": "Feedback ormai stale"}
+
+        monkeypatch.setattr(
+            "apps.companies.views._regenerate_company_dna_from_specialist_feedback",
+            fake_regenerate,
+        )
+
+        tasks.apply_specialist_feedback_task(
+            company.pk,
+            original_dna.pk,
+            operation_id=operation.pk,
+        )
+
+        operation.refresh_from_db()
+        assert operation.status == PaidOperation.STATUS_FAILED
+        assert operation.error_code == "company_dna_version_changed"
+        assert company.dna_versions.count() == 2
+        assert company.dna_versions.get(is_current=True).version == 2
 
     def test_run_consistency_audit_creates_issue_and_accumulated(self, monkeypatch):
         company = _make_company()

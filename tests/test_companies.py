@@ -1688,6 +1688,7 @@ class TestDNAQuestions:
             current_round,
             user_id=None,
             tenant_schema=None,
+            operation_id=None,
         ):
             queued.update({
                 "company_id": company_id,
@@ -2893,12 +2894,11 @@ class TestProductViews:
         assert response.status_code == 302
         assert response.url.endswith("?generating=1")
         assert specialist_dna.content["_feedback_proposals"] is None
-        delay.assert_called_once_with(
-            product.id,
-            specialist_dna.id,
-            company_dna.id,
-            tenant_schema="test-tenant",
-        )
+        delay.assert_called_once()
+        args, kwargs = delay.call_args
+        assert args == (product.id, specialist_dna.id, company_dna.id)
+        assert kwargs["tenant_schema"] == "test-tenant"
+        assert kwargs["operation_id"] is not None
 
     def test_product_dna_feedback_get_shows_completed_process(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
@@ -3357,6 +3357,7 @@ class TestConsistencyMotor:
         assert resp.status_code == 302
         assert product.status == Specialista.STATUS_ATTIVO
         assert company_dna.content["_consistency_audit_pending"]["scope"] == ConsistencyIssue.SCOPE_PERIODIC
+        assert called.pop("operation_id") is not None
         assert called == {
             "company_id": company.pk,
             "scope": ConsistencyIssue.SCOPE_PERIODIC,
@@ -3385,6 +3386,7 @@ class TestConsistencyMotor:
         company_dna.refresh_from_db()
         assert resp.status_code == 302
         assert company_dna.content["_consistency_audit_pending"]["scope"] == ConsistencyIssue.SCOPE_PERIODIC
+        assert called.pop("operation_id") is not None
         assert called == {
             "company_id": company.pk,
             "scope": ConsistencyIssue.SCOPE_PERIODIC,
@@ -3416,6 +3418,7 @@ class TestConsistencyMotor:
         assert resp.status_code == 302
         assert pending["scope"] == ConsistencyIssue.SCOPE_SPECIALIST
         assert pending["product_id"] == product.pk
+        assert called.pop("operation_id") is not None
         assert called == {
             "company_id": company.pk,
             "scope": ConsistencyIssue.SCOPE_SPECIALIST,
@@ -3478,6 +3481,7 @@ class TestConsistencyMotor:
         assert product.status == Specialista.STATUS_UPDATING
         assert product.product_files.filter(original_name="note-prodotto.txt").exists()
         assert company_dna.content["_consistency_audit_pending"]["scope"] == "specialist"
+        assert called.pop("operation_id") is not None
         assert called == {
             "company_id": company.pk,
             "scope": ConsistencyIssue.SCOPE_SPECIALIST,
