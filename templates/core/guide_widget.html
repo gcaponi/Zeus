@@ -59,7 +59,15 @@ page and htmx would swap that HTML into the widget containers.
 
         <div class="guide-widget__body">
             <aside class="guide-widget__path" aria-label="Il tuo percorso">
-                <div id="guide-state" class="guide-widget__state" hx-get="{{ guide_state_url }}" hx-trigger="load, guide-refresh" hx-swap="innerHTML" aria-live="polite" data-guide-state></div>
+                <div
+                    id="guide-state"
+                    class="guide-widget__state"
+                    aria-live="polite"
+                    aria-busy="true"
+                    data-guide-state
+                    data-guide-state-url="{{ guide_state_url }}">
+                    <p>Sto leggendo il tuo percorso…</p>
+                </div>
             </aside>
 
             <div class="guide-widget__chat">
@@ -123,6 +131,67 @@ page and htmx would swap that HTML into the widget containers.
     var closeButton = widget.querySelector("[data-guide-close]");
     var sendButton = widget.querySelector("[data-guide-send]");
     var chips = Array.prototype.slice.call(widget.querySelectorAll("[data-guide-chip]"));
+
+    // The deterministic path must not depend on htmx. Some shell pages do
+    // not preload it, and a delayed or blocked CDN script would otherwise
+    // leave the whole path column empty even though guide/state/ is healthy.
+    var stateRefreshInFlight = false;
+    var stateRefreshQueued = false;
+
+    function renderStateError() {
+        if (!state) {
+            return;
+        }
+        state.replaceChildren();
+        var message = document.createElement("p");
+        message.textContent = "Non riesco a leggere il percorso. Chiudi e riapri la guida per riprovare.";
+        state.appendChild(message);
+    }
+
+    function refreshGuideState() {
+        if (!state || !window.fetch) {
+            renderStateError();
+            return;
+        }
+        if (stateRefreshInFlight) {
+            stateRefreshQueued = true;
+            return;
+        }
+        var stateUrl = state.getAttribute("data-guide-state-url");
+        if (!stateUrl) {
+            renderStateError();
+            return;
+        }
+
+        stateRefreshInFlight = true;
+        state.setAttribute("aria-busy", "true");
+        window.fetch(stateUrl, {
+            credentials: "same-origin",
+            headers: {
+                "Accept": "text/html",
+                "X-Requested-With": "XMLHttpRequest"
+            },
+            redirect: "error"
+        }).then(function (response) {
+            if (!response.ok) {
+                throw new Error("Guide state returned " + response.status);
+            }
+            return response.text();
+        }).then(function (html) {
+            state.innerHTML = html;
+        }).catch(function () {
+            renderStateError();
+        }).finally(function () {
+            stateRefreshInFlight = false;
+            state.removeAttribute("aria-busy");
+            if (stateRefreshQueued) {
+                stateRefreshQueued = false;
+                refreshGuideState();
+            }
+        });
+    }
+
+    refreshGuideState();
 
     // No submit buttons inside the widget (they would collide with
     // page-level submit-button selectors used by browser tests): submission
@@ -227,9 +296,7 @@ page and htmx would swap that HTML into the widget containers.
             // Refresh the deterministic path state every time the panel opens:
             // the tenant may have completed steps since the page was loaded
             // (e.g. site scraping finishing while staying on the onboarding page).
-            if (state && window.htmx) {
-                window.htmx.trigger(state, "guide-refresh");
-            }
+            refreshGuideState();
             window.requestAnimationFrame(function () {
                 scrollLogToBottom();
                 if (input) {
@@ -253,14 +320,14 @@ page and htmx would swap that HTML into the widget containers.
     // guide/state/ (debounced — a burst of swaps triggers one reload).
     var stateRefreshTimer = null;
     function scheduleStateRefresh() {
-        if (!state || !window.htmx) {
+        if (!state) {
             return;
         }
         if (stateRefreshTimer) {
             clearTimeout(stateRefreshTimer);
         }
         stateRefreshTimer = setTimeout(function () {
-            window.htmx.trigger(state, "guide-refresh");
+            refreshGuideState();
         }, 800);
     }
 

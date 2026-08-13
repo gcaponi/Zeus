@@ -261,6 +261,47 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
             context.close()
             browser.close()
 
+    @override_settings(ZEUS_APP_SHELL_ENABLED=True)
+    def test_anagrafica_guide_loads_state_when_htmx_cdn_is_unavailable(self):
+        Company.objects.create(schema_name="ui-baseline", name="Amastone")
+        user = get_user_model().objects.create_user(
+            username="browser-anagrafica-guide",
+            email="browser-anagrafica-guide@example.com",
+            password="test-password",
+        )
+        self.client.force_login(user)
+        session_cookie = self.client.cookies[settings.SESSION_COOKIE_NAME].value
+
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            context = browser.new_context(
+                viewport=VIEWPORTS["desktop"],
+                extra_http_headers={"X-Zeus-Test-Tenant": "ui-baseline"},
+            )
+            context.route("https://unpkg.com/**", lambda route: route.abort())
+            context.add_cookies(
+                [
+                    {
+                        "name": settings.SESSION_COOKIE_NAME,
+                        "value": session_cookie,
+                        "url": self.live_server_url,
+                    }
+                ]
+            )
+            page = context.new_page()
+            response = page.goto(
+                f"{self.live_server_url}{reverse('company-anagrafica')}",
+                wait_until="networkidle",
+            )
+
+            self.assertTrue(response.ok)
+            page.get_by_role("button", name="Apri la guida ZEUS").click()
+            guide_state = page.locator("#guide-state")
+            expect(guide_state).to_contain_text("Anagrafica aziendale", timeout=3000)
+            expect(guide_state).to_contain_text("passo 1 di 10")
+            context.close()
+            browser.close()
+
     @override_settings(
         ZEUS_APP_SHELL_ENABLED=True,
         DNA_GENERATION_POLL_SECONDS=0.1,
