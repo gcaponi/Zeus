@@ -6847,7 +6847,15 @@ def guide_send(request):
     history.append(user_message)
     request.session[guide_service.SESSION_HISTORY_KEY] = history[-HISTORY_MAX_MESSAGES:]
 
-    system_prompt = guide_service.build_guide_system_prompt(company)
+    completion_overrides = None
+    if "guide_site_url" in data:
+        completion_overrides = {
+            "sito_web": bool(_normalize_source_url(data.get("guide_site_url"))),
+        }
+    system_prompt = guide_service.build_guide_system_prompt(
+        company,
+        completion_overrides=completion_overrides,
+    )
     if action == "draft":
         draft_block = guide_service.build_draft_block(company)
         if draft_block:
@@ -6922,7 +6930,15 @@ def guide_state(request):
     company = _tenant_company(request)
     if not company:
         return HttpResponse("No tenant", status=400)
-    progress = guide_service.compute_progress(company)
+    completion_overrides = None
+    if "site_url" in request.GET:
+        completion_overrides = {
+            "sito_web": bool(_normalize_source_url(request.GET.get("site_url"))),
+        }
+    progress = guide_service.compute_progress(
+        company,
+        completion_overrides=completion_overrides,
+    )
     return render(
         request,
         "core/partials/_guide_state.html",

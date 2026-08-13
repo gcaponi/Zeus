@@ -372,6 +372,19 @@ class TestComputeProgress:
         assert progress["current"]["step"] == 1
         assert [phase["step"] for phase in progress["phases"]] == list(range(1, 11))
 
+    def test_live_site_override_takes_precedence_over_saved_site_and_source(self):
+        company = _company()
+        _complete_anagrafica(company)
+        _scraped_source(company)
+
+        progress = guide_service.compute_progress(
+            company,
+            completion_overrides={"sito_web": False},
+        )
+        statuses = {phase["id"]: phase["status"] for phase in progress["phases"]}
+        assert statuses["sito_web"] == "current"
+        assert progress["current"]["id"] == "sito_web"
+
 
 # ---------------------------------------------------------------------------
 # build_guide_system_prompt
@@ -508,6 +521,30 @@ class TestGuideSend:
         content = response.content.decode()
         assert "guida-message" in content
         assert "Risposta di prova della guida" in content
+
+    def test_send_prompt_uses_live_site_field_state(self, rf_with_tenant):
+        company = _company()
+        _complete_anagrafica(company)
+        _scraped_source(company)
+        session = SessionStore()
+        request = rf_with_tenant(
+            "post",
+            reverse("guide-send"),
+            data={
+                "message": "Dove sono?",
+                "guide_site_url": "",
+            },
+            session=session,
+        )
+        request.META["HTTP_HX_REQUEST"] = "true"
+
+        response = views.guide_send(request)
+
+        assert response.status_code == 200
+        system_prompt = json.loads(LLMCall.objects.get(company=company).prompt_text)[0][
+            "content"
+        ]
+        assert "[>] Sito web collegato  <- passo corrente" in system_prompt
 
     def test_history_is_separate_from_agent_chat(self, rf_with_tenant):
         _company()
@@ -735,6 +772,23 @@ class TestGuideState:
         response = views.guide_state(request)
         assert response.status_code == 200
         assert "passo 1 di 10" in response.content.decode()
+
+    def test_state_uses_live_empty_site_field_over_saved_data(self, rf_with_tenant):
+        company = _company()
+        _complete_anagrafica(company)
+        _scraped_source(company)
+        request = rf_with_tenant(
+            "get",
+            f"{reverse('guide-state')}?site_url=",
+        )
+
+        response = views.guide_state(request)
+
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "passo 2 di 10" in content
+        assert "guida-checklist-item--current" in content
+        assert "Sito web collegato" in content
 
 
 # ---------------------------------------------------------------------------

@@ -42,11 +42,8 @@ page and htmx would swap that HTML into the widget containers.
                 <button
                     type="button"
                     class="zeus-btn zeus-btn-ghost zeus-btn-sm"
-                    hx-post="{{ guide_clear_url }}"
-                    hx-target="#guide-chat-log"
-                    hx-swap="innerHTML"
-                    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                    data-guide-clear>Nuova chat</button>
+                    data-guide-clear
+                    data-guide-clear-url="{{ guide_clear_url }}">Nuova chat</button>
                 <button
                     type="button"
                     class="zeus-app-icon-button"
@@ -84,11 +81,6 @@ page and htmx would swap that HTML into the widget containers.
                     class="guide-widget__composer"
                     method="post"
                     action="{{ guide_send_url }}"
-                    hx-post="{{ guide_send_url }}"
-                    hx-target="#guide-chat-log"
-                    hx-swap="beforeend"
-                    hx-indicator="#guide-chat-spinner"
-                    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
                     data-guide-composer>
                     {% csrf_token %}
                     <input type="hidden" name="action" value="" data-guide-action>
@@ -106,7 +98,7 @@ page and htmx would swap that HTML into the widget containers.
                         placeholder="Chiedi alla guida…"
                         data-guide-input></textarea>
                     <div class="guide-widget__actions">
-                        <span id="guide-chat-spinner" class="htmx-indicator zeus-app-chat-spinner" role="status" aria-label="La guida sta rispondendo"></span>
+                        <span id="guide-chat-spinner" class="zeus-app-chat-spinner" role="status" aria-label="La guida sta rispondendo" hidden></span>
                         <button type="button" class="zeus-btn zeus-btn-primary zeus-btn-sm" data-guide-send>Invia</button>
                     </div>
                 </form>
@@ -129,7 +121,10 @@ page and htmx would swap that HTML into the widget containers.
     var input = widget.querySelector("[data-guide-input]");
     var actionField = widget.querySelector("[data-guide-action]");
     var closeButton = widget.querySelector("[data-guide-close]");
+    var clearButton = widget.querySelector("[data-guide-clear]");
     var sendButton = widget.querySelector("[data-guide-send]");
+    var spinner = widget.querySelector("#guide-chat-spinner");
+    var siteUrlField = document.querySelector("[data-guide-site-url]");
     var chips = Array.prototype.slice.call(widget.querySelectorAll("[data-guide-chip]"));
 
     // The deterministic path must not depend on htmx. Some shell pages do
@@ -162,6 +157,11 @@ page and htmx would swap that HTML into the widget containers.
             renderStateError();
             return;
         }
+        if (siteUrlField) {
+            var stateRequestUrl = new URL(stateUrl, window.location.href);
+            stateRequestUrl.searchParams.set("site_url", siteUrlField.value.trim());
+            stateUrl = stateRequestUrl.toString();
+        }
 
         stateRefreshInFlight = true;
         state.setAttribute("aria-busy", "true");
@@ -193,43 +193,33 @@ page and htmx would swap that HTML into the widget containers.
 
     refreshGuideState();
 
-    // No submit buttons inside the widget (they would collide with
-    // page-level submit-button selectors used by browser tests): submission
-    // goes through requestSubmit(), which keeps native validation, fires the
-    // submit event htmx listens to, and falls back to a plain POST when htmx
-    // is absent.
+    // Chat requests use the same native same-origin transport as path state.
+    // The widget must never degrade to a full-page form POST: that navigation
+    // closes the panel and hides the completed answer stored in the session.
     var submitting = false;
-    // The composer stays disabled until htmx is ready: without htmx the
-    // submit would be a native full-page POST (redirect + reload) instead of
-    // an in-widget swap.
-    var htmxReady = Boolean(window.htmx);
 
     function updateControls() {
-        var enabled = htmxReady && !submitting;
+        var enabled = Boolean(window.fetch) && !submitting;
         if (sendButton) {
             sendButton.disabled = !enabled;
+        }
+        if (clearButton) {
+            clearButton.disabled = !enabled;
         }
         chips.forEach(function (chip) {
             chip.disabled = !enabled;
         });
-    }
-
-    function submitComposer() {
-        if (!composer || !htmxReady || submitting) {
-            return;
-        }
-        if (composer.requestSubmit) {
-            composer.requestSubmit();
-        } else {
-            // Safari < 16 / Chrome < 76 have no requestSubmit: plain POST
-            // fallback (the server redirects back to the referring page).
-            composer.submit();
+        if (spinner) {
+            spinner.hidden = !submitting;
         }
     }
 
-    // CSRF for HTMX requests: same cookie-based mechanism as
-    // partials/_app_shell_htmx.html, repeated here so the widget also works
-    // on shell pages that do not include that partial.
+    function setSubmitting(value) {
+        submitting = value;
+        updateControls();
+    }
+
+    // CSRF uses the same cookie as Django and the existing HTMX pages.
     function getCsrfToken() {
         var cookies = document.cookie.split(";");
         for (var index = 0; index < cookies.length; index += 1) {
@@ -241,38 +231,29 @@ page and htmx would swap that HTML into the widget containers.
         return "";
     }
 
-    document.body.addEventListener("htmx:configRequest", function (event) {
+    function requestGuideHtml(url, body) {
         var token = getCsrfToken();
+        var headers = {
+            "Accept": "text/html",
+            "HX-Request": "true",
+            "X-Requested-With": "XMLHttpRequest"
+        };
         if (token) {
-            event.detail.headers["X-CSRFToken"] = token;
+            headers["X-CSRFToken"] = token;
         }
-    });
-
-    // Load htmx only if the page did not include it already. The check runs
-    // at DOMContentLoaded: every synchronous <script> in the document —
-    // including the ones from _app_shell_htmx.html, which sit AFTER the
-    // widget (shell_scripts block) — has executed by then, so htmx is never
-    // loaded twice on the same page.
-    function onHtmxReady() {
-        htmxReady = true;
-        updateControls();
-    }
-
-    function ensureHtmx() {
-        if (window.htmx) {
-            onHtmxReady();
-            return;
-        }
-        var script = document.createElement("script");
-        script.src = "https://unpkg.com/htmx.org@1.9.12";
-        script.onload = onHtmxReady;
-        document.head.appendChild(script);
-    }
-
-    if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", ensureHtmx);
-    } else {
-        ensureHtmx();
+        return window.fetch(url, {
+            method: "POST",
+            body: body,
+            credentials: "same-origin",
+            headers: headers,
+            redirect: "error"
+        }).then(function (response) {
+            var contentType = response.headers.get("Content-Type") || "";
+            if (response.status !== 200 || contentType.indexOf("text/html") === -1) {
+                throw new Error("Guide request returned " + response.status);
+            }
+            return response.text();
+        });
     }
 
     updateControls();
@@ -331,42 +312,14 @@ page and htmx would swap that HTML into the widget containers.
         }, 800);
     }
 
+    if (siteUrlField) {
+        siteUrlField.addEventListener("input", scheduleStateRefresh);
+        siteUrlField.addEventListener("change", scheduleStateRefresh);
+    }
+
     document.body.addEventListener("htmx:afterRequest", function (event) {
         if (panel && !panel.hidden && event.target && !widget.contains(event.target)) {
             scheduleStateRefresh();
-        }
-    });
-
-    // In-flight guard: while a guide request is pending, chips/Enter/send are
-    // disabled — rapid clicks would otherwise fire concurrent POSTs (duplicate
-    // LLM calls = real cost, duplicated message pairs in the log).
-    document.body.addEventListener("htmx:beforeRequest", function (event) {
-        if (event.detail && event.detail.elt === composer) {
-            submitting = true;
-            updateControls();
-        }
-    });
-
-    function endSubmit(event) {
-        if (event.detail && event.detail.elt === composer) {
-            submitting = false;
-            updateControls();
-        }
-    }
-    document.body.addEventListener("htmx:afterRequest", endSubmit);
-    document.body.addEventListener("htmx:sendError", endSubmit);
-
-    // htmx 1.9 swaps error response bodies by default: without this guard a
-    // failed guide_send (400/502 JSON) would be appended verbatim into the
-    // chat log. Block the swap and show a friendly bubble instead.
-    document.body.addEventListener("htmx:beforeSwap", function (event) {
-        var detail = event.detail;
-        if (!detail || !detail.target || detail.target.id !== "guide-chat-log") {
-            return;
-        }
-        if (detail.xhr && detail.xhr.status >= 400) {
-            detail.shouldSwap = false;
-            appendGuideErrorBubble();
         }
     });
 
@@ -394,6 +347,70 @@ page and htmx would swap that HTML into the widget containers.
         row.appendChild(stack);
         log.appendChild(row);
         scrollLogToBottom();
+    }
+
+    function removeGuideHints() {
+        var hints = widget.querySelectorAll("[data-guide-hint], [data-guide-chat-hint]");
+        Array.prototype.forEach.call(hints, function (hint) {
+            hint.remove();
+        });
+    }
+
+    // In-flight guard: one browser tab can issue only one paid guide request
+    // at a time. The backend ledger remains the second line of defence.
+    function submitComposer() {
+        if (!composer || !window.fetch || submitting) {
+            return;
+        }
+        if (!composer.reportValidity()) {
+            return;
+        }
+
+        setSubmitting(true);
+        var sendUrl = composer.getAttribute("action");
+        var formData = new FormData(composer);
+        if (siteUrlField) {
+            formData.set("guide_site_url", siteUrlField.value.trim());
+        }
+        requestGuideHtml(sendUrl, formData).then(function (html) {
+            removeGuideHints();
+            log.insertAdjacentHTML("beforeend", html);
+            composer.reset();
+            if (actionField) {
+                actionField.value = "";
+            }
+            scrollLogToBottom();
+            input.focus();
+        }).catch(function () {
+            appendGuideErrorBubble();
+        }).finally(function () {
+            setSubmitting(false);
+        });
+    }
+
+    function clearGuideChat() {
+        if (!clearButton || !window.fetch || submitting) {
+            return;
+        }
+        var clearUrl = clearButton.getAttribute("data-guide-clear-url");
+        if (!clearUrl) {
+            appendGuideErrorBubble();
+            return;
+        }
+
+        setSubmitting(true);
+        requestGuideHtml(clearUrl, new FormData()).then(function (html) {
+            log.innerHTML = html;
+            composer.reset();
+            if (actionField) {
+                actionField.value = "";
+            }
+            scrollLogToBottom();
+        }).catch(function () {
+            appendGuideErrorBubble();
+        }).finally(function () {
+            setSubmitting(false);
+        });
     }
 
     if (closeButton) {
@@ -428,6 +445,17 @@ page and htmx would swap that HTML into the widget containers.
         sendButton.addEventListener("click", submitComposer);
     }
 
+    if (clearButton) {
+        clearButton.addEventListener("click", clearGuideChat);
+    }
+
+    if (composer) {
+        composer.addEventListener("submit", function (event) {
+            event.preventDefault();
+            submitComposer();
+        });
+    }
+
     // Enter sends (Shift+Enter keeps the newline): textareas swallow Enter,
     // so implicit form submission never applies here.
     if (input) {
@@ -439,27 +467,6 @@ page and htmx would swap that HTML into the widget containers.
         });
     }
 
-    document.body.addEventListener("htmx:afterRequest", function (event) {
-        if (!event.detail || !event.detail.successful) {
-            return;
-        }
-        var element = event.detail.elt;
-        if (element === composer) {
-            composer.reset();
-            if (actionField) {
-                actionField.value = "";
-            }
-            // Drop both the initial widget hint and the hint re-rendered by
-            // the backend's _guide_chat_log.html after "Nuova chat".
-            var hints = widget.querySelectorAll("[data-guide-hint], [data-guide-chat-hint]");
-            Array.prototype.forEach.call(hints, function (hint) {
-                hint.remove();
-            });
-            scrollLogToBottom();
-        } else if (element && element.matches && element.matches("[data-guide-clear]")) {
-            scrollLogToBottom();
-        }
-    });
 })();
 </script>
 {% endif %}

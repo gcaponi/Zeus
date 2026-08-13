@@ -299,6 +299,100 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
             guide_state = page.locator("#guide-state")
             expect(guide_state).to_contain_text("Anagrafica aziendale", timeout=3000)
             expect(guide_state).to_contain_text("passo 1 di 10")
+
+            guide_send_requests = []
+            page.on(
+                "request",
+                lambda request: (
+                    guide_send_requests.append(request)
+                    if request.url.endswith(reverse("guide-send"))
+                    else None
+                ),
+            )
+            guide_input = page.get_by_role("textbox", name="Chiedi alla guida…")
+            send_button = page.get_by_role("button", name="Invia")
+            expect(send_button).to_be_enabled()
+            guide_input.fill("Perché questo passo è importante?")
+            send_button.click()
+
+            expect(page).to_have_url(
+                f"{self.live_server_url}{reverse('company-anagrafica')}"
+            )
+            expect(page.locator("#guide-chat-log")).to_contain_text(
+                "Risposta di prova della guida",
+                timeout=5000,
+            )
+            self.assertEqual(len(guide_send_requests), 1)
+
+            page.get_by_role("button", name="Nuova chat").click()
+            expect(page.locator("#guide-chat-log")).not_to_contain_text(
+                "Risposta di prova della guida",
+                timeout=3000,
+            )
+            expect(page.locator("#guide-chat-log")).to_contain_text(
+                "Sono la guida di ZEUS",
+            )
+            expect(page).to_have_url(
+                f"{self.live_server_url}{reverse('company-anagrafica')}"
+            )
+            context.close()
+            browser.close()
+
+    @override_settings(ZEUS_APP_SHELL_ENABLED=True)
+    def test_onboarding_guide_tracks_live_site_url_field(self):
+        self._create_complete_company()
+        user = get_user_model().objects.create_user(
+            username="browser-onboarding-guide",
+            email="browser-onboarding-guide@example.com",
+            password="test-password",
+        )
+        self.client.force_login(user)
+        session_cookie = self.client.cookies[settings.SESSION_COOKIE_NAME].value
+
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            context = browser.new_context(
+                viewport=VIEWPORTS["desktop"],
+                extra_http_headers={"X-Zeus-Test-Tenant": "ui-baseline"},
+            )
+            context.add_cookies(
+                [
+                    {
+                        "name": settings.SESSION_COOKIE_NAME,
+                        "value": session_cookie,
+                        "url": self.live_server_url,
+                    }
+                ]
+            )
+            page = context.new_page()
+            onboarding_url = f"{self.live_server_url}{reverse('onboarding-index')}"
+            response = page.goto(onboarding_url, wait_until="networkidle")
+
+            self.assertTrue(response.ok)
+            page.get_by_role("button", name="Apri la guida ZEUS").click()
+            guide_state = page.locator("#guide-state")
+            expect(guide_state.locator(".guida-state-title")).to_have_text(
+                "Analisi iniziale (pre-DNA)",
+                timeout=3000,
+            )
+            expect(
+                guide_state.locator(".guida-checklist-item--done").filter(
+                    has_text="Sito web collegato"
+                )
+            ).to_have_count(1)
+
+            page.locator("[data-guide-site-url]").fill("")
+
+            expect(guide_state.locator(".guida-state-title")).to_have_text(
+                "Sito web collegato",
+                timeout=3000,
+            )
+            expect(
+                guide_state.locator(".guida-checklist-item--current").filter(
+                    has_text="Sito web collegato"
+                )
+            ).to_have_count(1)
+            expect(page).to_have_url(onboarding_url)
             context.close()
             browser.close()
 

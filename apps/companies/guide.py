@@ -296,7 +296,7 @@ QUICK_ACTION_PROMPTS = {
 # Progresso deterministico
 # ---------------------------------------------------------------------------
 
-def compute_progress(company):
+def compute_progress(company, *, completion_overrides=None):
     """Checklist delle fasi con stato done/current/todo, calcolato dal DB.
 
     "current" e' la prima fase obbligatoria non completata; le fasi opzionali
@@ -307,10 +307,14 @@ def compute_progress(company):
     status, step (posizione 1-based nel percorso — NON derivare il numero di
     passo da done_count: le fasi possono completarsi fuori ordine).
     """
+    completion_overrides = completion_overrides or {}
     phases = []
     current_found = False
     for index, phase in enumerate(PHASES, start=1):
-        done = phase["is_done"](company)
+        if phase["id"] in completion_overrides:
+            done = bool(completion_overrides[phase["id"]])
+        else:
+            done = phase["is_done"](company)
         if done:
             status = "done"
         elif phase.get("optional"):
@@ -381,13 +385,16 @@ def _current_phase_block(progress):
     return "\n".join(lines)
 
 
-def build_guide_system_prompt(company):
+def build_guide_system_prompt(company, *, completion_overrides=None):
     """System prompt della guida: ruolo + snapshot deterministico della checklist.
 
     Nessun gate: il prompt esiste per qualunque stato dell'azienda, anche
     appena registrata. Il percorso descritto e' solo quello in PHASES.
     """
-    progress = compute_progress(company)
+    progress = compute_progress(
+        company,
+        completion_overrides=completion_overrides,
+    )
     sections = [
         f"[{GUIDE_CHAT_MARKER}]",
         (
