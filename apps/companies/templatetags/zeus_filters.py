@@ -4,6 +4,7 @@ ZEUS template filters.
 Custom filters for safe markdown-to-HTML and other text transformations.
 Zero external dependencies — pure regex.
 """
+import html
 import re
 from django import template
 from django.utils.safestring import mark_safe
@@ -103,8 +104,9 @@ _SAFE_LINK_PREFIXES = ("http://", "https://", "mailto:", "/", "#")
 def _render_link(match: re.Match) -> str:
     """Render a markdown link, or fall back to the plain label when unsafe."""
     label, url = match.group(1), match.group(2).strip()
+    safe_label = html.escape(label, quote=True)
     if any(char in url for char in ('"', "'", "<", ">")) or any(c.isspace() for c in url):
-        return label
+        return safe_label
     if not url.lower().startswith(_SAFE_LINK_PREFIXES):
-        return label
-    return f'<a href="{url}" rel="noopener noreferrer">{label}</a>'
+        return safe_label
+    return f'<a href="{url}" rel="noopener noreferrer">{safe_label}</a>'

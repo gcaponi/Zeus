@@ -658,6 +658,38 @@ def test_suspended_feedback_generation_worker_clears_the_pending_slot(paid_works
     retry_delay.assert_called_once()
 
 
+def test_failed_feedback_generation_does_not_report_completed(paid_workspace):
+    company_dna = _company_dna(paid_workspace.company)
+    product = _product(paid_workspace.company)
+    specialist_dna = _product_dna(product)
+    path = reverse("specialista-dna-feedback", args=[product.pk])
+    with patch("apps.companies.tasks.generate_specialist_feedback_task.delay"):
+        response = views.product_dna_feedback(
+            paid_workspace.request("post", path, form=True),
+            product.pk,
+        )
+    assert response.status_code == 302
+    operation = PaidOperation.objects.get(kind="specialist_feedback_generate")
+
+    with patch(
+        "apps.companies.views._generate_specialist_feedback_proposals",
+        side_effect=RuntimeError("llm down"),
+    ):
+        tasks.generate_specialist_feedback_task(
+            product.pk,
+            specialist_dna.pk,
+            company_dna.pk,
+            operation_id=operation.pk,
+        )
+
+    specialist_dna.refresh_from_db()
+    operation.refresh_from_db()
+    assert specialist_dna.content["_feedback_generation"]["status"] == "failed"
+    assert not specialist_dna.content.get("_feedback_proposals")
+    assert operation.status == PaidOperation.STATUS_FAILED
+    assert operation.error_code == "RuntimeError"
+
+
 def test_suspended_feedback_apply_worker_restores_immutable_proposals(paid_workspace):
     company_dna = _company_dna(paid_workspace.company)
     product = _product(paid_workspace.company)

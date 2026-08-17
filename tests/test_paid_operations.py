@@ -85,6 +85,29 @@ def test_concurrency_limit_rejects_before_third_operation(paid_company, settings
     assert exc_info.value.rejection.code == "operation_concurrency_limit"
 
 
+def test_stale_cleanup_survives_concurrency_rejection(paid_company, settings):
+    settings.PAID_OPERATION_STALE_SECONDS = 60
+    settings.PAID_OPERATION_CONCURRENCY_LIMITS = {Plan.SLUG_STARTER: 2}
+    stale, _ = reserve_operation(
+        paid_company,
+        "agent_chat",
+        operation_key("stale-slot"),
+    )
+    reserve_operation(paid_company, "guide_chat", operation_key("live-slot"))
+    PaidOperation.objects.filter(pk=stale.pk).update(
+        created_at=timezone.now() - timedelta(minutes=5)
+    )
+    settings.PAID_OPERATION_CONCURRENCY_LIMITS = {Plan.SLUG_STARTER: 1}
+
+    with pytest.raises(OperationRejectedError) as exc_info:
+        reserve_operation(paid_company, "source_scrape", operation_key("over-limit"))
+
+    stale.refresh_from_db()
+    assert exc_info.value.rejection.code == "operation_concurrency_limit"
+    assert stale.status == PaidOperation.STATUS_FAILED
+    assert stale.error_code == "stale_operation"
+
+
 def test_daily_units_are_reserved_atomically(paid_company, settings):
     settings.PAID_OPERATION_DAILY_UNIT_LIMITS = {Plan.SLUG_STARTER: 2}
     first, _ = reserve_operation(

@@ -70,6 +70,20 @@ def _plan_slug(company):
     return Plan.SLUG_STARTER
 
 
+def _expire_stale_operations(company, stale_before, now):
+    PaidOperation.objects.filter(company=company).filter(
+        Q(status=PaidOperation.STATUS_QUEUED, created_at__lt=stale_before)
+        | Q(
+            status=PaidOperation.STATUS_RUNNING,
+            started_at__lt=stale_before,
+        )
+    ).update(
+        status=PaidOperation.STATUS_FAILED,
+        error_code="stale_operation",
+        finished_at=now,
+    )
+
+
 def _limits(company):
     plan_slug = _plan_slug(company)
     daily = settings.PAID_OPERATION_DAILY_UNIT_LIMITS.get(
@@ -102,27 +116,19 @@ def reserve_operation(
     stale_before = now - timedelta(seconds=settings.PAID_OPERATION_STALE_SECONDS)
     immutable_payload = payload or {}
 
+    # Expire in its own transaction so a later OperationRejectedError
+    # cannot roll back the cleanup and leave stale rows occupying slots.
     with transaction.atomic():
         locked_company = Company.objects.select_for_update().get(pk=company.pk)
+        _expire_stale_operations(locked_company, stale_before, now)
 
-        # Expire abandoned reservations before checking either the exact
-        # idempotency key or the protected resource. Otherwise a stale row can
-        # keep returning as an active duplicate forever.
+    with transaction.atomic():
+        locked_company = Company.objects.select_for_update().get(pk=company.pk)
         # QUEUED ages from created_at. RUNNING must age from started_at:
         # a job that waited in queue can have an old created_at while still
         # being executed, and complete_operation/requeue_operation only
         # transition STATUS_RUNNING.
-        PaidOperation.objects.filter(company=locked_company).filter(
-            Q(status=PaidOperation.STATUS_QUEUED, created_at__lt=stale_before)
-            | Q(
-                status=PaidOperation.STATUS_RUNNING,
-                started_at__lt=stale_before,
-            )
-        ).update(
-            status=PaidOperation.STATUS_FAILED,
-            error_code="stale_operation",
-            finished_at=now,
-        )
+        _expire_stale_operations(locked_company, stale_before, now)
 
         existing = PaidOperation.objects.filter(
             company=locked_company,

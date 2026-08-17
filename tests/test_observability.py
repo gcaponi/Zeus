@@ -61,6 +61,16 @@ class TestMetricsEndpoint:
         assert "zeus_dna_generation_seconds_bucket" in body
         assert "zeus_dna_generation_seconds_count 1" in body
 
+    def test_metrics_endpoint_rejects_non_ascii_bearer_without_500(self, settings):
+        settings.METRICS_TOKEN = "metrics-test-token"
+
+        response = DjangoClient().get(
+            "/metrics/",
+            HTTP_AUTHORIZATION="Bearer café",
+        )
+
+        assert response.status_code == 404
+
 
 class TestRequestContextLoggingMiddleware:
     def test_logs_one_entry_per_request_with_consistent_request_id(self, monkeypatch):

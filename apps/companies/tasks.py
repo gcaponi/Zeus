@@ -2286,8 +2286,7 @@ def generate_specialist_feedback_task(product_id, specialist_dna_id, company_dna
             )
             if operation_id is not None:
                 fail_operation(operation_id, exc.__class__.__name__)
-            proposals = []
-            final_status = "completed"
+            return
 
         # Persist proposals on the Specialist DNA content (not audit-hashed, like
         # _critique and _cross_specialist). Empty list is a valid result.

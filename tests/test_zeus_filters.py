@@ -56,3 +56,9 @@ class TestMarkdownifyLinkSafety:
     def test_url_with_spaces_is_not_linked(self):
         html = str(markdownify("[x](https://a.b/c d)"))
         assert "<a" not in html
+
+    def test_html_in_link_label_is_escaped(self):
+        html = str(markdownify("[<img src=x onerror=alert(1)>](https://ok.com)"))
+        assert "<img" not in html
+        assert "&lt;img src=x onerror=alert(1)&gt;" in html
+        assert 'href="https://ok.com"' in html

@@ -114,6 +114,14 @@ def prometheus_metrics_text():
     return "\n".join(lines) + "\n"
 
 
+def _token_matches(supplied, expected):
+    left = supplied.encode("utf-8") if isinstance(supplied, str) else supplied
+    right = expected.encode("utf-8") if isinstance(expected, str) else expected
+    if not isinstance(left, (bytes, bytearray)) or not isinstance(right, (bytes, bytearray)):
+        return False
+    return secrets.compare_digest(left, right)
+
+
 def _metrics_authorized(request):
     expected = settings.METRICS_TOKEN
     scheme, separator, supplied = request.headers.get("Authorization", "").partition(" ")
@@ -121,7 +129,7 @@ def _metrics_authorized(request):
         expected
         and separator
         and scheme.lower() == "bearer"
-        and secrets.compare_digest(supplied, expected)
+        and _token_matches(supplied, expected)
     )
 
 
