@@ -44,7 +44,7 @@ dependencies = [
     "whitenoise>=6.7.0",
     "gunicorn>=22.0.0",
     "openai>=1.0.0",
-    "instructor>=1.0.0",
+    "instructor>=1.15.4",
     "sentry-sdk>=2.0.0",
 ]
 
