@@ -230,7 +230,7 @@ def _reserve_pending_signup(slug, email, client_ip, company_name, password_hash)
             if expired_pending or holder.status == SignupProvisioning.STATUS_FAILED:
                 holder.slug = f"expired-{holder.pk}-{holder.slug}"[:63]
                 holder.save(update_fields=["slug"])
-        if Client.objects.filter(schema_name=slug).exists():
+        if Client.objects.filter(schema_name__iexact=slug).exists():
             return None
         pending.slug = slug
     pending.company_name = company_name
@@ -337,7 +337,12 @@ def _cleanup_failed_signup(tenant, email, tenant_domain):
     return cleanup_ok
 
 
+def _normalize_workspace_slug(slug):
+    return (slug or "").strip().lower()
+
+
 def _provision_workspace(email, slug, company_name, create_user, provisioning):
+    slug = _normalize_workspace_slug(slug)
     tenant_domain = f"{slug}.zeus.cais.uno"
     tenant = None
     try:
@@ -436,7 +441,7 @@ def signup_confirm(request):
     try:
         domain, handoff_token = _provision_workspace(
             email=provisioning.email,
-            slug=provisioning.slug,
+            slug=_normalize_workspace_slug(provisioning.slug),
             company_name=provisioning.company_name or provisioning.slug,
             create_user=lambda: _create_tenant_owner(
                 provisioning.email,
@@ -492,7 +497,7 @@ class ZEUSSignupView(SignupView):
         return super().post(request, *args, **kwargs)
 
     def form_valid(self, form):
-        slug = form.cleaned_data["company_slug"]
+        slug = _normalize_workspace_slug(form.cleaned_data["company_slug"])
         email = form.cleaned_data["email"]
         company_name = form.cleaned_data["company_name"]
         if WorkspaceAccess.objects.filter(email__iexact=email).exists():

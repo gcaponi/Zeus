@@ -23,11 +23,13 @@ class ZEUSSignupForm(SignupForm):
     )
 
     def clean_company_slug(self):
-        slug = self.cleaned_data["company_slug"]
-        if Client.objects.filter(schema_name=slug).exists():
+        # HTTP Host e' case-insensitive: uno slug "Testes" crea
+        # Testes.zeus.cais.uno, il browser chiede testes.zeus.cais.uno, 404.
+        slug = self.cleaned_data["company_slug"].lower()
+        if Client.objects.filter(schema_name__iexact=slug).exists():
             raise forms.ValidationError(_SLUG_TAKEN.format(slug=slug))
         now = timezone.now()
-        reserved = SignupProvisioning.objects.filter(slug=slug).exclude(
+        reserved = SignupProvisioning.objects.filter(slug__iexact=slug).exclude(
             status=SignupProvisioning.STATUS_FAILED,
         )
         email = (self.data.get("email") or "").strip()

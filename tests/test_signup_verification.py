@@ -57,6 +57,30 @@ def _token_from_mailbox(index=-1):
 
 
 @override_settings(ROOT_URLCONF="config.urls")
+def test_uppercase_slug_provisions_lowercase_host():
+    response = _signup(
+        payload={
+            **PAYLOAD,
+            "email": "caps@example.com",
+            "company_name": "Testes",
+            "company_slug": "Testes",
+        }
+    )
+    assert response.status_code == 200
+    pending = SignupProvisioning.objects.get(email="caps@example.com")
+    assert pending.slug == "testes"
+
+    token = _token_from_mailbox()
+    confirm = DjangoClient().get("/accounts/signup/confirm/", {"t": token})
+
+    assert confirm.status_code == 302
+    assert "testes.zeus.cais.uno/accounts/handoff/" in confirm.url
+    assert Client.objects.filter(schema_name="testes").exists()
+    assert not Client.objects.filter(schema_name="Testes").exists()
+    assert Domain.objects.filter(domain="testes.zeus.cais.uno").exists()
+
+
+@override_settings(ROOT_URLCONF="config.urls")
 def test_unverified_signup_creates_no_workspace_or_access():
     response = _signup()
 
