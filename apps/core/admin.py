@@ -167,8 +167,8 @@ class ClientAdmin(admin.ModelAdmin):
         ).first()
 
         if request.method == "POST":
-            new_password = request.POST.get("new_password", "")
-            confirm_password = request.POST.get("confirm_password", "")
+            new_password = request.POST.get("new_password")
+            confirm_password = request.POST.get("confirm_password")
 
             if not new_password:
                 return render(request, "admin/change_password.html", {
