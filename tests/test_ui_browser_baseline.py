@@ -799,7 +799,9 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                     menu_toggle.click()
                     dashboard_page.set_viewport_size({"width": 768, "height": 844})
                     dashboard_page.wait_for_function(
-                        "!document.querySelector('#app-sidebar').hasAttribute('inert')"
+                        """() => !window.matchMedia('(max-width: 767px)').matches
+                        && document.querySelector('[data-app-menu-toggle]').getAttribute('aria-expanded') === 'false'
+                        && !document.querySelector('#app-sidebar').hasAttribute('inert')"""
                     )
                     self.assertEqual(menu_toggle.get_attribute("aria-expanded"), "false")
                     self.assertTrue(sidebar.get_attribute("inert") is None)
