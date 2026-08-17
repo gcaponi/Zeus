@@ -35,7 +35,6 @@ PAYLOAD = {
     "password1": "A-strong-password-2026",
     "password2": "A-strong-password-2026",
     "company_name": "Owner Company",
-    "company_slug": "owner-company",
 }
 
 
@@ -57,13 +56,12 @@ def _token_from_mailbox(index=-1):
 
 
 @override_settings(ROOT_URLCONF="config.urls")
-def test_uppercase_slug_provisions_lowercase_host():
+def test_slug_generated_from_company_name_lowercase():
     response = _signup(
         payload={
             **PAYLOAD,
             "email": "caps@example.com",
             "company_name": "Testes",
-            "company_slug": "Testes",
         }
     )
     assert response.status_code == 200
@@ -78,6 +76,27 @@ def test_uppercase_slug_provisions_lowercase_host():
     assert Client.objects.filter(schema_name="testes").exists()
     assert not Client.objects.filter(schema_name="Testes").exists()
     assert Domain.objects.filter(domain="testes.zeus.cais.uno").exists()
+
+
+@override_settings(ROOT_URLCONF="config.urls")
+def test_slug_normalizes_special_chars():
+    response = _signup(
+        payload={**PAYLOAD, "email": "srl@example.com", "company_name": "Teste S.r.l."}
+    )
+    assert response.status_code == 200
+    pending = SignupProvisioning.objects.get(email="srl@example.com")
+    assert pending.slug == "teste-srl"
+
+
+@override_settings(ROOT_URLCONF="config.urls")
+def test_slug_suffix_when_name_taken():
+    _signup()  # Owner Company -> owner-company (pending, owner@example.com)
+
+    response = _signup(payload={**PAYLOAD, "email": "other@example.com"})
+
+    assert response.status_code == 200
+    pending = SignupProvisioning.objects.get(email="other@example.com")
+    assert pending.slug == "owner-company-2"
 
 
 @override_settings(ROOT_URLCONF="config.urls")

@@ -2,13 +2,46 @@ from allauth.account.forms import SignupForm
 from django import forms
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from django.utils.text import slugify
 from django_tenants.utils import schema_context
 
 from apps.core.models import Client, SignupProvisioning, WorkspaceAccess
 
-_SLUG_TAKEN = (
-    'The workspace URL "{slug}.zeus.cais.uno" is already taken. Please choose another.'
-)
+
+def _slug_reserved_by_other(slug, email):
+    """True se lo slug e' un tenant attivo o e' riservato da un provisioning
+    valido di un altro utente; lo stesso email puo' riusare il proprio pending."""
+    if Client.objects.filter(schema_name__iexact=slug).exists():
+        return True
+    now = timezone.now()
+    reserved = SignupProvisioning.objects.filter(slug__iexact=slug).exclude(
+        status=SignupProvisioning.STATUS_FAILED,
+    )
+    for row in reserved:
+        if row.status == SignupProvisioning.STATUS_COMPLETED:
+            return True
+        if row.status == SignupProvisioning.STATUS_PENDING:
+            if row.expires_at is not None and row.expires_at < now:
+                continue
+            if email and row.email.lower() == email.lower():
+                continue
+            return True
+    return False
+
+
+def _workspace_slug_from_name(company_name, email):
+    """Slug workspace unico generato dal nome azienda.
+
+    Minuscolo e sicuro sia per il sottodominio DNS sia per lo schema
+    Postgres (slugify). Se il nome e' gia' occupato da un altro workspace
+    aggiunge un suffisso numerico (acme, acme-2, acme-3, ...)."""
+    base = slugify(company_name)[:50].strip("-") or "workspace"
+    slug = base
+    suffix = 2
+    while _slug_reserved_by_other(slug, email):
+        slug = f"{base}-{suffix}"
+        suffix += 1
+    return slug
 
 
 class ZEUSSignupForm(SignupForm):
@@ -16,40 +49,16 @@ class ZEUSSignupForm(SignupForm):
         max_length=100,
         label="Company name",
     )
-    company_slug = forms.SlugField(
-        max_length=63,
-        label="Company slug",
-        help_text="Used for your subdomain: {slug}.zeus.cais.uno",
-    )
-
-    def clean_company_slug(self):
-        # HTTP Host e' case-insensitive: uno slug "Testes" crea
-        # Testes.zeus.cais.uno, il browser chiede testes.zeus.cais.uno, 404.
-        slug = self.cleaned_data["company_slug"].lower()
-        if Client.objects.filter(schema_name__iexact=slug).exists():
-            raise forms.ValidationError(_SLUG_TAKEN.format(slug=slug))
-        now = timezone.now()
-        reserved = SignupProvisioning.objects.filter(slug__iexact=slug).exclude(
-            status=SignupProvisioning.STATUS_FAILED,
-        )
-        email = (self.data.get("email") or "").strip()
-        for row in reserved:
-            if row.status == SignupProvisioning.STATUS_COMPLETED:
-                raise forms.ValidationError(_SLUG_TAKEN.format(slug=slug))
-            if row.status == SignupProvisioning.STATUS_PENDING:
-                if row.expires_at is not None and row.expires_at < now:
-                    continue
-                if email and row.email.lower() == email.lower():
-                    continue
-                raise forms.ValidationError(_SLUG_TAKEN.format(slug=slug))
-        return slug
 
     def clean(self):
         cleaned_data = super().clean()
         email = cleaned_data.get("email")
-        slug = cleaned_data.get("company_slug")
-        if not email or not slug:
+        company_name = cleaned_data.get("company_name")
+        if not email or not company_name:
             return cleaned_data
+
+        slug = _workspace_slug_from_name(company_name, email)
+        cleaned_data["company_slug"] = slug
 
         if WorkspaceAccess.objects.filter(email__iexact=email).exists():
             raise forms.ValidationError(
