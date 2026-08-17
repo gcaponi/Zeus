@@ -380,6 +380,21 @@ body {
   color: var(--accent-cyan-light);
 }
 
+.zeus-mobile-menu .zeus-logout-form {
+  display: block;
+}
+
+.zeus-mobile-menu .zeus-logout-link {
+  display: block;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-align: left;
+}
+
 @media (max-width: 640px) {
   .zeus-nav { top: 0.65rem; width: calc(100vw - 1rem); min-height: 4rem; border-radius: 1.4rem; grid-template-columns: auto auto; }
   .zeus-nav-links { display: none; }
@@ -1014,6 +1029,25 @@ html,
 .zeus-app-menu-toggle,
 .zeus-app-menu-close {
   display: none;
+}
+
+.zeus-logout-form {
+  display: inline;
+  margin: 0;
+}
+
+.zeus-logout-link,
+button.zeus-app-logout {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.zeus-app-sidebar-foot .zeus-logout-link {
+  font-weight: 700;
 }
 
 .zeus-app-logout {

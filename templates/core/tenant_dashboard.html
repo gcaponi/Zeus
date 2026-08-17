@@ -18,7 +18,7 @@
 
         <div class="mt-8 flex flex-wrap justify-center gap-3">
             <a href="{% url 'onboarding-index' %}" class="zeus-btn zeus-btn-primary">Inizia onboarding</a>
-            <a href="{% url 'account_logout' %}" class="zeus-btn zeus-btn-ghost">Esci</a>
+            {% include "core/partials/_logout_form.html" with button_class="zeus-btn zeus-btn-ghost" %}
         </div>
 
         <hr class="zeus-divider">

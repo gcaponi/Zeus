@@ -31,7 +31,7 @@
 
     <div class="zeus-app-sidebar-foot">
         <span class="zeus-app-user-email">{{ user.email|default:"Workspace ZEUS" }}</span>
-        <a href="{% url 'account_logout' %}">Esci</a>
+        {% include "core/partials/_logout_form.html" with button_class="zeus-logout-link" %}
     </div>
 </div>
 {% endblock %}
@@ -62,7 +62,7 @@
         <button type="button" class="zeus-app-icon-button" data-app-theme-toggle aria-label="Attiva tema scuro" title="Cambia tema">
             <span aria-hidden="true">☾</span>
         </button>
-        <a class="zeus-app-logout" href="{% url 'account_logout' %}">Esci</a>
+        {% include "core/partials/_logout_form.html" with button_class="zeus-app-logout" %}
     </div>
 </div>
 <button type="button" class="zeus-app-sidebar-overlay" data-app-menu-close aria-label="Chiudi navigazione" tabindex="-1"></button>

@@ -273,10 +273,21 @@ def test_dashboard_keeps_authentication_and_navigation_contract(django_user_mode
 
 
 @override_settings(ROOT_URLCONF="config.urls")
-def test_logout_keeps_public_redirect_and_clears_workspace_cookie(client):
+def test_logout_get_shows_confirmation_without_clearing_workspace_cookie(client):
     client.cookies[WORKSPACE_COOKIE] = "test.zeus.cais.uno"
 
     response = client.get(reverse("account_logout"))
+
+    assert response.status_code == 200
+    assert b"Vuoi uscire?" in response.content
+    assert WORKSPACE_COOKIE not in response.cookies
+
+
+@override_settings(ROOT_URLCONF="config.urls")
+def test_logout_keeps_public_redirect_and_clears_workspace_cookie(client):
+    client.cookies[WORKSPACE_COOKIE] = "test.zeus.cais.uno"
+
+    response = client.post(reverse("account_logout"))
 
     assert response.status_code == 302
     assert response.url == "https://zeus.cais.uno/accounts/login/"

@@ -181,6 +181,30 @@ def test_all_session_cookies_are_host_only():
 
 
 @override_settings(ROOT_URLCONF="config.urls")
+def test_logout_get_does_not_end_sessions():
+    user = _create_app_user()
+    from django.contrib.auth import get_user_model
+    from django.contrib.sessions.models import Session
+
+    get_user_model().objects.create_superuser("root", "root@x.it", "pw")
+    client = Client()
+    client.force_login(user)
+    client.post("/admin/login/", {"username": "root", "password": "pw"})
+    app_key = client.cookies[settings.SESSION_COOKIE_NAME].value
+    admin_key = client.cookies[settings.ADMIN_SESSION_COOKIE_NAME].value
+
+    response = client.get("/accounts/logout/")
+
+    assert response.status_code == 200
+    assert b"method=\"post\"" in response.content
+    assert b"/accounts/logout/" in response.content
+    assert client.cookies[settings.SESSION_COOKIE_NAME].value == app_key
+    assert client.cookies[settings.ADMIN_SESSION_COOKIE_NAME].value == admin_key
+    assert Session.objects.filter(session_key=app_key).exists()
+    assert Session.objects.filter(session_key=admin_key).exists()
+
+
+@override_settings(ROOT_URLCONF="config.urls")
 def test_logout_clears_both_session_cookies():
     user = _create_app_user()
     from django.contrib.auth import get_user_model
@@ -195,10 +219,58 @@ def test_logout_clears_both_session_cookies():
     assert settings.SESSION_COOKIE_NAME in client.cookies
     assert settings.ADMIN_SESSION_COOKIE_NAME in client.cookies
 
-    response = client.get("/accounts/logout/")
+    response = client.post("/accounts/logout/")
 
     assert response.status_code == 302
     # Il TestClient mantiene i cookie eliminati con valore vuoto (il browser
     # li rimuove davvero): verifichiamo che entrambe le sessioni siano morte.
     assert client.cookies[settings.SESSION_COOKIE_NAME].value == ""
     assert client.cookies[settings.ADMIN_SESSION_COOKIE_NAME].value == ""
+
+
+@override_settings(ROOT_URLCONF="config.urls")
+def test_logout_revokes_admin_session_store():
+    user = _create_app_user()
+    from django.contrib.auth import get_user_model
+    from django.contrib.sessions.models import Session
+
+    get_user_model().objects.create_superuser("root", "root@x.it", "pw")
+    client = Client()
+    client.force_login(user)
+    client.post("/admin/login/", {"username": "root", "password": "pw"})
+    app_key = client.cookies[settings.SESSION_COOKIE_NAME].value
+    admin_key = client.cookies[settings.ADMIN_SESSION_COOKIE_NAME].value
+
+    client.post("/accounts/logout/")
+
+    assert not Session.objects.filter(session_key=app_key).exists()
+    assert not Session.objects.filter(session_key=admin_key).exists()
+
+    replay = Client()
+    replay.cookies[settings.ADMIN_SESSION_COOKIE_NAME] = admin_key
+    replayed = replay.get("/admin/")
+    assert replayed.status_code == 302
+    assert "/admin/login" in replayed.url
+
+
+def test_templates_do_not_use_get_logout_links():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1] / "templates"
+    offenders = []
+    for path in root.rglob("*.html"):
+        text = path.read_text(encoding="utf-8")
+        if "href=\"{% url 'account_logout' %}\"" in text:
+            offenders.append(str(path.relative_to(root)))
+    assert offenders == []
+
+
+@override_settings(ROOT_URLCONF="config.urls")
+def test_logout_post_requires_csrf():
+    user = _create_app_user()
+    client = Client(enforce_csrf_checks=True)
+    client.force_login(user)
+
+    response = client.post("/accounts/logout/")
+
+    assert response.status_code == 403

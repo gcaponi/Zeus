@@ -3,6 +3,7 @@ import ipaddress
 import logging
 import secrets
 from datetime import timedelta
+from importlib import import_module
 
 from allauth.account.views import SignupView
 from django.conf import settings
@@ -417,14 +418,28 @@ def tenant_dashboard(request):
     })
 
 
+def _revoke_session_key(session_key):
+    """Delete a session from the configured store. Missing keys are a no-op."""
+    if not session_key:
+        return
+    engine = import_module(settings.SESSION_ENGINE)
+    engine.SessionStore(session_key).delete()
+
+
 def public_logout(request):
-    """Logout from any domain and redirect to public login with cookie cleared."""
+    """End both app and admin sessions. GET only confirms; POST performs logout."""
+    if request.method != "POST":
+        return render(request, "account/logout.html")
+
+    # Path /accounts/logout/ loads the app session. Flush it, then also
+    # delete the independent admin session so a copied cookie cannot replay.
+    admin_session_key = request.COOKIES.get(settings.ADMIN_SESSION_COOKIE_NAME)
     auth_logout(request)
+    _revoke_session_key(admin_session_key)
+
     response = redirect("https://zeus.cais.uno/accounts/login/")
-    # Svuota entrambi i cookie di sessione: la zona admin usa un cookie
-    # separato (ADMIN_SESSION_COOKIE_NAME) gestito da TenantAwareSessionMiddleware.
-    # Il cookie app ha Domain condiviso, quello admin e' host-only: vanno
-    # cancellati ciascuno con il proprio dominio o il browser li ignora.
-    response.delete_cookie(settings.SESSION_COOKIE_NAME, domain=settings.SESSION_COOKIE_DOMAIN)
+    response.delete_cookie(
+        settings.SESSION_COOKIE_NAME, domain=settings.SESSION_COOKIE_DOMAIN
+    )
     response.delete_cookie(settings.ADMIN_SESSION_COOKIE_NAME)
     return _clear_workspace_cookie(response)
