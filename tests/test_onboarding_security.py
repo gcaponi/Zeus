@@ -76,3 +76,57 @@ class TestOnboardingFileDeleteSecurity:
 
         assert response.status_code == 200
         assert not CompanyFile.objects.filter(pk=company_file.pk).exists()
+
+
+class TestGenerationProgressAuth:
+    def test_anonymous_is_redirected_for_existing_run(self, rf_with_tenant):
+        from apps.companies.models import PipelineRun
+
+        company = _company()
+        run = PipelineRun.objects.create(
+            company=company,
+            status=PipelineRun.STATUS_RUNNING,
+            current_step="2/4: Generazione Pre-DNA",
+            error_msg="dettaglio interno",
+        )
+        request = rf_with_tenant("get", reverse("generation-progress", args=[run.pk]))
+        request.user = AnonymousUser()
+
+        response = views.generation_progress(request, pk=run.pk)
+
+        assert response.status_code == 302
+        assert "/accounts/login/" in response.url
+        assert b"dettaglio interno" not in response.content
+
+    def test_anonymous_is_redirected_for_missing_run(self, rf_with_tenant):
+        request = rf_with_tenant("get", reverse("generation-progress", args=[999999]))
+        request.user = AnonymousUser()
+
+        response = views.generation_progress(request, pk=999999)
+
+        assert response.status_code == 302
+        assert "/accounts/login/" in response.url
+
+    def test_authenticated_owner_receives_progress(self, rf_with_tenant):
+        from apps.companies.models import PipelineRun
+
+        company = _company()
+        run = PipelineRun.objects.create(
+            company=company,
+            status=PipelineRun.STATUS_RUNNING,
+            current_step="2/4: Generazione Pre-DNA",
+        )
+        request = rf_with_tenant("get", reverse("generation-progress", args=[run.pk]))
+
+        response = views.generation_progress(request, pk=run.pk)
+
+        assert response.status_code == 200
+        assert b"Generazione Pre-DNA" in response.content
+        assert b"Step 2 di 4" in response.content
+
+    def test_missing_run_is_not_found(self, rf_with_tenant):
+        request = rf_with_tenant("get", reverse("generation-progress", args=[999999]))
+
+        response = views.generation_progress(request, pk=999999)
+
+        assert response.status_code == 404

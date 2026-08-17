@@ -2636,6 +2636,7 @@ def onboarding_status(request, pk):
     })
 
 
+@login_required
 def generation_progress(request, pk):
     """Shared HTMX progress endpoint for all generation tasks.
     
