@@ -18,16 +18,13 @@ jobs:
   semgrep:
     name: Semgrep
     runs-on: ubuntu-24.04
+    container:
+      image: semgrep/semgrep
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-      - run: pip install semgrep
+      - uses: actions/checkout@v4
       - run: >-
           semgrep scan
           --config p/python
-          --config p/django
           --severity ERROR
           --error
           --metrics=off
@@ -58,6 +55,6 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-      - run: uv export --frozen --no-dev -o /tmp/zeus-reqs.txt
+      - run: uv export --frozen --no-dev --no-hashes --no-emit-project -o /tmp/zeus-reqs.txt
       - run: pip install pip-audit
-      - run: pip-audit -r /tmp/zeus-reqs.txt
+      - run: pip-audit -r /tmp/zeus-reqs.txt --progress-spinner off
