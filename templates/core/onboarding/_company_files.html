@@ -15,7 +15,7 @@
                 <span class="text-xs text-content-muted whitespace-nowrap">{{ file.file_size|filesizeformat }}</span>
                 <span class="text-xs text-content-muted whitespace-nowrap">{{ file.created_at|date:"d/m/Y H:i" }}</span>
             </div>
-            <form method="post" action="{% url 'onboarding-file-delete' file.pk %}" hx-post="{% url 'onboarding-file-delete' file.pk %}" hx-target="#company-files-list" hx-swap="outerHTML" onsubmit="return confirm('Eliminare {{ file.original_name }}?');">
+            <form method="post" action="{% url 'onboarding-file-delete' file.pk %}" hx-post="{% url 'onboarding-file-delete' file.pk %}" hx-target="#company-files-list" hx-swap="outerHTML" onsubmit="return confirm('Eliminare questo file?');">
                 {% csrf_token %}
                 <button type="submit" class="zeus-btn zeus-btn-destructive zeus-btn-sm">Elimina</button>
             </form>

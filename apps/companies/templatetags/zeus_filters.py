@@ -32,6 +32,9 @@ def markdownify(text: str) -> str:
     if not text:
         return ""
 
+    # Escape first so unmatched HTML never becomes executable after mark_safe.
+    text = html.escape(text, quote=True)
+
     # Normalise line endings
     text = text.replace("\r\n", "\n").replace("\r", "\n")
 
@@ -73,8 +76,7 @@ def markdownify(text: str) -> str:
         # Regular paragraph
         result_blocks.append(f"<p>{_inline_markdown(block)}</p>")
 
-    html = "\n".join(result_blocks)
-    return mark_safe(html)
+    return mark_safe("\n".join(result_blocks))
 
 
 def _inline_markdown(text: str) -> str:
@@ -103,10 +105,15 @@ _SAFE_LINK_PREFIXES = ("http://", "https://", "mailto:", "/", "#")
 
 def _render_link(match: re.Match) -> str:
     """Render a markdown link, or fall back to the plain label when unsafe."""
-    label, url = match.group(1), match.group(2).strip()
-    safe_label = html.escape(label, quote=True)
+    label, raw_url = match.group(1), match.group(2).strip()
+    # Source text is already HTML-escaped; unescape the URL for validation so
+    # query strings with `&` still link, then re-escape the href.
+    url = html.unescape(raw_url)
     if any(char in url for char in ('"', "'", "<", ">")) or any(c.isspace() for c in url):
-        return safe_label
+        return label
     if not url.lower().startswith(_SAFE_LINK_PREFIXES):
-        return safe_label
-    return f'<a href="{url}" rel="noopener noreferrer">{safe_label}</a>'
+        return label
+    return (
+        f'<a href="{html.escape(url, quote=True)}" '
+        f'rel="noopener noreferrer">{label}</a>'
+    )

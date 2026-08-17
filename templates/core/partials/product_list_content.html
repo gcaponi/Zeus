@@ -46,7 +46,7 @@
                         <p class="mt-2 text-xs text-content-muted italic zeus-product-next-action">{{ product.next_action }}</p>
                     </a>
                     <div class="flex items-center gap-3 zeus-product-actions">
-                        <form method="post" action="{% url 'specialista-delete' product.pk %}" onsubmit="return confirm('Eliminare lo specialista &quot;{{ product.name }}&quot; e tutti i suoi file e DNA? Questa azione e irreversibile.');">
+                        <form method="post" action="{% url 'specialista-delete' product.pk %}" onsubmit="return confirm('Eliminare questo specialista e tutti i suoi file e DNA? Questa azione e irreversibile.');">
                             {% csrf_token %}
                             <button type="submit" class="zeus-btn zeus-btn-destructive zeus-btn-sm">Elimina</button>
                         </form>
