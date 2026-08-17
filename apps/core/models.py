@@ -213,6 +213,11 @@ class SignupProvisioning(models.Model):
 
     slug = models.SlugField(max_length=63, unique=True)
     email = models.EmailField()
+    company_name = models.CharField(max_length=100, blank=True)
+    password_hash = models.CharField(max_length=256, blank=True)
+    token_hash = models.CharField(max_length=64, unique=True, null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    verified_at = models.DateTimeField(null=True, blank=True)
     client_ip_hash = models.CharField(max_length=64)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
     error_code = models.CharField(max_length=100, blank=True)

@@ -2039,11 +2039,102 @@ def _finalize_complete_dna(dna, pre_dna, company):
     dna.save(update_fields=["_enrichment", "audit_hash", "previous_hash"])
 
 
+def _company_file_max_bytes():
+    return int(getattr(settings, "COMPANY_FILE_MAX_BYTES", 15 * 1024 * 1024))
+
+
+def _company_file_max_pdf_pages():
+    return int(getattr(settings, "COMPANY_FILE_MAX_PDF_PAGES", 50))
+
+
+def _rewind_uploaded_file(uploaded_file):
+    seek = getattr(uploaded_file, "seek", None)
+    if callable(seek):
+        seek(0)
+
+
+def _uploaded_file_header(uploaded_file, nbytes=16):
+    header = uploaded_file.read(nbytes)
+    _rewind_uploaded_file(uploaded_file)
+    return header or b""
+
+
+def _looks_like_pdf(header):
+    return header.startswith(b"%PDF")
+
+
+def _looks_like_image(header):
+    if header.startswith(b"\x89PNG\r\n\x1a\n") or header.startswith(b"\xff\xd8\xff"):
+        return True
+    return len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WEBP"
+
+
+def _file_size_limit_label(max_bytes):
+    if max_bytes >= 1024 * 1024:
+        return f"{max_bytes // (1024 * 1024)} MB"
+    return f"{max_bytes} byte"
+
+
+def _admit_uploaded_file(uploaded_file):
+    """Rifiuta body troppo grandi, magic errata e PDF con troppe pagine.
+
+    La dimensione dichiarata viene valutata prima di qualsiasi read().
+    Per i PDF si apre il documento solo per page_count, senza get_text/OCR.
+    """
+    max_bytes = _company_file_max_bytes()
+    declared = getattr(uploaded_file, "size", None)
+    try:
+        declared = int(declared)
+    except (TypeError, ValueError):
+        return "Impossibile determinare la dimensione del file."
+    if declared < 0:
+        return "Impossibile determinare la dimensione del file."
+    if declared > max_bytes:
+        return f"Il file supera il limite di {_file_size_limit_label(max_bytes)}."
+    if declared == 0:
+        return "Il file è vuoto."
+
+    name = (getattr(uploaded_file, "name", None) or "documento-azienda.txt").lower()
+    header = _uploaded_file_header(uploaded_file, 16)
+    if not header:
+        return "Il file è vuoto."
+    if name.endswith(".pdf") and not _looks_like_pdf(header):
+        return "Il file non è un PDF valido."
+    if name.endswith((".png", ".jpg", ".jpeg", ".webp")) and not _looks_like_image(header):
+        return "Il file non è un'immagine valida."
+    if not name.endswith(".pdf"):
+        return None
+
+    raw = uploaded_file.read()
+    _rewind_uploaded_file(uploaded_file)
+    if len(raw) > max_bytes:
+        return f"Il file supera il limite di {_file_size_limit_label(max_bytes)}."
+    try:
+        doc = fitz.open(stream=raw, filetype="pdf")
+    except Exception:
+        return "Il file non è un PDF valido."
+    try:
+        if getattr(doc, "needs_pass", False):
+            return "Il PDF è protetto da password."
+        pages = int(doc.page_count or 0)
+    finally:
+        doc.close()
+    max_pages = _company_file_max_pdf_pages()
+    if pages > max_pages:
+        return f"Il PDF supera il limite di {max_pages} pagine."
+    return None
+
+
 def _extract_company_file_text(uploaded_file):
     raw = uploaded_file.read()
     name = uploaded_file.name or "documento-azienda.txt"
+    if len(raw) > _company_file_max_bytes():
+        return "", len(raw), name
     if name.lower().endswith(".pdf"):
         doc = fitz.open(stream=raw, filetype="pdf")
+        if doc.page_count > _company_file_max_pdf_pages():
+            doc.close()
+            return "", len(raw), name
         text = "\n".join(page.get_text() for page in doc)
         # Fallback OCR per PDF scannerizzati
         if not text.strip():
@@ -2113,6 +2204,9 @@ def _save_company_file_from_request(company, request, *, replace_notes=False):
         return block_reason
 
     if uploaded_file:
+        admit_error = _admit_uploaded_file(uploaded_file)
+        if admit_error:
+            return admit_error
         content_text, file_size, original_name = _extract_company_file_text(uploaded_file)
         if not content_text.strip():
             return "Il documento aziendale non contiene testo leggibile."
@@ -2757,6 +2851,10 @@ def onboarding_file_upload(request):
     block_reason = _company_file_block_reason(company)
     if block_reason:
         return _company_files_response(request, company, error=block_reason)
+
+    admit_error = _admit_uploaded_file(uploaded_file)
+    if admit_error:
+        return _company_files_response(request, company, error=admit_error)
 
     content_text, extracted_size, original_name = _extract_company_file_text(uploaded_file)
     if not content_text.strip():
@@ -5301,6 +5399,16 @@ def product_file_upload(request, pk):
         return JsonResponse({"error": "File o note obbligatori"}, status=400)
 
     if uploaded_file:
+        admit_error = _admit_uploaded_file(uploaded_file)
+        if admit_error:
+            if not _wants_json(request):
+                return render(
+                    request,
+                    _product_detail_template_name(),
+                    _product_detail_context(product, admit_error),
+                    status=400,
+                )
+            return JsonResponse({"error": admit_error}, status=400)
         content_text, file_size, original_name = _extract_company_file_text(uploaded_file)
         if notes:
             content_text = f"{content_text}\n\nNote aggiuntive:\n{notes}".strip()
@@ -5765,6 +5873,11 @@ def product_promote(request, pk):
         return HttpResponse("Prodotto non trovato", status=404)
     if product.status != Specialista.STATUS_IN_VALIDAZIONE:
         return HttpResponse("Stato non valido per la promozione", status=400)
+    if product.current_approved_complete_dna() is None:
+        return HttpResponse(
+            "Il DNA Specialista deve essere completo e approvato prima dell'attivazione.",
+            status=400,
+        )
     product.status = Specialista.STATUS_ATTIVO
     product.save(update_fields=["status"])
     active_count = company.products.filter(status=Specialista.STATUS_ATTIVO).count()
@@ -5796,11 +5909,8 @@ def product_publish(request, pk):
         return HttpResponse("Prodotto non trovato", status=404)
     if product.status != Specialista.STATUS_ATTIVO:
         return HttpResponse("Pubblicazione disponibile solo per specialisti attivi", status=400)
-    dna = product.dna_versions.filter(
-        dna_type=ProductDNA.TYPE_COMPLETE,
-        is_current=True,
-    ).first()
-    if not dna or not dna.is_fully_approved():
+    dna = product.current_approved_complete_dna()
+    if not dna:
         return HttpResponse("DNA Specialista approvato non trovato", status=404)
 
     channel = request.POST.get("channel", ProductPublication.CHANNEL_WEBSITE)

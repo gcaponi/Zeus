@@ -625,6 +625,18 @@ class Specialista(models.Model):
         }
         return mapping.get(self.status, "zeus-badge-muted")
 
+    def current_approved_complete_dna(self):
+        """DNA Specialista completo, corrente e approvato.
+
+        Invariante di attivazione e di consumo Agent: senza questo record
+        lo specialista non puo' diventare attivo e non entra nel prompt.
+        """
+        return self.dna_versions.filter(
+            dna_type="complete",
+            is_current=True,
+            is_approved__isnull=False,
+        ).first()
+
 
 class ProductDNA(models.Model):
     TYPE_PRE = "pre"

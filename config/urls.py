@@ -12,6 +12,7 @@ from apps.core.views import (
     public_login,
     public_logout,
     public_onboarding_redirect,
+    signup_confirm,
     tenant_dashboard,
     tenant_landing,
 )
@@ -24,6 +25,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include(onboarding_urls)),
     path("accounts/signup/", ZEUSSignupView.as_view(), name="account_signup"),
+    path("accounts/signup/confirm/", signup_confirm, name="account-signup-confirm"),
     path("accounts/login/", public_login, name="account_login"),
     path("accounts/handoff/", login_handoff, name="login-handoff"),
     path("accounts/logout/", public_logout, name="account_logout"),

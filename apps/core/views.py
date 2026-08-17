@@ -7,12 +7,14 @@ from importlib import import_module
 
 from allauth.account.views import SignupView
 from django.conf import settings
-from django.contrib.auth import authenticate
+from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth import login as auth_login
 from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.hashers import make_password
 from django.core import signing
 from django.core.cache import cache
+from django.core.mail import send_mail
 from django.core.signing import BadSignature, SignatureExpired
 from django.db import IntegrityError, transaction
 from django.http import Http404, JsonResponse
@@ -37,6 +39,7 @@ WORKSPACE_COOKIE_MAX_AGE = 60 * 60 * 24 * 30
 
 LOGIN_HANDOFF_TTL_SECONDS = 60
 LOGIN_HANDOFF_SALT = "apps.core.login-handoff"
+SIGNUP_VERIFY_SALT = "apps.core.signup-verify"
 logger = logging.getLogger(__name__)
 
 
@@ -166,7 +169,7 @@ def _login_rate_limit_allows(request):
     )
 
 
-def _claim_signup_provisioning(slug, email, client_ip):
+def _claim_signup_provisioning(slug, email, client_ip, **extra):
     values = {
         "email": email,
         "client_ip_hash": hashlib.sha256(client_ip.encode()).hexdigest(),
@@ -174,18 +177,144 @@ def _claim_signup_provisioning(slug, email, client_ip):
         "error_code": "",
         "cleanup_required": False,
         "completed_at": None,
+        "verified_at": None,
+        **extra,
     }
     try:
         with transaction.atomic():
             return SignupProvisioning.objects.create(slug=slug, **values)
     except IntegrityError:
+        now = timezone.now()
         claimed = SignupProvisioning.objects.filter(
             slug=slug,
             status=SignupProvisioning.STATUS_FAILED,
         ).update(**values)
         if claimed != 1:
+            claimed = SignupProvisioning.objects.filter(
+                slug=slug,
+                status=SignupProvisioning.STATUS_PENDING,
+                expires_at__lt=now,
+            ).update(**values)
+        if claimed != 1:
             return None
         return SignupProvisioning.objects.get(slug=slug)
+
+
+def _reserve_pending_signup(slug, email, client_ip, company_name, password_hash):
+    """Una registrazione pending per email; niente tenant finche' non conferma."""
+    extra = {
+        "company_name": company_name,
+        "password_hash": password_hash,
+        "token_hash": None,
+    }
+    pending = SignupProvisioning.objects.filter(
+        email__iexact=email,
+        status=SignupProvisioning.STATUS_PENDING,
+    ).first()
+    if pending is None:
+        return _claim_signup_provisioning(
+            slug, email, client_ip, **extra,
+        )
+
+    now = timezone.now()
+    if pending.slug != slug:
+        holder = SignupProvisioning.objects.filter(slug=slug).exclude(pk=pending.pk).first()
+        if holder is not None:
+            expired_pending = (
+                holder.status == SignupProvisioning.STATUS_PENDING
+                and holder.expires_at is not None
+                and holder.expires_at < now
+            )
+            if holder.status != SignupProvisioning.STATUS_FAILED and not expired_pending:
+                return None
+            if expired_pending or holder.status == SignupProvisioning.STATUS_FAILED:
+                holder.slug = f"expired-{holder.pk}-{holder.slug}"[:63]
+                holder.save(update_fields=["slug"])
+        if Client.objects.filter(schema_name=slug).exists():
+            return None
+        pending.slug = slug
+    pending.company_name = company_name
+    pending.password_hash = password_hash
+    pending.client_ip_hash = hashlib.sha256(client_ip.encode()).hexdigest()
+    pending.error_code = ""
+    pending.cleanup_required = False
+    pending.completed_at = None
+    pending.verified_at = None
+    pending.save(update_fields=[
+        "slug",
+        "company_name",
+        "password_hash",
+        "client_ip_hash",
+        "error_code",
+        "cleanup_required",
+        "completed_at",
+        "verified_at",
+        "updated_at",
+    ])
+    return pending
+
+
+def _signup_confirm_url(token):
+    base = getattr(settings, "SIGNUP_VERIFY_URL_BASE", "https://zeus.cais.uno")
+    return f"{base.rstrip('/')}/accounts/signup/confirm/?t={token}"
+
+
+def _issue_signup_verification(provisioning):
+    nonce = secrets.token_urlsafe(32)
+    now = timezone.now()
+    ttl = settings.SIGNUP_VERIFY_TTL_SECONDS
+    token_hash = hashlib.sha256(nonce.encode()).hexdigest()
+    SignupProvisioning.objects.filter(pk=provisioning.pk).update(
+        token_hash=token_hash,
+        expires_at=now + timedelta(seconds=ttl),
+        status=SignupProvisioning.STATUS_PENDING,
+        verified_at=None,
+    )
+    SignupProvisioning.objects.filter(
+        status=SignupProvisioning.STATUS_PENDING,
+        expires_at__lt=now,
+    ).exclude(pk=provisioning.pk).update(token_hash=None)
+    return signing.dumps(
+        {"nonce": nonce, "email": provisioning.email},
+        salt=SIGNUP_VERIFY_SALT,
+        compress=True,
+    )
+
+
+def _send_signup_verification_email(email, company_name, token):
+    confirm_url = _signup_confirm_url(token)
+    send_mail(
+        subject="Conferma il tuo account ZEUS",
+        message=(
+            "Per attivare il workspace "
+            f"{company_name} apri questo link (valido 24 ore):\n\n"
+            f"{confirm_url}\n\n"
+            "Se non hai chiesto tu questo account, ignora il messaggio.\n"
+        ),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[email],
+        fail_silently=False,
+    )
+
+
+def _create_tenant_owner(email, password_hash):
+    user = get_user_model()(
+        username=email[:150],
+        email=email,
+        is_active=True,
+    )
+    user.password = password_hash
+    user.save()
+    try:
+        from allauth.account.models import EmailAddress
+    except Exception:
+        return user
+    EmailAddress.objects.update_or_create(
+        user=user,
+        email=email,
+        defaults={"primary": True, "verified": True},
+    )
+    return user
 
 
 def _cleanup_failed_signup(tenant, email, tenant_domain):
@@ -208,13 +337,11 @@ def _cleanup_failed_signup(tenant, email, tenant_domain):
     return cleanup_ok
 
 
-def _provision_signup(request, form, provisioning):
-    slug = form.cleaned_data["company_slug"]
-    email = form.cleaned_data["email"]
+def _provision_workspace(email, slug, company_name, create_user, provisioning):
     tenant_domain = f"{slug}.zeus.cais.uno"
     tenant = None
     try:
-        tenant = Client(schema_name=slug, name=form.cleaned_data["company_name"])
+        tenant = Client(schema_name=slug, name=company_name)
         tenant.save()
 
         domain = Domain.objects.create(
@@ -226,7 +353,7 @@ def _provision_signup(request, form, provisioning):
         WorkspaceSubscription.objects.create(client=tenant, plan=Plan.get_default())
 
         with schema_context(slug):
-            user = form.save(request)
+            user = create_user()
 
         handoff_token = _create_login_handoff(slug, user)
     except Exception as exc:
@@ -243,6 +370,94 @@ def _provision_signup(request, form, provisioning):
         completed_at=timezone.now(),
     )
     return domain, handoff_token
+
+
+def _provision_signup(request, form, provisioning):
+    return _provision_workspace(
+        email=form.cleaned_data["email"],
+        slug=form.cleaned_data["company_slug"],
+        company_name=form.cleaned_data["company_name"],
+        create_user=lambda: form.save(request),
+        provisioning=provisioning,
+    )
+
+
+def _signup_confirm_error(request):
+    return render(
+        request,
+        "account/signup_confirm_error.html",
+        status=400,
+    )
+
+
+@require_GET
+def signup_confirm(request):
+    """Attiva il workspace solo dopo il click sul link monouso inviato via email."""
+    raw_token = request.GET.get("t", "")
+    if not raw_token or len(raw_token) > 1024:
+        return _signup_confirm_error(request)
+
+    try:
+        payload = signing.loads(
+            raw_token,
+            salt=SIGNUP_VERIFY_SALT,
+            max_age=settings.SIGNUP_VERIFY_TTL_SECONDS,
+        )
+    except (BadSignature, SignatureExpired):
+        return _signup_confirm_error(request)
+
+    nonce = payload.get("nonce") if isinstance(payload, dict) else None
+    email = payload.get("email") if isinstance(payload, dict) else None
+    if not isinstance(nonce, str) or not isinstance(email, str):
+        return _signup_confirm_error(request)
+
+    token_hash = hashlib.sha256(nonce.encode()).hexdigest()
+    now = timezone.now()
+    provisioning = SignupProvisioning.objects.filter(
+        token_hash=token_hash,
+        email__iexact=email,
+        status=SignupProvisioning.STATUS_PENDING,
+        expires_at__gt=now,
+        verified_at__isnull=True,
+    ).first()
+    if provisioning is None or not provisioning.password_hash:
+        return _signup_confirm_error(request)
+
+    consumed = SignupProvisioning.objects.filter(
+        pk=provisioning.pk,
+        token_hash=token_hash,
+        status=SignupProvisioning.STATUS_PENDING,
+        verified_at__isnull=True,
+    ).update(verified_at=now, token_hash=None)
+    if consumed != 1:
+        return _signup_confirm_error(request)
+    provisioning.refresh_from_db()
+
+    try:
+        domain, handoff_token = _provision_workspace(
+            email=provisioning.email,
+            slug=provisioning.slug,
+            company_name=provisioning.company_name or provisioning.slug,
+            create_user=lambda: _create_tenant_owner(
+                provisioning.email,
+                provisioning.password_hash,
+            ),
+            provisioning=provisioning,
+        )
+    except Exception:
+        logger.exception(
+            "signup_confirm_provisioning_failed",
+            extra={"tenant": provisioning.slug},
+        )
+        return render(
+            request,
+            "account/signup_confirm_error.html",
+            {"provision_failed": True},
+            status=503,
+        )
+
+    response = redirect(f"https://{domain.domain}/accounts/handoff/?t={handoff_token}")
+    return _set_workspace_cookie(response, domain.domain)
 
 
 class ZEUSSignupView(SignupView):
@@ -279,10 +494,17 @@ class ZEUSSignupView(SignupView):
     def form_valid(self, form):
         slug = form.cleaned_data["company_slug"]
         email = form.cleaned_data["email"]
-        provisioning = _claim_signup_provisioning(
+        company_name = form.cleaned_data["company_name"]
+        if WorkspaceAccess.objects.filter(email__iexact=email).exists():
+            form.add_error("email", "This email is already registered in another workspace.")
+            return self.form_invalid(form)
+
+        provisioning = _reserve_pending_signup(
             slug,
             email,
             _signup_client_ip(self.request),
+            company_name,
+            make_password(form.cleaned_data["password1"]),
         )
         if provisioning is None:
             form.add_error(None, "Provisioning gia' in corso o workspace gia' creato.")
@@ -291,19 +513,22 @@ class ZEUSSignupView(SignupView):
             return response
 
         try:
-            domain, handoff_token = _provision_signup(self.request, form, provisioning)
+            token = _issue_signup_verification(provisioning)
+            _send_signup_verification_email(email, company_name, token)
         except Exception:
-            logger.exception("signup_provisioning_failed", extra={"tenant": slug})
-            form.add_error(
-                None,
-                "Creazione workspace non riuscita. Nessun dato parziale e' stato mantenuto.",
+            logger.exception("signup_verification_email_failed", extra={"tenant": slug})
+            return render(
+                self.request,
+                self.template_name,
+                {"form": self.form_class(), "signup_unavailable": True},
+                status=503,
             )
-            response = self.form_invalid(form)
-            response.status_code = 503
-            return response
 
-        response = redirect(f"https://{domain.domain}/accounts/handoff/?t={handoff_token}")
-        return _set_workspace_cookie(response, domain.domain)
+        return render(
+            self.request,
+            "account/signup_check_email.html",
+            {"email": email},
+        )
 
 
 def public_login(request):

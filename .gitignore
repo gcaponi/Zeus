@@ -34,9 +34,6 @@ static_collected/
 .env.local
 .env.*.local
 
-# Docker
-docker-compose.override.yml
-
 # Testing
 .coverage
 coverage.xml

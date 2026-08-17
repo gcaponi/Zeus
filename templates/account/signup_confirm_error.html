@@ -1,0 +1,35 @@
+{% extends "core/base.html" %}
+
+{% block title %}Conferma non valida · ZEUS{% endblock %}
+
+{% block nav %}
+<nav class="zeus-nav">
+    <a href="{% url 'tenant-landing' %}" class="zeus-brand">
+        <span class="zeus-brand-dot">⚡</span>
+        ZEUS
+    </a>
+    <div class="zeus-nav-links"></div>
+    <a href="{% url 'account_signup' %}" class="zeus-btn zeus-btn-ghost zeus-btn-sm">
+        Crea account
+    </a>
+</nav>
+{% endblock %}
+
+{% block content %}
+<section class="zeus-centered-page">
+    <div class="zeus-card zeus-auth-card text-center">
+        <span class="hero-kicker"><span class="pulse-dot"></span> Conferma email</span>
+        <h1 class="mt-5 text-3xl font-bold tracking-tight sm:text-4xl">Link non valido</h1>
+        <p class="mt-3 text-sm leading-6 text-content-secondary">
+            {% if provision_failed %}
+                Conferma ricevuta, ma la creazione del workspace non e' riuscita. Riprova piu' tardi.
+            {% else %}
+                Il link di conferma e' scaduto o e' gia' stato usato. Ripeti la registrazione.
+            {% endif %}
+        </p>
+        <div class="mt-8">
+            <a href="{% url 'account_signup' %}" class="zeus-btn zeus-btn-primary">Ripeti registrazione</a>
+        </div>
+    </div>
+</section>
+{% endblock %}

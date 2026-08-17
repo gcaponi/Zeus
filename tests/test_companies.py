@@ -3279,6 +3279,7 @@ class TestConsistencyMotor:
             version=1,
             dna_type=ProductDNA.TYPE_COMPLETE,
             content={key: f"{name} {key}" for key in views.PRODUCT_LAYER_KEYS},
+            is_approved=timezone.now(),
         )
         return product
 

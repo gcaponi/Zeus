@@ -2,7 +2,7 @@
 
 L'agente risponde come il tecnico dell'azienda tenant usando come knowledge base:
 - DNA Generale (DNAGenerale completo, corrente, approvato) renderizzato in Markdown
-- DNA Specialistici correnti di TUTTI i prodotti con status "attivo"
+- DNA Specialistici correnti e approvati di TUTTI i prodotti con status "attivo"
 - Estratti rilevanti dai file caricati (CompanyFile + tutti i ProductFile del tenant)
 
 La conversazione NON e' persistita: la storia vive nella Django session
@@ -19,7 +19,7 @@ from django.db import connection
 
 from apps.companies.dna_renderer import render_sintesi_cognitiva
 from apps.companies.llm_client import AGENT_CHAT_MARKER
-from apps.companies.models import DNAGenerale, CompanyFile, Specialista, ProductDNA, ProductFile
+from apps.companies.models import DNAGenerale, CompanyFile, Specialista, ProductFile
 
 logger = logging.getLogger(__name__)
 
@@ -128,10 +128,7 @@ def build_system_prompt(company):
 
     active_products = company.products.filter(status=Specialista.STATUS_ATTIVO)
     for product in active_products:
-        product_dna = product.dna_versions.filter(
-            dna_type=ProductDNA.TYPE_COMPLETE,
-            is_current=True,
-        ).first()
+        product_dna = product.current_approved_complete_dna()
         if product_dna is not None:
             sections.append(
                 render_sintesi_cognitiva(

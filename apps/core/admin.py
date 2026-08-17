@@ -230,6 +230,7 @@ class WorkspaceAccessAdmin(admin.ModelAdmin):
 
 @admin.register(SignupProvisioning)
 class SignupProvisioningAdmin(admin.ModelAdmin):
+    exclude = ["password_hash"]
     list_display = [
         "slug",
         "email",
@@ -243,6 +244,10 @@ class SignupProvisioningAdmin(admin.ModelAdmin):
     readonly_fields = [
         "slug",
         "email",
+        "company_name",
+        "token_hash",
+        "expires_at",
+        "verified_at",
         "client_ip_hash",
         "status",
         "error_code",

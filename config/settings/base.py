@@ -117,9 +117,24 @@ AUTHENTICATION_BACKENDS = [
     "allauth.account.auth_backends.AuthenticationBackend",
 ]
 
+# La verifica email e' nostra (signup pending + link monouso), non allauth:
+# l'utente tenant nasce solo dopo il click, gia' verificato.
 ACCOUNT_EMAIL_VERIFICATION = "none"
 ACCOUNT_LOGIN_METHODS = {"email"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
+
+SIGNUP_VERIFY_TTL_SECONDS = int(os.environ.get("SIGNUP_VERIFY_TTL_SECONDS", "86400"))
+SIGNUP_VERIFY_URL_BASE = os.environ.get("SIGNUP_VERIFY_URL_BASE", "https://zeus.cais.uno")
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "ZEUS <noreply@zeus.cais.uno>")
+EMAIL_BACKEND = os.environ.get(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend",
+)
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "true").lower() in {"1", "true", "yes"}
 LOGIN_REDIRECT_URL = "/dashboard/"
 LOGOUT_REDIRECT_URL = "/"
 
@@ -153,6 +168,12 @@ LOGIN_RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("LOGIN_RATE_LIMIT_WINDOW_SE
 LOGIN_RATE_LIMIT_GLOBAL = int(os.environ.get("LOGIN_RATE_LIMIT_GLOBAL", "200"))
 LOGIN_RATE_LIMIT_IP = int(os.environ.get("LOGIN_RATE_LIMIT_IP", "30"))
 LOGIN_RATE_LIMIT_EMAIL = int(os.environ.get("LOGIN_RATE_LIMIT_EMAIL", "8"))
+
+# Limite per-file prima di read()/fitz/OCR. Indipendente dalla quota piano:
+# anche i piani illimitati non devono materializzare un PDF da centinaia di MB
+# o da migliaia di pagine sul request path.
+COMPANY_FILE_MAX_BYTES = int(os.environ.get("COMPANY_FILE_MAX_BYTES", str(15 * 1024 * 1024)))
+COMPANY_FILE_MAX_PDF_PAGES = int(os.environ.get("COMPANY_FILE_MAX_PDF_PAGES", "50"))
 
 # Unita' astratte di lavoro pagato (una chat = 1; una generazione multi-call
 # riserva piu' unita'). Limiti volutamente larghi per uso legittimo, ma finiti

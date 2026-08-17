@@ -49,6 +49,8 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+SIGNUP_VERIFY_URL_BASE = "http://testserver"
 
 DATABASE_ROUTERS = []
 

@@ -26,7 +26,7 @@ git rev-parse HEAD
 git log -1 --oneline
 ```
 
-Set the exact green commit as `RELEASE_SHA`. Confirm the GitHub jobs `lint`, `test`, `build`,
+Set the exact green commit as `RELEASE_SHA`. Confirm the GitHub jobs `lint`, `test`
 and `release-gate` are successful. Do not deploy a moving branch name without recording its
 commit.
 
