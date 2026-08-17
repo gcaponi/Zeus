@@ -126,10 +126,7 @@ def _metrics_authorized(request):
     expected = settings.METRICS_TOKEN
     scheme, separator, supplied = request.headers.get("Authorization", "").partition(" ")
     return bool(
-        expected
-        and separator
-        and scheme.lower() == "bearer"
-        and _token_matches(supplied, expected)
+        expected and separator and scheme.lower() == "bearer" and _token_matches(supplied, expected)
     )
 
 
