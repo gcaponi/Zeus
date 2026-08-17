@@ -1,0 +1,63 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  semgrep:
+    name: Semgrep
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install semgrep
+      - run: >-
+          semgrep scan
+          --config p/python
+          --config p/django
+          --severity ERROR
+          --error
+          --metrics=off
+          apps config
+
+  bandit:
+    name: Bandit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install bandit
+      - run: >-
+          bandit -q -r apps config
+          -lll
+          -x '**/migrations/*,**/tests/*'
+
+  pip-audit:
+    name: pip-audit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v8.3.2
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: uv export --frozen --no-dev -o /tmp/zeus-reqs.txt
+      - run: pip install pip-audit
+      - run: pip-audit -r /tmp/zeus-reqs.txt
