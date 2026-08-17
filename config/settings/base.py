@@ -149,6 +149,10 @@ SIGNUP_RATE_LIMIT_GLOBAL = int(os.environ.get("SIGNUP_RATE_LIMIT_GLOBAL", "20"))
 SIGNUP_RATE_LIMIT_IP = int(os.environ.get("SIGNUP_RATE_LIMIT_IP", "5"))
 SIGNUP_RATE_LIMIT_EMAIL = int(os.environ.get("SIGNUP_RATE_LIMIT_EMAIL", "3"))
 SIGNUP_TRUST_X_REAL_IP = False
+LOGIN_RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("LOGIN_RATE_LIMIT_WINDOW_SECONDS", "900"))
+LOGIN_RATE_LIMIT_GLOBAL = int(os.environ.get("LOGIN_RATE_LIMIT_GLOBAL", "200"))
+LOGIN_RATE_LIMIT_IP = int(os.environ.get("LOGIN_RATE_LIMIT_IP", "30"))
+LOGIN_RATE_LIMIT_EMAIL = int(os.environ.get("LOGIN_RATE_LIMIT_EMAIL", "8"))
 
 # Unita' astratte di lavoro pagato (una chat = 1; una generazione multi-call
 # riserva piu' unita'). Limiti volutamente larghi per uso legittimo, ma finiti

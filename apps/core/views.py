@@ -117,14 +117,13 @@ def _signup_client_ip(request):
         return "unknown"
 
 
-def _rate_limit_key(scope, identity):
+def _rate_limit_key(prefix, scope, identity):
     digest = hashlib.sha256(identity.encode()).hexdigest()
-    return f"signup-rate:{scope}:{digest}"
+    return f"{prefix}:{scope}:{digest}"
 
 
-def _consume_signup_limit(scope, identity, limit):
-    key = _rate_limit_key(scope, identity)
-    timeout = settings.SIGNUP_RATE_LIMIT_WINDOW_SECONDS
+def _consume_rate_limit(prefix, scope, identity, limit, timeout):
+    key = _rate_limit_key(prefix, scope, identity)
     if cache.add(key, 1, timeout=timeout):
         return True
     try:
@@ -140,12 +139,31 @@ def _consume_signup_limit(scope, identity, limit):
 def _signup_rate_limit_allows(request):
     email = request.POST.get("email", "").strip().lower() or "missing"
     client_ip = _signup_client_ip(request)
+    timeout = settings.SIGNUP_RATE_LIMIT_WINDOW_SECONDS
     checks = (
         ("global", "all", settings.SIGNUP_RATE_LIMIT_GLOBAL),
         ("ip", client_ip, settings.SIGNUP_RATE_LIMIT_IP),
         ("email", email, settings.SIGNUP_RATE_LIMIT_EMAIL),
     )
-    return all(_consume_signup_limit(scope, identity, limit) for scope, identity, limit in checks)
+    return all(
+        _consume_rate_limit("signup-rate", scope, identity, limit, timeout)
+        for scope, identity, limit in checks
+    )
+
+
+def _login_rate_limit_allows(request):
+    email = request.POST.get("login", "").strip().lower() or "missing"
+    client_ip = _signup_client_ip(request)
+    timeout = settings.LOGIN_RATE_LIMIT_WINDOW_SECONDS
+    checks = (
+        ("global", "all", settings.LOGIN_RATE_LIMIT_GLOBAL),
+        ("ip", client_ip, settings.LOGIN_RATE_LIMIT_IP),
+        ("email", email, settings.LOGIN_RATE_LIMIT_EMAIL),
+    )
+    return all(
+        _consume_rate_limit("login-rate", scope, identity, limit, timeout)
+        for scope, identity, limit in checks
+    )
 
 
 def _claim_signup_provisioning(slug, email, client_ip):
@@ -296,6 +314,26 @@ def public_login(request):
     usa-e-getta che la view login_handoff consuma sull'host del tenant,
     dove avviene il vero auth_login (cookie host-only)."""
     if request.method == "POST":
+        try:
+            allowed = _login_rate_limit_allows(request)
+        except Exception:
+            logger.exception("login_rate_limit_unavailable")
+            return render(
+                request,
+                "account/login.html",
+                {"error": "Accesso temporaneamente non disponibile. Riprova più tardi."},
+                status=503,
+            )
+        if not allowed:
+            response = render(
+                request,
+                "account/login.html",
+                {"error": "Troppi tentativi di accesso. Riprova tra qualche minuto."},
+                status=429,
+            )
+            response["Retry-After"] = str(settings.LOGIN_RATE_LIMIT_WINDOW_SECONDS)
+            return response
+
         email = request.POST.get("login", "").strip()
         password = request.POST.get("password", "")
         access = WorkspaceAccess.objects.filter(email__iexact=email).first()
