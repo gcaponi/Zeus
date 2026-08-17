@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.utils import timezone
 
 from apps.companies.models import Company, PaidOperation
@@ -108,10 +108,16 @@ def reserve_operation(
         # Expire abandoned reservations before checking either the exact
         # idempotency key or the protected resource. Otherwise a stale row can
         # keep returning as an active duplicate forever.
-        PaidOperation.objects.filter(
-            company=locked_company,
-            status__in=PaidOperation.ACTIVE_STATUSES,
-            created_at__lt=stale_before,
+        # QUEUED ages from created_at. RUNNING must age from started_at:
+        # a job that waited in queue can have an old created_at while still
+        # being executed, and complete_operation/requeue_operation only
+        # transition STATUS_RUNNING.
+        PaidOperation.objects.filter(company=locked_company).filter(
+            Q(status=PaidOperation.STATUS_QUEUED, created_at__lt=stale_before)
+            | Q(
+                status=PaidOperation.STATUS_RUNNING,
+                started_at__lt=stale_before,
+            )
         ).update(
             status=PaidOperation.STATUS_FAILED,
             error_code="stale_operation",

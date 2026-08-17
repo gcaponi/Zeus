@@ -255,3 +255,72 @@ def test_stale_resource_lock_does_not_block_a_new_operation(paid_company, settin
     assert fresh.pk != stale.pk
     assert stale.status == PaidOperation.STATUS_FAILED
     assert stale.error_code == "stale_operation"
+
+
+def test_running_operation_is_not_expired_from_created_at(paid_company, settings):
+    settings.PAID_OPERATION_STALE_SECONDS = 60
+    operation, _ = reserve_operation(
+        paid_company,
+        "source_scrape",
+        operation_key("source", "running"),
+        payload={"source_id": 1, "url": "https://example.com"},
+        resource_key="source-scrape:1",
+    )
+    claim_operation(operation.pk, "source_scrape")
+    now = timezone.now()
+    PaidOperation.objects.filter(pk=operation.pk).update(
+        created_at=now - timedelta(minutes=5),
+        started_at=now - timedelta(seconds=10),
+    )
+
+    same, created = reserve_operation(
+        paid_company,
+        "source_scrape",
+        operation_key("source", "other"),
+        payload={"source_id": 2, "url": "https://other.example"},
+        resource_key="source-scrape:1",
+    )
+
+    operation.refresh_from_db()
+    assert created is False
+    assert same.pk == operation.pk
+    assert operation.status == PaidOperation.STATUS_RUNNING
+    assert operation.error_code == ""
+    complete_operation(operation.pk, result={"ok": True}, actual_cost_usd="0.12")
+    operation.refresh_from_db()
+    assert operation.status == PaidOperation.STATUS_COMPLETED
+    assert operation.result == {"ok": True}
+    assert str(operation.actual_cost_usd) == "0.120000"
+
+
+def test_running_operation_expires_from_started_at(paid_company, settings):
+    settings.PAID_OPERATION_STALE_SECONDS = 60
+    stale, _ = reserve_operation(
+        paid_company,
+        "consistency_audit",
+        operation_key("audit", "running-old"),
+        resource_key="company-dna:1",
+    )
+    claim_operation(stale.pk, "consistency_audit")
+    now = timezone.now()
+    PaidOperation.objects.filter(pk=stale.pk).update(
+        created_at=now - timedelta(minutes=10),
+        started_at=now - timedelta(minutes=5),
+    )
+
+    fresh, created = reserve_operation(
+        paid_company,
+        "specialist_feedback_apply",
+        operation_key("feedback", "after-hang"),
+        resource_key="company-dna:1",
+    )
+
+    stale.refresh_from_db()
+    assert created is True
+    assert fresh.pk != stale.pk
+    assert stale.status == PaidOperation.STATUS_FAILED
+    assert stale.error_code == "stale_operation"
+    complete_operation(stale.pk, result={"lost": True}, actual_cost_usd="1.00")
+    stale.refresh_from_db()
+    assert stale.status == PaidOperation.STATUS_FAILED
+    assert stale.result == {}
