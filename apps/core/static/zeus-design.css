@@ -1032,8 +1032,16 @@ html,
 }
 
 .zeus-logout-form {
-  display: inline;
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  flex: 0 0 auto;
   margin: 0;
+}
+
+.zeus-logout-form button {
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .zeus-logout-link,

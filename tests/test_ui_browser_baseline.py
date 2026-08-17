@@ -241,7 +241,7 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
 
             page.locator("#id_name").fill("")
             with page.expect_navigation(wait_until="networkidle") as navigation:
-                page.locator('button[type="submit"]').click()
+                page.locator('#company-anagrafica-form button[type="submit"]').click()
             self.assertEqual(navigation.value.status, 400)
             phones = page.locator('[data-formset="phones"]')
             self.assertEqual(phones.locator('[data-form-row]:visible').count(), 1)
@@ -778,10 +778,13 @@ class TestUIBrowserBaseline(StaticLiveServerTestCase):
                         "app-shell-drawer-mobile",
                         full_page=False,
                     )
-                    sidebar.locator("a").last.focus()
+                    focusable = sidebar.locator(
+                        'a[href], button:not([disabled]):not([tabindex="-1"])'
+                    )
+                    focusable.last.focus()
                     dashboard_page.keyboard.press("Tab")
                     self.assertTrue(
-                        sidebar.locator("a").first.evaluate(
+                        focusable.first.evaluate(
                             "element => element === document.activeElement"
                         )
                     )
