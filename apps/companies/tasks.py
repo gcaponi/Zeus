@@ -1494,7 +1494,11 @@ def process_company_gap_round_task(
                 steps_total=4,
                 step_label="Verifica lacune e contraddizioni",
             )
-            if current_round > limits["max_rounds"] + 1:
+            # max_rounds counts follow-up rounds only (round 1 is the base set).
+            # After the last allowed follow-up (current_round > max_rounds) we
+            # must synthesize the complete DNA instead of creating a round the
+            # UI will reject with HTTP 409.
+            if current_round > limits["max_rounds"]:
                 _dispatch_complete()
                 return
 
@@ -1858,7 +1862,7 @@ def process_product_gap_round_task(
                 steps_total=4,
                 step_label="Verifica lacune e contraddizioni",
             )
-            if current_round > limits["max_rounds"] + 1:
+            if current_round > limits["max_rounds"]:
                 _dispatch_complete()
                 return
 

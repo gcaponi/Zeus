@@ -1873,6 +1873,119 @@ class TestDNAQuestions:
         follow_up.refresh_from_db()
         assert follow_up.answer == "Risposta approfondita"
 
+    def test_gap_questions_get_after_last_round_resumes_processing(
+        self, rf_with_tenant, monkeypatch
+    ):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        pre_dna = self._make_pre_dna(company)
+        CompanyQuestion.objects.create(
+            company=company,
+            dna=pre_dna,
+            code="F1",
+            section_key="identita",
+            principle="Approfondimento",
+            question="Dettaglio?",
+            question_round=2,
+            answer="ok",
+            answered_at=timezone.now(),
+        )
+        CompanyQuestion.objects.create(
+            company=company,
+            dna=pre_dna,
+            code="F12",
+            section_key="identita",
+            principle="Oltre il piano",
+            question="Domanda extra?",
+            question_round=3,
+        )
+        pre_dna.content = {
+            **pre_dna.content,
+            "_async_processing": {
+                "operation": "gap",
+                "round": 2,
+                "status": "followups_ready",
+                "result": "followups",
+                "target_round": 3,
+            },
+        }
+        pre_dna.save(update_fields=["content"])
+
+        resp = views.dna_gap_questions(
+            rf_with_tenant("get", reverse("dna-gap-questions", args=[2])),
+            round_number=2,
+        )
+        assert resp.status_code == 302
+        assert resp["Location"] == reverse("dna-processing", args=["gap", 2])
+
+        over_limit = views.dna_gap_questions(
+            rf_with_tenant("get", reverse("dna-gap-questions", args=[3])),
+            round_number=3,
+        )
+        assert over_limit.status_code == 302
+        assert over_limit["Location"] == reverse("dna-processing", args=["gap", 2])
+
+        questions_resp = views.dna_questions(
+            rf_with_tenant("get", reverse("dna-questions")),
+        )
+        assert questions_resp.status_code == 302
+        assert questions_resp["Location"] == reverse("dna-processing", args=["gap", 2])
+
+    def test_gap_processing_skips_over_limit_followups_and_starts_complete(
+        self, rf_with_tenant, monkeypatch
+    ):
+        company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
+        pre_dna = self._make_pre_dna(company)
+        CompanyQuestion.objects.create(
+            company=company,
+            dna=pre_dna,
+            code="F1",
+            section_key="identita",
+            principle="Approfondimento",
+            question="Dettaglio?",
+            question_round=2,
+            answer="ok",
+            answered_at=timezone.now(),
+        )
+        CompanyQuestion.objects.create(
+            company=company,
+            dna=pre_dna,
+            code="F12",
+            section_key="identita",
+            principle="Oltre il piano",
+            question="Domanda extra?",
+            question_round=3,
+        )
+        pre_dna.content = {
+            **pre_dna.content,
+            "_async_processing": {
+                "operation": "gap",
+                "round": 2,
+                "status": "followups_ready",
+                "result": "followups",
+                "target_round": 3,
+            },
+        }
+        pre_dna.save(update_fields=["content"])
+        queued = {}
+
+        def fake_delay(company_id, pre_dna_id, user_id=None, tenant_schema=None, operation_id=None):
+            queued["args"] = (company_id, pre_dna_id, user_id, tenant_schema)
+
+        monkeypatch.setattr(tasks.generate_complete_dna, "delay", fake_delay)
+
+        resp = views.dna_processing(
+            rf_with_tenant("get", reverse("dna-processing", args=["gap", 2])),
+            "gap",
+            2,
+        )
+
+        assert resp.status_code == 302
+        assert resp["Location"] == reverse("dna-generating")
+        assert queued["args"][0] == company.id
+        assert queued["args"][1] == pre_dna.id
+        pre_dna.refresh_from_db()
+        assert pre_dna.content["_async_processing"]["status"] == "complete_pending"
+
     def test_foundation_questions_include_three_suggested_answers(self, rf_with_tenant):
         company = Company.objects.create(schema_name="test-tenant", name="Test Tenant")
         self._make_pre_dna(company)

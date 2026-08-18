@@ -11,6 +11,7 @@ from apps.companies.llm_client import MockLLMClient
 from apps.companies.llm_schemas import ConsistencyAuditSchema
 from apps.companies.models import (
     Company,
+    CompanyQuestion,
     DNAGenerale,
     ConsistencyIssue,
     LLMCall,
@@ -19,6 +20,7 @@ from apps.companies.models import (
     Specialista,
     ProductDNA,
     ProductFile,
+    ProductQuestion,
     Source,
 )
 
@@ -376,6 +378,172 @@ class TestAsyncCompanyTasks:
         assert state["result"] == "complete"
         assert state["expected_complete_version"] == 2
         assert state["delay"] == (company.id, pre_dna.id, 7, "tenant1")
+
+    def test_process_company_gap_round_completes_after_last_allowed_followup(
+        self, monkeypatch,
+    ):
+        company = _make_company()
+        pre_dna = DNAGenerale.objects.create(
+            company=company,
+            version=2,
+            dna_type=DNAGenerale.TYPE_PRE,
+            content={"identita": "pre"},
+            is_current=False,
+        )
+        CompanyQuestion.objects.create(
+            company=company,
+            dna=pre_dna,
+            code="F1",
+            section_key="identita",
+            principle="Approfondimento",
+            question="Dettaglio?",
+            question_round=2,
+            answer="risposta",
+        )
+        state = {}
+        called = {"evaluated": False, "followups": False}
+
+        monkeypatch.setattr(
+            "apps.companies.views._plan_slug_for_company",
+            lambda company_arg: "starter",
+        )
+        monkeypatch.setattr(
+            "apps.companies.views._gap_engine_limits",
+            lambda plan_slug: {"max_rounds": 1, "max_followups": 3},
+        )
+
+        def fake_evaluate(*args, **kwargs):
+            called["evaluated"] = True
+            return {
+                "overall_sufficient": False,
+                "evaluations": [],
+                "follow_ups": [
+                    {
+                        "target_question_code": "F1",
+                        "section_key": "identita",
+                        "principle": "Ancora",
+                        "question": "Altra domanda?",
+                    }
+                ],
+            }
+
+        def fake_followups(*args, **kwargs):
+            called["followups"] = True
+            return []
+
+        def fake_set(pre_dna_arg, **kwargs):
+            state.update(kwargs)
+
+        def fake_delay(company_id, pre_dna_id, user_id, tenant_schema=None):
+            state["delay"] = (company_id, pre_dna_id, user_id, tenant_schema)
+
+        monkeypatch.setattr(
+            "apps.companies.views._evaluate_answer_sufficiency",
+            fake_evaluate,
+        )
+        monkeypatch.setattr(
+            "apps.companies.views._create_gap_followups",
+            fake_followups,
+        )
+        monkeypatch.setattr(
+            "apps.companies.views._set_company_async_processing",
+            fake_set,
+        )
+        monkeypatch.setattr(
+            "apps.companies.views._set_company_generation_progress",
+            lambda *args, **kwargs: None,
+        )
+        monkeypatch.setattr(tasks.generate_complete_dna, "delay", fake_delay)
+
+        tasks.process_company_gap_round_task(
+            company.id,
+            pre_dna.id,
+            current_round=2,
+            user_id=7,
+            tenant_schema="tenant1",
+        )
+
+        assert called == {"evaluated": False, "followups": False}
+        assert state["status"] == "complete_pending"
+        assert state["result"] == "complete"
+        assert state["delay"] == (company.id, pre_dna.id, 7, "tenant1")
+        assert not CompanyQuestion.objects.filter(dna=pre_dna, question_round=3).exists()
+
+    def test_process_product_gap_round_completes_after_last_allowed_followup(
+        self, monkeypatch,
+    ):
+        company = _make_company()
+        product = _make_product(company)
+        pre_dna = ProductDNA.objects.create(
+            product=product,
+            version=1,
+            dna_type=ProductDNA.TYPE_PRE,
+            content=_specialist_content("pre"),
+        )
+        ProductQuestion.objects.create(
+            product=product,
+            dna=pre_dna,
+            code="F1",
+            section_key="vincoli",
+            principle="Confine",
+            question="Quale vincolo?",
+            question_round=2,
+            answer="risposta",
+        )
+        state = {}
+        called = {"evaluated": False, "followups": False}
+
+        monkeypatch.setattr(
+            "apps.companies.views._plan_slug_for_company",
+            lambda company_arg: "starter",
+        )
+        monkeypatch.setattr(
+            "apps.companies.views._gap_engine_product_limits",
+            lambda plan_slug: {"max_rounds": 1, "max_followups": 3},
+        )
+
+        def fake_evaluate(*args, **kwargs):
+            called["evaluated"] = True
+            return {
+                "overall_sufficient": False,
+                "evaluations": [],
+                "follow_ups": [{"question": "Ancora?"}],
+            }
+
+        def fake_followups(*args, **kwargs):
+            called["followups"] = True
+            return []
+
+        def fake_set(pre_dna_arg, **kwargs):
+            state.update(kwargs)
+
+        def fake_delay(product_id, pre_dna_id, user_id, tenant_schema=None):
+            state["delay"] = (product_id, pre_dna_id, user_id, tenant_schema)
+
+        monkeypatch.setattr(
+            "apps.companies.views._evaluate_product_answer_sufficiency",
+            fake_evaluate,
+        )
+        monkeypatch.setattr(
+            "apps.companies.views._create_product_gap_followups",
+            fake_followups,
+        )
+        monkeypatch.setattr(
+            "apps.companies.views._set_product_gap_processing",
+            fake_set,
+        )
+        monkeypatch.setattr(tasks.generate_complete_product_dna, "delay", fake_delay)
+
+        tasks.process_product_gap_round_task(
+            product.id,
+            pre_dna.id,
+            current_round=2,
+            user_id=7,
+        )
+
+        assert called == {"evaluated": False, "followups": False}
+        assert state["status"] == "complete_pending"
+        assert state["delay"] == (product.id, pre_dna.id, 7, None)
 
     def test_generate_complete_product_dna_task_calls_view_helper(self, monkeypatch):
         user = get_user_model().objects.create_user("p", "p@example.com", "pw")

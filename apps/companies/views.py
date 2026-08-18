@@ -853,6 +853,11 @@ def _gap_engine_limits(plan_slug):
     return GAP_ENGINE_LIMITS.get(plan_slug, GAP_ENGINE_LIMITS[Plan.SLUG_STARTER])
 
 
+def _max_answerable_gap_round(limits):
+    """Highest question_round the client may answer (round 1 + follow-up rounds)."""
+    return int(limits["max_rounds"]) + 1
+
+
 def _gap_engine_prompt(company, pre_dna, questions, plan_slug):
     """Build the Gap Engine prompt to evaluate answer sufficiency in batch."""
     limits = _gap_engine_limits(plan_slug)
@@ -1076,13 +1081,79 @@ def _start_company_questions_processing(request, company, pre_dna):
     return redirect("dna-processing", operation="questions", round_number=1)
 
 
-def _latest_unanswered_company_round(pre_dna, after_round=0):
-    return (
-        pre_dna.questions.filter(answer="", question_round__gt=after_round)
-        .order_by("question_round")
-        .values_list("question_round", flat=True)
-        .first()
+def _latest_unanswered_company_round(pre_dna, after_round=0, before_round=None):
+    qs = pre_dna.questions.filter(answer="", question_round__gt=after_round)
+    if before_round is not None:
+        qs = qs.filter(question_round__lte=before_round)
+    return qs.order_by("question_round").values_list("question_round", flat=True).first()
+
+
+def _company_has_answered_followups(pre_dna, max_round):
+    return pre_dna.questions.filter(
+        question_round__gt=1,
+        question_round__lte=max_round,
+    ).exclude(answer="").exists()
+
+
+def _legal_dna_questions(dna, limits):
+    return list(
+        dna.questions.filter(
+            question_round__lte=_max_answerable_gap_round(limits),
+        ).order_by("question_round", "id")
     )
+
+
+def _begin_company_complete_from_gap(request, company, pre_dna, current_round):
+    """Start complete DNA after the last legal follow-up round."""
+    existing = company.dna_versions.filter(
+        dna_type=DNAGenerale.TYPE_COMPLETE,
+        is_current=True,
+    ).first()
+    if existing:
+        return _redirect_after_htmx_action(request, "dna-review")
+
+    state = _company_async_processing_state(pre_dna)
+    latest_complete = company.dna_versions.filter(
+        dna_type=DNAGenerale.TYPE_COMPLETE,
+    ).order_by("-version").first()
+    expected_version = latest_complete.version + 1 if latest_complete else 1
+    if state.get("status") != "complete_pending":
+        _set_company_async_processing(
+            pre_dna,
+            operation="gap",
+            round=current_round,
+            status="complete_pending",
+            result="complete",
+            expected_complete_version=expected_version,
+            step_num=4,
+            steps_total=4,
+            step_label="Avvio DNA Generale completo",
+            error="",
+        )
+        _set_company_generation_progress(
+            pre_dna,
+            1,
+            4,
+            "Lettura risposte",
+            status="running",
+            flow="company_complete_dna",
+        )
+        tenant = getattr(request, "tenant", None)
+        from apps.companies.tasks import generate_complete_dna
+        generate_complete_dna.delay(
+            company.id,
+            pre_dna.id,
+            request.user.id if getattr(request.user, "is_authenticated", False) else None,
+            tenant_schema=tenant.schema_name if tenant else None,
+        )
+    else:
+        expected_version = state.get("expected_complete_version") or expected_version
+    _set_pending_complete_generation(
+        request,
+        expected_version,
+        source_dna_id=pre_dna.pk,
+    )
+    return _redirect_after_htmx_action(request, "dna-generating")
 
 
 def _serialized_answer_snapshot(questions):
@@ -1349,12 +1420,46 @@ def _product_gap_progress_context(round_number, state):
     }
 
 
-def _latest_unanswered_product_round(pre_dna, after_round=0):
-    return (
-        pre_dna.questions.filter(answer="", question_round__gt=after_round)
-        .order_by("question_round")
-        .values_list("question_round", flat=True)
-        .first()
+def _latest_unanswered_product_round(pre_dna, after_round=0, before_round=None):
+    qs = pre_dna.questions.filter(answer="", question_round__gt=after_round)
+    if before_round is not None:
+        qs = qs.filter(question_round__lte=before_round)
+    return qs.order_by("question_round").values_list("question_round", flat=True).first()
+
+
+def _product_has_answered_followups(pre_dna, max_round):
+    return pre_dna.questions.filter(
+        question_round__gt=1,
+        question_round__lte=max_round,
+    ).exclude(answer="").exists()
+
+
+def _ensure_product_complete_from_gap(request, product, pre_dna, current_round):
+    """Queue specialist complete DNA if the last legal follow-up is done."""
+    if product.dna_versions.filter(
+        dna_type=ProductDNA.TYPE_COMPLETE,
+        is_current=True,
+    ).exists():
+        return
+    state = _product_gap_processing_state(pre_dna)
+    if state.get("status") == "complete_pending":
+        return
+    _set_product_gap_processing(
+        pre_dna,
+        round=current_round,
+        status="complete_pending",
+        result="complete",
+        step_num=3,
+        steps_total=4,
+        step_label="Avvio DNA Specialista completo",
+    )
+    tenant = getattr(request, "tenant", None)
+    from apps.companies.tasks import generate_complete_product_dna
+    generate_complete_product_dna.delay(
+        product.id,
+        pre_dna.id,
+        request.user.id if getattr(request.user, "is_authenticated", False) else None,
+        tenant_schema=tenant.schema_name if tenant else None,
     )
 
 
@@ -1925,8 +2030,10 @@ def _safe_merge_synthesis(
 
 
 def _create_complete_dna(company, pre_dna, user):
-    questions = list(pre_dna.questions.all())
-    plan_slug = questions[0].plan_slug if questions else _plan_slug_for_company(company)
+    plan_slug = _plan_slug_for_company(company)
+    questions = _legal_dna_questions(pre_dna, _gap_engine_limits(plan_slug))
+    if questions:
+        plan_slug = questions[0].plan_slug or plan_slug
     content = _public_content(pre_dna.content)
 
     content = _global_dna_synthesis(company, content, questions)
@@ -3264,15 +3371,18 @@ def dna_questions(request):
         return HttpResponse("Pre-DNA not found", status=404)
 
     # If follow-up questions from a previous Gap Engine round are still waiting
-    # for answers, send the user directly to the latest active round.
-    latest_unanswered_round = (
-        pre_dna.questions.filter(answer="")
-        .order_by("-question_round")
-        .values_list("question_round", flat=True)
-        .first()
+    # for answers, send the user directly to the latest active legal round.
+    limits = _gap_engine_limits(_plan_slug_for_company(company))
+    max_round = _max_answerable_gap_round(limits)
+    latest_unanswered_round = _latest_unanswered_company_round(
+        pre_dna,
+        after_round=1,
+        before_round=max_round,
     )
     if latest_unanswered_round and latest_unanswered_round > 1:
         return redirect("dna-gap-questions", round_number=latest_unanswered_round)
+    if _company_has_answered_followups(pre_dna, max_round) and not complete_dna:
+        return redirect("dna-processing", operation="gap", round_number=max_round)
 
     questions = _round_questions(pre_dna, 1)
     if not questions:
@@ -3348,18 +3458,33 @@ def dna_gap_questions(request, round_number):
         return HttpResponse(block_reason, status=403)
 
     limits = _gap_engine_limits(_plan_slug_for_company(company))
-    expected_round = _latest_unanswered_company_round(pre_dna, after_round=1)
+    max_round = _max_answerable_gap_round(limits)
+    expected_round = _latest_unanswered_company_round(
+        pre_dna,
+        after_round=1,
+        before_round=max_round,
+    )
     processing_state = _company_async_processing_state(pre_dna)
     retrying_failed_round = (
         processing_state.get("operation") == "gap"
         and processing_state.get("round") == round_number
         and processing_state.get("status") == "failed"
     )
-    if (
+    off_current_round = (
         round_number < 2
-        or round_number > limits["max_rounds"] + 1
+        or round_number > max_round
         or (expected_round != round_number and not retrying_failed_round)
-    ):
+    )
+    if off_current_round:
+        if request.method == "GET":
+            if expected_round:
+                return redirect("dna-gap-questions", round_number=expected_round)
+            if _company_has_answered_followups(pre_dna, max_round):
+                return redirect(
+                    "dna-processing",
+                    operation="gap",
+                    round_number=max_round,
+                )
         return HttpResponse("Round di approfondimento non corrente", status=409)
 
     questions = _round_questions(pre_dna, round_number)
@@ -3438,9 +3563,12 @@ def dna_processing(request, operation, round_number):
 
     state = _company_async_processing_state(pre_dna)
     if operation == "gap":
+        limits = _gap_engine_limits(_plan_slug_for_company(company))
+        max_round = _max_answerable_gap_round(limits)
         next_round = _latest_unanswered_company_round(
             pre_dna,
             after_round=round_number,
+            before_round=max_round,
         )
         if next_round:
             return _redirect_after_htmx_action(
@@ -3455,6 +3583,13 @@ def dna_processing(request, operation, round_number):
                 source_dna_id=pre_dna.pk,
             )
             return _redirect_after_htmx_action(request, "dna-generating")
+        if state.get("status") == "followups_ready":
+            return _begin_company_complete_from_gap(
+                request,
+                company,
+                pre_dna,
+                current_round=round_number,
+            )
 
     progress_context = _company_async_progress_context(
         operation,
@@ -5049,8 +5184,13 @@ def _finalize_complete_product_dna(dna, pre_dna, product):
 
 
 def _create_complete_product_dna(product, pre_dna, user):
-    questions = list(pre_dna.questions.all())
-    plan_slug = questions[0].plan_slug if questions else _plan_slug_for_company(product.company)
+    plan_slug = _plan_slug_for_company(product.company)
+    questions = _legal_dna_questions(
+        pre_dna,
+        _gap_engine_product_limits(plan_slug),
+    )
+    if questions:
+        plan_slug = questions[0].plan_slug or plan_slug
     content = _public_content(pre_dna.content)
 
     content = _global_product_dna_synthesis(product, content, questions)
@@ -5599,15 +5739,18 @@ def product_questions(request, pk):
         return HttpResponse("Pre-DNA prodotto non trovato", status=404)
 
     # If follow-up questions from a previous Gap Engine round are still waiting
-    # for answers, send the user directly to the latest active round.
-    latest_unanswered_round = (
-        pre_dna.questions.filter(answer="")
-        .order_by("-question_round")
-        .values_list("question_round", flat=True)
-        .first()
+    # for answers, send the user directly to the latest active legal round.
+    limits = _gap_engine_product_limits(_plan_slug_for_company(company))
+    max_round = _max_answerable_gap_round(limits)
+    latest_unanswered_round = _latest_unanswered_product_round(
+        pre_dna,
+        after_round=1,
+        before_round=max_round,
     )
     if latest_unanswered_round and latest_unanswered_round > 1:
         return redirect("specialista-gap-questions", pk=product.id, round_number=latest_unanswered_round)
+    if _product_has_answered_followups(pre_dna, max_round) and not complete_dna:
+        return redirect("specialista-gap-processing", pk=product.id, round_number=max_round)
 
     error = None
     questions = list(pre_dna.questions.filter(question_round=1).order_by("id"))
@@ -5692,17 +5835,36 @@ def product_gap_questions(request, pk, round_number):
         return HttpResponse(block_reason, status=403)
 
     limits = _gap_engine_product_limits(_plan_slug_for_company(company))
-    expected_round = _latest_unanswered_product_round(pre_dna, after_round=1)
+    max_round = _max_answerable_gap_round(limits)
+    expected_round = _latest_unanswered_product_round(
+        pre_dna,
+        after_round=1,
+        before_round=max_round,
+    )
     processing_state = _product_gap_processing_state(pre_dna)
     retrying_failed_round = (
         processing_state.get("round") == round_number
         and processing_state.get("status") == "failed"
     )
-    if (
+    off_current_round = (
         round_number < 2
-        or round_number > limits["max_rounds"] + 1
+        or round_number > max_round
         or (expected_round != round_number and not retrying_failed_round)
-    ):
+    )
+    if off_current_round:
+        if request.method == "GET":
+            if expected_round:
+                return redirect(
+                    "specialista-gap-questions",
+                    pk=product.id,
+                    round_number=expected_round,
+                )
+            if _product_has_answered_followups(pre_dna, max_round):
+                return redirect(
+                    "specialista-gap-processing",
+                    pk=product.id,
+                    round_number=max_round,
+                )
         return HttpResponse("Round di approfondimento non corrente", status=409)
 
     questions = _round_questions(pre_dna, round_number)
@@ -5774,7 +5936,13 @@ def product_gap_processing(request, pk, round_number):
         return HttpResponse("Pre-DNA prodotto non trovato", status=404)
 
     state = _product_gap_processing_state(pre_dna)
-    next_round = _latest_unanswered_product_round(pre_dna, after_round=round_number)
+    limits = _gap_engine_product_limits(_plan_slug_for_company(company))
+    max_round = _max_answerable_gap_round(limits)
+    next_round = _latest_unanswered_product_round(
+        pre_dna,
+        after_round=round_number,
+        before_round=max_round,
+    )
     if next_round:
         target = reverse("specialista-gap-questions", args=[product.id, next_round])
         if request.headers.get("HX-Request") == "true":
@@ -5782,6 +5950,9 @@ def product_gap_processing(request, pk, round_number):
             response["HX-Redirect"] = target
             return response
         return redirect(target)
+    if state.get("status") == "followups_ready":
+        _ensure_product_complete_from_gap(request, product, pre_dna, round_number)
+        state = _product_gap_processing_state(pre_dna)
 
     expected_version = state.get("expected_complete_version")
     complete_qs = product.dna_versions.filter(
